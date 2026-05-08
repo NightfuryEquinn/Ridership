@@ -1,0 +1,4 @@
+source,n_services,total_trips,weekday_trips,weekend_trips,n_weekday_services,n_weekend_services,n_daily_services,weekday_trip_share,weekend_trip_share
+gtfs_ktmb,5,304.0,37.6,58.0,4,4,3,12.36842105263158,19.078947368421055
+gtfs_rapid_bus_kl,2,2042.0,228.6,449.5,1,1,0,11.194906953966699,22.01273261508325
+gtfs_rapid_rail_kl,8,42.0,2.8,28.0,4,4,0,6.666666666666667,66.66666666666666

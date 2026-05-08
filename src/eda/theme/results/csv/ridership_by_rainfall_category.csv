@@ -1,0 +1,4 @@
+rain_category,mean,std,count
+Moderate (15-30),964471.0,257072.0,9
+Heavy (30-100),876236.0,309393.0,139
+Very Heavy (>100),932200.0,341819.0,49

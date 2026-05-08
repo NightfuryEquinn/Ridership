@@ -1,0 +1,188 @@
+Year,Type,Event Name,Spatial Coverage,Start Date,End Date,Notes / Replacement Logic
+2019,Academic,Term 1 Break,Group A,Mar-22,Mar-30,
+2019,Academic,Term 1 Break,Group B,Mar-23,Mar-31,
+2019,Academic,Mid-Year Break,Group A,May-24,Jun-08,
+2019,Academic,Mid-Year Break,Group B,May-25,Jun-09,
+2019,Academic,Term 2 Break,Group A,Aug-09,Aug-17,
+2019,Academic,Term 2 Break,Group B,Aug-10,Aug-18,
+2019,Academic,Year-End Break,Group A,Nov-22,Dec-31,
+2019,Academic,Year-End Break,Group B,Nov-23,Dec-31,
+2019,Public,New Year's Day,"National (Exc. JHR, KDH, KEL, PLS, TRG)",Jan-01,Jan-01,
+2019,Public,Thaipusam,State-specific,Jan-21,Jan-21,
+2019,Public,Federal Territory Day,"KUL, LBN, PJY",Feb-01,Feb-01,
+2019,Public,Chinese New Year,National,Feb-05,Feb-06,
+2019,Public,Labour Day,National,May-01,May-01,
+2019,Public,Wesak Day,National,May-19,May-19,"Replacement observed on Monday, May 20"
+2019,Public,Hari Raya Aidilfitri,National,Jun-05,Jun-06,
+2019,Public,Installation of 16th Agong,National,Jul-30,Jul-30,Ad-hoc declaration (Exogenous Shock)
+2019,Public,Hari Raya Haji,National,Aug-11,Aug-12,"Replacement observed on Monday, Aug 12"
+2019,Public,National Day,National,Aug-31,Aug-31,
+2019,Public,Awal Muharram,National,Sep-01,Sep-01,"Replacement observed on Monday, Sep 2"
+2019,Public,Agong's Birthday,National,Sep-09,Sep-09,
+2019,Public,Malaysia Day,National,Sep-16,Sep-16,
+2019,Public,Deepavali,National (Exc. SRW),Oct-27,Oct-27,"Replacement observed on Monday, Oct 28"
+2019,Public,Prophet Muhammad's Birthday,National,Nov-09,Nov-09,
+2019,Public,Christmas Day,National,Dec-25,Dec-25,
+2020,Academic,Term 1 Break,Group A,Mar-13,Mar-21,Start of pandemic disruptions
+2020,Academic,Term 1 Break,Group B,Mar-14,Mar-22,
+2020,Academic,Mid-Year Break,Group A,May-22,Jun-06,Overlaps with Hari Raya Aidilfitri
+2020,Academic,Mid-Year Break,Group B,May-23,Jun-07,
+2020,Academic,Amended Term 2 Break,National,Aug-20,Aug-24,Truncated for pandemic recovery
+2020,Academic,Amended Year-End Break,Group A,Dec-18,Dec-31,Truncated for pandemic recovery
+2020,Academic,Amended Year-End Break,Group B,Dec-19,Dec-31,Truncated for pandemic recovery
+2020,Public,New Year's Day,"National (Exc. JHR, KDH, KEL, PLS, TRG)",Jan-01,Jan-01,
+2020,Public,Chinese New Year,National,Jan-25,Jan-26,"Replacement observed on Monday, Jan 27"
+2020,Public,Thaipusam,State-specific,Feb-08,Feb-08,
+2020,Public,Labour Day,National,May-01,May-01,
+2020,Public,Wesak Day,National,May-07,May-07,
+2020,Public,Hari Raya Aidilfitri,National,May-24,May-25,"Replacement observed on Tuesday, May 26"
+2020,Public,Agong's Birthday,National,Jun-06,Jun-06,
+2020,Public,Hari Raya Haji,National,Jul-31,Jul-31,
+2020,Public,Awal Muharram,National,Aug-20,Aug-20,
+2020,Public,National Day,National,Aug-31,Aug-31,
+2020,Public,Malaysia Day,National,Sep-16,Sep-16,
+2020,Public,Prophet Muhammad's Birthday,National,Oct-29,Oct-29,
+2020,Public,Deepavali,National (Exc. SRW),Nov-14,Nov-14,
+2020,Public,Christmas Day,National,Dec-25,Dec-25,
+2021,Academic,Term 1 Break,Group A,Mar-26,Apr-03,Academic year start delayed to Jan 20
+2021,Academic,Term 1 Break,Group B,Mar-27,Apr-04,
+2021,Academic,Mid-Year Break,Group A,May-28,Jun-12,
+2021,Academic,Mid-Year Break,Group B,May-29,Jun-13,
+2021,Academic,Term 2 Break (Part 1),Group A,Jul-16,Jul-24,Fractured structural pattern
+2021,Academic,Term 2 Break (Part 1),Group B,Jul-17,Jul-25,
+2021,Academic,Term 2 Break (Part 2),Group A,Sep-10,Sep-18,Fractured structural pattern
+2021,Academic,Term 2 Break (Part 2),Group B,Sep-11,Sep-19,
+2021,Academic,Year-End Break,Group A,Dec-10,Dec-31,
+2021,Academic,Year-End Break,Group B,Dec-11,Dec-31,
+2021,Public,New Year's Day,"National (Exc. JHR, KDH, KEL, PLS, TRG)",Jan-01,Jan-01,
+2021,Public,Thaipusam,State-specific,Jan-28,Jan-28,
+2021,Public,Chinese New Year,National,Feb-12,Feb-13,
+2021,Public,Labour Day,National,May-01,May-01,
+2021,Public,Hari Raya Aidilfitri,National,May-13,May-14,
+2021,Public,Wesak Day,National,May-26,May-26,
+2021,Public,Agong's Birthday,National,Jun-07,Jun-07,
+2021,Public,Hari Raya Haji,National,Jul-20,Jul-20,Replacement observed on Jul 21 in specific states
+2021,Public,Awal Muharram,National,Aug-10,Aug-10,
+2021,Public,National Day,National,Aug-31,Aug-31,
+2021,Public,Malaysia Day,National,Sep-16,Sep-16,
+2021,Public,Prophet Muhammad's Birthday,National,Oct-19,Oct-19,
+2021,Public,Deepavali,National (Exc. SRW),Nov-04,Nov-04,
+2021,Public,Christmas Day,National,Dec-25,Dec-25,
+2022,Academic,Term 1 Break,Group A,Jun-03,Jun-11,Permanent shift to March start cycle
+2022,Academic,Term 1 Break,Group B,Jun-04,Jun-12,
+2022,Academic,Term 2 Break,Group A,Sep-02,Sep-10,
+2022,Academic,Term 2 Break,Group B,Sep-03,Sep-11,
+2022,Academic,Term 3 Break,Group A,Dec-09,Dec-31,No longer the primary End of Year Break
+2022,Academic,Term 3 Break,Group B,Dec-10,Dec-31,
+2022,Public,Chinese New Year,National,Feb-01,Feb-02,
+2022,Public,Labour Day,National,May-01,May-01,"Replacement observed on Monday, May 2"
+2022,Public,Hari Raya Aidilfitri,National,May-03,May-04,
+2022,Public,Wesak Day,National,May-15,May-15,"Replacement observed on Monday, May 16"
+2022,Public,Agong's Birthday,National,Jun-06,Jun-06,
+2022,Public,Hari Raya Haji,National,Jul-10,Jul-10,"Replacement observed on Monday, Jul 11"
+2022,Public,Awal Muharram,National,Jul-30,Jul-30,
+2022,Public,National Day,National,Aug-31,Aug-31,
+2022,Public,Malaysia Day,National,Sep-16,Sep-16,
+2022,Public,Prophet Muhammad's Birthday,National,Oct-09,Oct-09,"Replacement observed on Monday, Oct 10"
+2022,Public,Deepavali,National (Exc. SRW),Oct-24,Oct-24,
+2022,Public,GE15 Polling Holidays,National,Nov-18,Nov-19,Ad-hoc declaration (Exogenous Shock)
+2022,Public,GE15 Post-Election Holiday,National,Nov-28,Nov-28,Ad-hoc declaration (Exogenous Shock)
+2022,Public,Christmas Day,National,Dec-25,Dec-25,"Replacement observed on Monday, Dec 26"
+2023,Academic,End of Year Break (22/23),Group A,Feb-17,Mar-11,Cross-year transition break
+2023,Academic,End of Year Break (22/23),Group B,Feb-18,Mar-12,
+2023,Academic,Mid-Term 1 Break,Group A,Apr-21,Apr-29,
+2023,Academic,Mid-Term 1 Break,Group B,Apr-22,Apr-30,
+2023,Academic,Term 1 Break,Group A,May-26,Jun-03,
+2023,Academic,Term 1 Break,Group B,May-27,Jun-04,
+2023,Academic,Term 2 Break,Group A,Aug-25,Sep-02,
+2023,Academic,Term 2 Break,Group B,Aug-26,Sep-03,
+2023,Academic,Term 3 Break,Group A,Dec-15,Dec-31,"Extends to Jan 1, 2024"
+2023,Academic,Term 3 Break,Group B,Dec-16,Dec-31,"Extends to Jan 1, 2024"
+2023,Public,New Year's Day,National (Exc. specific states),Jan-01,Jan-01,"Replacement on Monday, Jan 2"
+2023,Public,Chinese New Year,National,Jan-22,Jan-23,"Replacement observed on Tuesday, Jan 24"
+2023,Public,Thaipusam,State-specific,Feb-05,Feb-05,"Replacement on Monday, Feb 6"
+2023,Public,Extra Aidilfitri Holiday,National,Apr-21,Apr-21,Ad-hoc declaration (Executive Intervention)
+2023,Public,Hari Raya Aidilfitri,National,Apr-22,Apr-23,"Replacement observed on Monday, Apr 24"
+2023,Public,Labour Day,National,May-01,May-01,
+2023,Public,Wesak Day,National,May-04,May-04,
+2023,Public,Agong's Birthday,National,Jun-05,Jun-05,
+2023,Public,Hari Raya Haji,National,Jun-29,Jun-29,
+2023,Public,Awal Muharram,National,Jul-19,Jul-19,
+2023,Public,National Day,National,Aug-31,Aug-31,
+2023,Public,Malaysia Day,National,Sep-16,Sep-16,
+2023,Public,Prophet Muhammad's Birthday,National,Sep-28,Sep-28,
+2023,Public,Deepavali,National (Exc. SRW),Nov-12,Nov-12,"Replacement observed on Monday, Nov 13"
+2023,Public,Christmas Day,National,Dec-25,Dec-25,
+2024,Academic,End of Year Break (23/24),Group A,Feb-09,Mar-09,Cross-year transition break
+2024,Academic,End of Year Break (23/24),Group B,Feb-10,Mar-10,
+2024,Academic,Term 1 Break,Group A,May-24,Jun-02,
+2024,Academic,Term 1 Break,Group B,May-25,Jun-02,
+2024,Academic,Term 2 Break,Group A,Sep-13,Sep-21,
+2024,Academic,Term 2 Break,Group B,Sep-14,Sep-22,
+2024,Academic,Term 3 Break,Group A,Dec-20,Dec-28,
+2024,Academic,Term 3 Break,Group B,Dec-21,Dec-29,
+2024,Public,New Year's Day,"National (Exc. JHR, KDH, KEL, PLS, TRG)",Jan-01,Jan-01,
+2024,Public,Thaipusam,State-specific,Jan-25,Jan-25,
+2024,Public,Federal Territory Day,"KUL, LBN, PJY",Feb-01,Feb-01,
+2024,Public,Chinese New Year,National,Feb-10,Feb-11,"Replacement observed on Monday, Feb 12"
+2024,Public,Hari Raya Aidilfitri,National,Apr-10,Apr-11,
+2024,Public,Labour Day,National,May-01,May-01,
+2024,Public,Wesak Day,National,May-22,May-22,
+2024,Public,Agong's Birthday,National,Jun-03,Jun-03,Ceremonies delayed to September
+2024,Public,Hari Raya Haji,National,Jun-17,Jun-17,
+2024,Public,Awal Muharram,National,Jul-07,Jul-07,"Replacement observed on Monday, Jul 8"
+2024,Public,Agong's Coronation,National,Jul-20,Jul-20,Ad-hoc declaration (Non-recurring)
+2024,Public,National Day,National,Aug-31,Aug-31,
+2024,Public,Malaysia Day / Prophet Muhammad,National,Sep-16,Sep-16,Overlap anomaly: No replacement for civil servants
+2024,Public,Deepavali,National (Exc. SRW),Oct-31,Oct-31,
+2024,Public,Christmas Day,National,Dec-25,Dec-25,
+2025,Academic,End of Year Break (24/25),Group A,Jan-17,Feb-15,Cross-year transition break
+2025,Academic,End of Year Break (24/25),Group B,Jan-18,Feb-16,
+2025,Academic,Extra Festive Leave (Aidilfitri),Group A,Mar-30,Apr-01,Cuti Tambahan Perayaan
+2025,Academic,Extra Festive Leave (Aidilfitri),Group B,Mar-31,Apr-02,Cuti Tambahan Perayaan
+2025,Academic,Term 1 Break,Group A,May-29,Jun-09,Compression begins to reset calendar
+2025,Academic,Term 1 Break,Group B,May-29,Jun-09,
+2025,Academic,Term 2 Break,Group A,Sep-12,Sep-20,
+2025,Academic,Term 2 Break,Group B,Sep-13,Sep-21,
+2025,Academic,End of Academic Year Break,Group A,Dec-19,Dec-31,"Extends to Jan 10, 2026"
+2025,Academic,End of Academic Year Break,Group B,Dec-20,Dec-31,"Extends to Jan 11, 2026"
+2025,Public,New Year's Day,"National (Exc. KDH, KEL, PLS, TRG)",Jan-01,Jan-01,Note: Johor reverts to Sat-Sun (Group B)
+2025,Public,Chinese New Year,National,Jan-29,Jan-30,
+2025,Public,Thaipusam,State-specific,Feb-11,Feb-11,
+2025,Public,Hari Raya Aidilfitri,National,Mar-31,Apr-01,Overlaps with Extra Festive Leave
+2025,Public,Labour Day,National,May-01,May-01,
+2025,Public,Wesak Day,National,May-12,May-12,
+2025,Public,Agong's Birthday,National,Jun-02,Jun-02,
+2025,Public,Hari Raya Haji,National,Jun-07,Jun-07,
+2025,Public,Awal Muharram,National,Jun-27,Jun-27,
+2025,Public,National Day,National,Aug-31,Aug-31,"Replacement observed on Monday, Sep 1"
+2025,Public,Prophet Muhammad's Birthday,National,Sep-05,Sep-05,
+2025,Public,Additional Malaysia Day Holiday,National,Sep-15,Sep-15,Ad-hoc declaration (Severe velocity distortion)
+2025,Public,Malaysia Day,National,Sep-16,Sep-16,
+2025,Public,Deepavali,National (Exc. SRW),Oct-20,Oct-20,
+2025,Public,Christmas Day,National,Dec-25,Dec-25,
+2026,Academic,First Day of School,Group A,Jan-11,Jan-11,Return to Jan-commencement baseline
+2026,Academic,First Day of School,Group B,Jan-12,Jan-12,
+2026,Academic,Term 1 Break,Group A,Mar-20,Mar-28,Overlaps Hari Raya Puasa
+2026,Academic,Term 1 Break,Group B,Mar-21,Mar-29,Overlaps Hari Raya Puasa
+2026,Academic,Mid-Year Break,Group A,May-22,Jun-06,
+2026,Academic,Mid-Year Break,Group B,May-23,Jun-07,
+2026,Academic,Term 2 Break,Group A,Aug-28,Sep-05,
+2026,Academic,Term 2 Break,Group B,Aug-29,Sep-06,
+2026,Academic,Year-End Break,Group A,Dec-04,Dec-31,Seasonal stationarity restored
+2026,Academic,Year-End Break,Group B,Dec-05,Dec-31,Seasonal stationarity restored
+2026,Public,New Year's Day,"National (Exc. KDH, KEL, PLS, TRG)",Jan-01,Jan-01,
+2026,Public,Thaipusam / FT Day Overlap,"State-specific / KUL, LBN, PJY",Feb-01,Feb-01,
+2026,Public,Thaipusam / FT Day Replacements,Overlapping Territories Only,Feb-02,Feb-03,Cascading multi-day replacement anomaly
+2026,Public,Chinese New Year,National,Feb-17,Feb-18,
+2026,Public,Hari Raya Aidilfitri,National,Mar-21,Mar-22,"Replacement observed on Monday, Mar 23"
+2026,Public,Labour Day,National,May-01,May-01,
+2026,Public,Hari Raya Haji,National,May-27,May-27,
+2026,Public,Wesak Day,National,May-31,May-31,"Replacement observed on Monday, Jun 1"
+2026,Public,Agong's Birthday,National,Jun-01,Jun-01,Overlaps with Wesak Day replacement
+2026,Public,Awal Muharram,National,Jun-17,Jun-17,
+2026,Public,Prophet Muhammad's Birthday,National,Aug-25,Aug-25,
+2026,Public,National Day,National,Aug-31,Aug-31,
+2026,Public,Malaysia Day,National,Sep-16,Sep-16,
+2026,Public,Deepavali,National (Exc. SRW),Nov-08,Nov-08,"Replacement observed on Monday, Nov 9"
+2026,Public,Christmas Day,National,Dec-25,Dec-25,

@@ -1,0 +1,5 @@
+is_holiday,is_weekend,mean,std,count
+False,False,1027679.0,309703.0,1156
+False,True,672429.0,227733.0,427
+True,False,937537.0,285762.0,267
+True,True,704044.0,227122.0,143

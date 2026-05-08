@@ -1,0 +1,67 @@
+academic_holiday,public_holiday,academic_group,overlap_start,overlap_end,overlap_days
+Mid-Year Break,Hari Raya Aidilfitri,Group A,2019-06-05,2019-06-06,2
+Mid-Year Break,Hari Raya Aidilfitri,Group B,2019-06-05,2019-06-06,2
+Term 2 Break,Hari Raya Haji,Group A,2019-08-11,2019-08-12,2
+Term 2 Break,Hari Raya Haji,Group B,2019-08-11,2019-08-12,2
+Year-End Break,Christmas Day,Group A,2019-12-25,2019-12-25,1
+Year-End Break,Christmas Day,Group B,2019-12-25,2019-12-25,1
+Mid-Year Break,Hari Raya Aidilfitri,Group A,2020-05-24,2020-05-25,2
+Mid-Year Break,Agong's Birthday,Group A,2020-06-06,2020-06-06,1
+Mid-Year Break,Hari Raya Aidilfitri,Group B,2020-05-24,2020-05-25,2
+Mid-Year Break,Agong's Birthday,Group B,2020-06-06,2020-06-06,1
+Amended Term 2 Break,Awal Muharram,National,2020-08-20,2020-08-20,1
+Amended Year-End Break,Christmas Day,Group A,2020-12-25,2020-12-25,1
+Amended Year-End Break,Christmas Day,Group B,2020-12-25,2020-12-25,1
+Mid-Year Break,Agong's Birthday,Group A,2021-06-07,2021-06-07,1
+Mid-Year Break,Agong's Birthday,Group B,2021-06-07,2021-06-07,1
+Term 2 Break (Part 1),Hari Raya Haji,Group A,2021-07-20,2021-07-20,1
+Term 2 Break (Part 1),Hari Raya Haji,Group B,2021-07-20,2021-07-20,1
+Term 2 Break (Part 2),Malaysia Day,Group A,2021-09-16,2021-09-16,1
+Term 2 Break (Part 2),Malaysia Day,Group B,2021-09-16,2021-09-16,1
+Year-End Break,Christmas Day,Group A,2021-12-25,2021-12-25,1
+Year-End Break,Christmas Day,Group B,2021-12-25,2021-12-25,1
+Term 1 Break,Agong's Birthday,Group A,2022-06-06,2022-06-06,1
+Term 1 Break,Agong's Birthday,Group B,2022-06-06,2022-06-06,1
+Term 3 Break,Christmas Day,Group A,2022-12-25,2022-12-25,1
+Term 3 Break,Christmas Day,Group B,2022-12-25,2022-12-25,1
+Mid-Term 1 Break,Extra Aidilfitri Holiday,Group A,2023-04-21,2023-04-21,1
+Mid-Term 1 Break,Hari Raya Aidilfitri,Group A,2023-04-22,2023-04-23,2
+Mid-Term 1 Break,Hari Raya Aidilfitri,Group B,2023-04-22,2023-04-23,2
+Term 2 Break,National Day,Group A,2023-08-31,2023-08-31,1
+Term 2 Break,National Day,Group B,2023-08-31,2023-08-31,1
+Term 3 Break,Christmas Day,Group A,2023-12-25,2023-12-25,1
+Term 3 Break,Christmas Day,Group B,2023-12-25,2023-12-25,1
+End of Year Break (23/24),Chinese New Year,Group A,2024-02-10,2024-02-11,2
+End of Year Break (23/24),Chinese New Year,Group B,2024-02-10,2024-02-11,2
+Term 2 Break,Malaysia Day / Prophet Muhammad,Group A,2024-09-16,2024-09-16,1
+Term 2 Break,Malaysia Day / Prophet Muhammad,Group B,2024-09-16,2024-09-16,1
+Term 3 Break,Christmas Day,Group A,2024-12-25,2024-12-25,1
+Term 3 Break,Christmas Day,Group B,2024-12-25,2024-12-25,1
+End of Year Break (24/25),Chinese New Year,Group A,2025-01-29,2025-01-30,2
+End of Year Break (24/25),Thaipusam,Group A,2025-02-11,2025-02-11,1
+End of Year Break (24/25),Chinese New Year,Group B,2025-01-29,2025-01-30,2
+End of Year Break (24/25),Thaipusam,Group B,2025-02-11,2025-02-11,1
+Extra Festive Leave (Aidilfitri),Hari Raya Aidilfitri,Group A,2025-03-31,2025-04-01,2
+Extra Festive Leave (Aidilfitri),Hari Raya Aidilfitri,Group B,2025-03-31,2025-04-01,2
+Term 1 Break,Agong's Birthday,Group A,2025-06-02,2025-06-02,1
+Term 1 Break,Hari Raya Haji,Group A,2025-06-07,2025-06-07,1
+Term 1 Break,Agong's Birthday,Group B,2025-06-02,2025-06-02,1
+Term 1 Break,Hari Raya Haji,Group B,2025-06-07,2025-06-07,1
+Term 2 Break,Additional Malaysia Day Holiday,Group A,2025-09-15,2025-09-15,1
+Term 2 Break,Malaysia Day,Group A,2025-09-16,2025-09-16,1
+Term 2 Break,Additional Malaysia Day Holiday,Group B,2025-09-15,2025-09-15,1
+Term 2 Break,Malaysia Day,Group B,2025-09-16,2025-09-16,1
+End of Academic Year Break,Christmas Day,Group A,2025-12-25,2025-12-25,1
+End of Academic Year Break,Christmas Day,Group B,2025-12-25,2025-12-25,1
+Term 1 Break,Hari Raya Aidilfitri,Group A,2026-03-21,2026-03-22,2
+Term 1 Break,Hari Raya Aidilfitri,Group B,2026-03-21,2026-03-22,2
+Mid-Year Break,Hari Raya Haji,Group A,2026-05-27,2026-05-27,1
+Mid-Year Break,Wesak Day,Group A,2026-05-31,2026-05-31,1
+Mid-Year Break,Agong's Birthday,Group A,2026-06-01,2026-06-01,1
+Mid-Year Break,Hari Raya Haji,Group B,2026-05-27,2026-05-27,1
+Mid-Year Break,Wesak Day,Group B,2026-05-31,2026-05-31,1
+Mid-Year Break,Agong's Birthday,Group B,2026-06-01,2026-06-01,1
+Term 2 Break,National Day,Group A,2026-08-31,2026-08-31,1
+Term 2 Break,National Day,Group B,2026-08-31,2026-08-31,1
+Year-End Break,Christmas Day,Group A,2026-12-25,2026-12-25,1
+Year-End Break,Christmas Day,Group B,2026-12-25,2026-12-25,1

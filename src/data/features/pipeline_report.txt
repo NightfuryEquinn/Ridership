@@ -1,0 +1,20 @@
+============================================================
+FEATURE ENGINEERING PIPELINE REPORT
+============================================================
+
+STEP STATUS
+----------------------------------------
+  ridership                 [X] FAILED: [Errno 2] No such file or directory: 'data\\cleaned\\ridership_headline_clean.csv'
+  fuel                      [X] FAILED: [Errno 2] No such file or directory: 'data\\cleaned\\fuelprice_cleaned.csv'
+  holiday                   [X] FAILED: [Errno 2] No such file or directory: 'data\\cleaned\\school_public_holiday_clean.csv'
+  rainfall                  [X] FAILED: [Errno 2] No such file or directory: 'data\\cleaned\\rainfall_combined_final.csv'
+  spatial                   [X] FAILED: data\cleaned\gadm_mys_l1_clean.geojson: No such file or directory
+  walking_friction          [X] FAILED: data\cleaned\walking_friction_clean.tif: No such file or directory
+  graph_construction        [OK] OK
+  fusion                    [X] FAILED: No temporal feature files found. Run earlier pipeline steps first.
+
+GRAPH VALIDATION
+----------------------------------------
+  [OK] No graph validation issues.
+
+============================================================

@@ -1,0 +1,37 @@
+============================================================
+FEATURE ENGINEERING PIPELINE REPORT
+============================================================
+
+STEP STATUS
+----------------------------------------
+  ridership                 [OK] OK
+  fuel                      [OK] OK
+  holiday                   [OK] OK
+  rainfall                  [OK] OK
+  spatial                   [OK] OK
+  walking_friction          [OK] OK
+  graph_construction        [OK] OK
+  fusion                    [OK] OK
+
+LSTM FEATURE MATRIX
+----------------------------------------
+  Shape            : (2637, 1904)
+  Date range       : 2019-01-01 -> 2026-03-21
+  NaN %            : 30.81%
+  Feature groups   :
+    ridership            221 columns
+    fuel                 30 columns
+    holiday              18 columns
+    rainfall             1617 columns
+    spatial              18 columns
+
+  WARNINGS:
+    [!] 1825 columns have >10% NaN: ['ridership__bus_rkl', 'ridership__bus_rpn', 'ridership__rail_lrt_ampang', 'ridership__rail_mrt_kajang', 'ridership__rail_lrt_kj'] ...
+
+GRAPH VALIDATION
+----------------------------------------
+  [OK] No graph validation issues.
+  [gadm] nodes=16, undirected_edges=20, node_feat_dim=[16, 9]
+  [gtfs] nodes=2283, undirected_edges=2565, node_feat_dim=[2283, 5]
+
+============================================================

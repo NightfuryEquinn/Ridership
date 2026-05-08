@@ -1,0 +1,4 @@
+source,mean,median,std,count
+gtfs_ktmb,0.048260562,0.06,0.019188054,191
+gtfs_rapid_bus_kl,0.06,0.06,0.0,3698
+gtfs_rapid_rail_kl,0.06,0.06,0.0,167
