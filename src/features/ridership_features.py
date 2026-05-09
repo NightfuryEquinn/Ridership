@@ -20,28 +20,40 @@ def load_ridership(path: Path) -> pd.DataFrame:
 
 
 def engineer_rolling_windows(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    features = {}
+
     for window in [7, 14, 30]:
-        df[f"{col}_roll_mean_{window}d"] = df[col].rolling(window).mean()
-        df[f"{col}_roll_std_{window}d"] = df[col].rolling(window).std()
-        df[f"{col}_roll_max_{window}d"] = df[col].rolling(window).max()
-    return df
+        roll = df[col].rolling(window)
+
+        features[f"{col}_roll_mean_{window}d"] = roll.mean()
+        features[f"{col}_roll_std_{window}d"] = roll.std()
+        features[f"{col}_roll_max_{window}d"] = roll.max()
+
+    return pd.concat([df, pd.DataFrame(features, index=df.index)], axis=1)
 
 
 def engineer_lags(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    lag_features = {}
+
     for lag in [-7, -3, -1, 1, 3, 7]:
         label = f"lag_p{abs(lag)}d" if lag > 0 else f"lag_m{abs(lag)}d"
-        df[f"{col}_{label}"] = df[col].shift(-lag)
-    return df
+        lag_features[f"{col}_{label}"] = df[col].shift(-lag)
+
+    return pd.concat([df, pd.DataFrame(lag_features, index=df.index)], axis=1)
 
 
 def detect_anomalies(df: pd.DataFrame, col: str, z_thresh: float = 3.0) -> pd.DataFrame:
-    """Flag anomalies using rolling z-score (30-day window)."""
     roll_mean = df[col].rolling(30, min_periods=7).mean()
     roll_std = df[col].rolling(30, min_periods=7).std()
+
     z_score = (df[col] - roll_mean) / roll_std.replace(0, np.nan)
-    df[f"{col}_anomaly"] = (z_score.abs() > z_thresh).astype(int)
-    df[f"{col}_zscore"] = z_score
-    return df
+
+    features = {
+        f"{col}_anomaly": (z_score.abs() > z_thresh).astype(int),
+        f"{col}_zscore": z_score,
+    }
+
+    return pd.concat([df, pd.DataFrame(features, index=df.index)], axis=1)
 
 
 def align_timestamps(df: pd.DataFrame) -> pd.DataFrame:

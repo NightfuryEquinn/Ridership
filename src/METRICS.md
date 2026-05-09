@@ -3,15 +3,13 @@
 ## 1. Combined Accuracy Percentage %
 
 ```
-Combined = max(0,  100 − MAPE − NMAE% − NRMSE%)
+Combined = max(0,  100 − MAPE − MAE% − RMSE%)
 ```
 
 - The higher the better
 - Clipped to **[0, 100]** — cannot go negative
-
-> **Note:** Raw MAE and RMSE are in ridership counts (e.g. 26,000 riders). They
-> cannot be subtracted from 100 directly. Each term must first be converted to a
-> percentage via normalisation (see B and C below).
+- All three terms are mean-demand-normalised percentages, making them directly
+  comparable and additive on the same [0, 100] scale
 
 ---
 
@@ -27,30 +25,31 @@ Combined = max(0,  100 − MAPE − NMAE% − NRMSE%)
 
 ---
 
-### B. Normalised Mean Absolute Error (NMAE) %
+### B. MAE% — Mean Absolute Error as % of Total Demand
 
 ```math
-\text{NMAE} = \frac{\text{MAE}}{\max(y) - \min(y)} \times 100
-\quad \text{where} \quad
-\text{MAE} = \frac{1}{n} \sum_{i=1}^{n} |\hat{y}_i - y_i|
+\text{MAE\%} = \frac{\displaystyle\sum_{i=1}^{n} |\hat{y}_i - y_i|}{\displaystyle\sum_{i=1}^{n} y_i} \times 100
+\;=\; \frac{\text{MAE}}{\bar{y}} \times 100
 ```
 
-- Dividing by the **range** (max − min) maps MAE onto the actual dynamic swing
-  the model must capture, giving a scale-free percentage in **[0, 100]**
+- Equivalent to dividing MAE by mean actual demand $\bar{y}$
+- Unit: **%** — scale-free, used directly in Combined
+- Raw **MAE** (ridership counts) is also reported as a standalone diagnostic
 - The lower the better
 
 ---
 
-### C. Normalised Root Mean Squared Error (NRMSE) %
+### C. RMSE% — Root Mean Squared Error as % of Mean Demand
 
 ```math
-\text{NRMSE} = \frac{\text{RMSE}}{\max(y) - \min(y)} \times 100
+\text{RMSE\%} = \frac{\text{RMSE}}{\bar{y}} \times 100
 \quad \text{where} \quad
 \text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (\hat{y}_i - y_i)^2}
 ```
 
-- Same range normalisation as NMAE; result is in **[0, 100]**
+- Same mean-demand denominator as MAE%; result is in **%**
 - RMSE penalises large errors more heavily than MAE (squared term)
+- Raw **RMSE** (ridership counts) is also reported as a standalone diagnostic
 - The lower the better
 
 ---

@@ -67,31 +67,31 @@ STEPS = [
 
 def _run_step(name: str, results: dict) -> Optional[pd.DataFrame]:
     if name == "ridership":
-        from .ridership_features import run
+        from ridership_features import run
         return run()
 
     if name == "fuel":
-        from .fuel_features import run
+        from fuel_features import run
         return run()
 
     if name == "holiday":
-        from .holiday_features import run
+        from holiday_features import run
         return run()
 
     if name == "rainfall":
-        from .rainfall_features import run
+        from rainfall_features import run
         return run()
 
     if name == "spatial":
-        from .spatial_features import run
+        from spatial_features import run
         return run()
 
     if name == "walking_friction":
-        from .walking_friction import run
+        from walking_friction import run
         return run()
 
     if name == "graph_construction":
-        from .graph_construction import run
+        from graph_construction import run
         return run()
 
     if name == "fusion":
@@ -115,13 +115,14 @@ def _fuse(results: dict) -> pd.DataFrame:
     """
     Merge all temporal feature tables on a shared daily DatetimeIndex.
     Produces feature_matrix_lstm.parquet.
+    Applies min-max normalization to ensure MAE/RMSE are scaled between 0-1.
     """
     log.info("[fusion] Merging temporal feature tables ...")
 
     temporal_paths = {
         "ridership": FEATURES_DIR / "ridership_temporal.parquet",
-        "fuel"     : FEATURES_DIR / "fuel_temporal.parquet",
-        "holiday"  : FEATURES_DIR / "holiday_flags.parquet",
+        "fuel" : FEATURES_DIR / "fuel_temporal.parquet",
+        "holiday" : FEATURES_DIR / "holiday_flags.parquet",
         "rainfall" : FEATURES_DIR / "rainfall_temporal.parquet",
     }
 
@@ -137,7 +138,7 @@ def _fuse(results: dict) -> pd.DataFrame:
     # ---- Align on a common daily DatetimeIndex ------------------------------
     all_indices = [f.index for f in frames.values()]
     start = max(idx.min() for idx in all_indices)
-    end   = min(idx.max() for idx in all_indices)
+    end = min(idx.max() for idx in all_indices)
     log.info("[fusion] Common date range: %s -> %s", start.date(), end.date())
 
     common_idx = pd.date_range(start, end, freq="D")
@@ -145,7 +146,7 @@ def _fuse(results: dict) -> pd.DataFrame:
     aligned = {}
     for key, df in frames.items():
         df_num = df.select_dtypes(include=[np.number])
-        df_num = df_num.reindex(common_idx)        # introduce NaN for missing days
+        df_num = df_num.reindex(common_idx) # introduce NaN for missing days
         df_num = df_num.ffill(limit=3).bfill(limit=3)
         # Prefix columns to avoid collisions
         df_num.columns = [f"{key}__{c}" for c in df_num.columns]
@@ -153,21 +154,36 @@ def _fuse(results: dict) -> pd.DataFrame:
 
     fused = pd.concat(aligned.values(), axis=1)
 
+    # ---- Normalize temporal features (0-1 scaling) -------------------------
+    temporal_numeric_cols = fused.select_dtypes(include=[np.number]).columns
+    # Exclude holiday/flag columns (already 0-1)
+    cols_to_normalize = [c for c in temporal_numeric_cols if not c.startswith("holiday__") and "flag" not in c]
+    if cols_to_normalize:
+        cols_min = fused[cols_to_normalize].min()
+        cols_max = fused[cols_to_normalize].max()
+        fused[cols_to_normalize] = (fused[cols_to_normalize] - cols_min) / (cols_max - cols_min + 1e-9)
+        log.info("[fusion] Normalized %d temporal columns (0-1).", len(cols_to_normalize))
+
     # ---- Append static spatial features (broadcast over time) ---------------
     spatial_path = FEATURES_DIR / "spatial_features.parquet"
     sp = _load_if_exists(spatial_path)
     if sp is not None:
         # Spatial is zone-level; attach zone-level aggregates as scalar columns
         numeric_sp = sp.select_dtypes(include=[np.number])
+        # Normalize spatial features (0-1 scaling)
+        sp_cols_to_normalize = numeric_sp.columns
+        sp_min = numeric_sp.min()
+        sp_max = numeric_sp.max()
+        normalized_sp = (numeric_sp - sp_min) / (sp_max - sp_min + 1e-9)
         zone_agg = {
-            f"spatial__{col}__mean" : numeric_sp[col].mean() for col in numeric_sp.columns
+            f"spatial__{col}__mean" : normalized_sp[col].mean() for col in sp_cols_to_normalize
         }
         zone_agg.update({
-            f"spatial__{col}__max"  : numeric_sp[col].max() for col in numeric_sp.columns
+            f"spatial__{col}__max" : normalized_sp[col].max() for col in sp_cols_to_normalize
         })
         for col_name, val in zone_agg.items():
             fused[col_name] = val
-        log.info("[fusion] Appended %d spatial aggregate columns.", len(zone_agg))
+        log.info("[fusion] Appended %d spatial aggregate columns (normalized 0-1).", len(zone_agg))
 
     # ---- Drop columns that are all-NaN --------------------------------------
     before = fused.shape[1]

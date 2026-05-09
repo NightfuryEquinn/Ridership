@@ -493,41 +493,25 @@ def evaluate(model, loader, tgt_scaler, device, calibrator=None):
         np.abs((trues_inv - preds_inv) / (np.abs(trues_inv) + 1e-8))
     ) * 100
 
-    # ── Normalised MAE & RMSE ∈ [0, 1] ───────────────────────────────────
-    # Divide by the range of actual values (max − min).
-    # This makes NMAE/NRMSE scale-free and directly comparable across models
-    # or datasets regardless of ridership magnitude.
+    # ── MAE% and RMSE% — mean-demand-normalised percentages ──────────────
+    # MAE%  = Σ|pred − actual| / Σ(actual) × 100
+    #       = MAE / mean(actual) × 100          (equivalent, since both ÷ n)
+    # RMSE% = RMSE / mean(actual) × 100
     #
-    #   NMAE  = MAE  / (max_actual − min_actual)   ∈ [0, 1]
-    #   NRMSE = RMSE / (max_actual − min_actual)   ∈ [0, 1]
-    #
-    # Interpretation:
-    #   0.00 → perfect predictions
-    #   0.05 → average error is 5 % of the full ridership swing — excellent
-    #   0.10 → 10 % of swing — acceptable for a baseline
-    #   0.20 → 20 % of swing — poor
-    #   1.00 → errors as large as the entire ridership range — useless
-    #
-    # Why range and not mean?
-    #   Mean-normalised MAE (= MAPE / 100) confounds scale and spread.
-    #   Range normalisation maps onto the actual dynamic range the model must
-    #   capture, making it the standard for multi-model leaderboard comparison.
-    actual_range = float(np.abs(trues_inv).max() - np.abs(trues_inv).min()) + 1e-8
-    nmae  = float(mae  / actual_range)   # Normalised MAE  ∈ [0, 1]
-    nrmse = float(rmse / actual_range)   # Normalised RMSE ∈ [0, 1]
+    # Both use mean(actual) as the denominator, making them scale-free
+    # percentages directly comparable to MAPE in the Combined formula.
+    mean_actual = float(np.abs(trues_inv).mean()) + 1e-8
+    mae_pct  = float(mae  / mean_actual * 100)
+    rmse_pct = float(rmse / mean_actual * 100)
 
     # Combined Accuracy ∈ [0, 100]
     # ─────────────────────────────────────────────────────────────────────
-    # Updated to use NMAE / NRMSE (already 0-1 fractions) instead of the old
-    # mean-percentage terms.  Multiply by 100 to convert to percentage points
-    # before subtracting from 100, keeping the Combined metric on [0, 100].
-    #
-    #   Combined = max(0,  100 − MAPE − NMAE×100 − NRMSE×100)
-    combined = float(np.clip(100.0 - (mape + nmae * 100 + nrmse * 100), 0.0, 100.0))
+    #   Combined = max(0,  100 − MAPE − MAE% − RMSE%)
+    combined = float(np.clip(100.0 - (mape + mae_pct + rmse_pct), 0.0, 100.0))
 
     return dict(
         MAE=mae, RMSE=rmse,
-        NMAE=nmae, NRMSE=nrmse,   # ← new normalised columns
+        MAE_pct=mae_pct, RMSE_pct=rmse_pct,
         R2=r2, MAPE=mape, Combined=combined,
     ), preds_inv, trues_inv
 

@@ -483,17 +483,25 @@ def evaluate(model, loader, tgt_scaler, device, calibrator=None):
         np.abs((trues_inv - preds_inv) / (np.abs(trues_inv) + 1e-8))
     ) * 100
 
-    # v4 FIX 5: NMAE / NRMSE — range-normalised to [0, 1]
-    actual_range = float(np.abs(trues_inv).max() - np.abs(trues_inv).min()) + 1e-8
-    nmae  = float(mae  / actual_range)
-    nrmse = float(rmse / actual_range)
+    # ── MAE% and RMSE% — mean-demand-normalised percentages ──────────────
+    # MAE%  = Σ|pred − actual| / Σ(actual) × 100
+    #       = MAE / mean(actual) × 100          (equivalent, since both ÷ n)
+    # RMSE% = RMSE / mean(actual) × 100
+    #
+    # Both use mean(actual) as the denominator, making them scale-free
+    # percentages directly comparable to MAPE in the Combined formula.
+    mean_actual = float(np.abs(trues_inv).mean()) + 1e-8
+    mae_pct  = float(mae  / mean_actual * 100)
+    rmse_pct = float(rmse / mean_actual * 100)
 
-    # Combined = max(0, 100 − MAPE − NMAE×100 − NRMSE×100)
-    combined = float(np.clip(100.0 - (mape + nmae * 100 + nrmse * 100), 0.0, 100.0))
+    # Combined Accuracy ∈ [0, 100]
+    # ─────────────────────────────────────────────────────────────────────
+    #   Combined = max(0,  100 − MAPE − MAE% − RMSE%)
+    combined = float(np.clip(100.0 - (mape + mae_pct + rmse_pct), 0.0, 100.0))
 
     return dict(
         MAE=mae, RMSE=rmse,
-        NMAE=nmae, NRMSE=nrmse,
+        MAE_pct=mae_pct, RMSE_pct=rmse_pct,
         R2=r2, MAPE=mape, Combined=combined,
     ), preds_inv, trues_inv
 
@@ -541,6 +549,7 @@ def compare_with_baseline(bilstm_metrics: dict, baseline_path: str):
     Gracefully skips if the file does not exist yet.
     """
     baseline_path = Path(baseline_path)
+
     if not baseline_path.exists():
         logging.warning(
             f"Baseline metrics not found at '{baseline_path}'. "
@@ -550,32 +559,50 @@ def compare_with_baseline(bilstm_metrics: dict, baseline_path: str):
 
     baseline = pd.read_csv(baseline_path).iloc[0].to_dict()
 
-    metrics_order = ["MAE", "RMSE", "NMAE", "NRMSE", "MAPE", "R2", "Combined"]
-    # Lower-is-better for all except R2 and Combined
+    metrics_order = ["MAE", "RMSE", "MAE_pct", "RMSE_pct", "MAPE", "R2", "Combined"]
+
+    # Higher-is-better metrics
     higher_better = {"R2", "Combined"}
 
     col_w = 14
-    sep = "-" * (12 + col_w * 2)
+    sep = "-" * (12 + col_w * 3)
 
     logging.info("")
     logging.info("=" * len(sep))
     logging.info("  MODEL COMPARISON — BiLSTM v4 vs LSTM v4 (baseline)")
     logging.info("=" * len(sep))
-    logging.info(f"  {'Metric':<12}{'BiLSTM v4':>{col_w}}{'LSTM v4':>{col_w}}{'Winner':>{col_w}}")
+    logging.info(
+        f"  {'Metric':<12}"
+        f"{'BiLSTM v4':>{col_w}}"
+        f"{'LSTM v4':>{col_w}}"
+        f"{'Winner':>{col_w}}"
+    )
     logging.info(sep)
 
     for m in metrics_order:
-        bi_val   = bilstm_metrics.get(m, float("nan"))
+        bi_val = bilstm_metrics.get(m, float("nan"))
         base_val = baseline.get(m, float("nan"))
 
         if m in higher_better:
-            winner = "BiLSTM (W)" if bi_val > base_val else ("LSTM (W)" if base_val > bi_val else "TIE")
+            winner = (
+                "BiLSTM (W)"
+                if bi_val > base_val
+                else ("LSTM (W)" if base_val > bi_val else "TIE")
+            )
         else:
-            winner = "BiLSTM (W)" if bi_val < base_val else ("LSTM (W)" if base_val < bi_val else "TIE")
+            winner = (
+                "BiLSTM (W)"
+                if bi_val < base_val
+                else ("LSTM (W)" if base_val < bi_val else "TIE")
+            )
 
-        fmt = ".4f" if m in {"NMAE", "NRMSE", "R2"} else ".2f"
+        fmt = ".4f"
+
         logging.info(
-            f"  {m:<12}{bi_val:>{col_w}{fmt}}{base_val:>{col_w}{fmt}}{winner:>{col_w}}"
+            f"  {m:<12}"
+            f"{bi_val:>{col_w}{fmt}}"
+            f"{base_val:>{col_w}{fmt}}"
+            f"{winner:>{col_w}}"
         )
 
     logging.info(sep)

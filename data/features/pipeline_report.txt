@@ -15,18 +15,18 @@ STEP STATUS
 
 LSTM FEATURE MATRIX
 ----------------------------------------
-  Shape            : (2637, 1904)
+  Shape            : (2637, 449)
   Date range       : 2019-01-01 -> 2026-03-21
-  NaN %            : 30.81%
+  NaN %            : 29.77%
   Feature groups   :
     ridership            221 columns
-    fuel                 30 columns
+    fuel                 27 columns
     holiday              18 columns
-    rainfall             1617 columns
+    rainfall             165 columns
     spatial              18 columns
 
   WARNINGS:
-    [!] 1825 columns have >10% NaN: ['ridership__bus_rkl', 'ridership__bus_rpn', 'ridership__rail_lrt_ampang', 'ridership__rail_mrt_kajang', 'ridership__rail_lrt_kj'] ...
+    [!] 372 columns have >10% NaN: ['ridership__bus_rkl', 'ridership__bus_rpn', 'ridership__rail_lrt_ampang', 'ridership__rail_mrt_kajang', 'ridership__rail_lrt_kj'] ...
 
 GRAPH VALIDATION
 ----------------------------------------
