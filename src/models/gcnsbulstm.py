@@ -1,9 +1,9 @@
 """
-GCN-SBULSTM — Bus Ridership Forecasting
+GCN-SBULSTM v4 — Bus Ridership Forecasting
 Hardware target: 13th Gen Intel Core i5-13500HX + NVIDIA RTX 4050 (6 GB VRAM)
 
-Architecture overview
-─────────────────────
+Architecture (UNCHANGED from v3):
+─────────────────────────────────
   Input (B, T, F)
     → InputProj   Linear(F, N*node_dim) + ReLU + LayerNorm
     → Reshape     (B*T, N, node_dim)           ← treat each timestep as a graph
@@ -13,18 +13,37 @@ Architecture overview
     → LayerNorm + Dropout
     → MLP head    hidden → 64 → horizon
 
-Adaptive Adjacency (Graph WaveNet style)
-─────────────────────────────────────────
+Adaptive Adjacency (Graph WaveNet style) — UNCHANGED:
+──────────────────────────────────────────────────────
   Two learnable node-embedding matrices E1, E2 ∈ R^{N×embed_dim}.
   A = softmax(ReLU(E1 @ E2ᵀ))
-  No ground-truth KL transit topology needed — the graph is learned end-to-end.
+  No ground-truth transit topology needed — graph learned end-to-end.
 
-Spatial-Based Unit (SBU)
-─────────────────────────
+Spatial-Based Unit (SBU) — UNCHANGED:
+───────────────────────────────────────
   Two stacked GCN layers with a residual skip:
     H' = GCN₂(GCN₁(H, A), A)  +  H
   GCN:  H_out = ReLU(LayerNorm(A H W))
-  einsum formulation avoids explicit expand/bmm overhead.
+
+v4 fixes (identical to LSTM v4, BiLSTM v4, TPA-LSTM v4 — required for fair comparison):
+  [FIX 1] Removed log1p / expm1.  Target is StandardScaler-only (linear scale).
+          log1p compressed the 140K–260K ridership swing into 0.62 log-units,
+          causing systematic peak under-prediction (GCN spatial signal was being
+          learned in a compressed space where 30K errors looked negligible).
+  [FIX 2] Replaced HuberLoss with MSELoss.  Huber discounted large peak errors;
+          MSE squares them so the adaptive adjacency matrix is trained to route
+          signal toward high-ridership weekday patterns.
+  [FIX 3] lr_T_max 500 → 100.  Prevents the unstable high-LR phase (epochs 0-50)
+          that caused large val-loss spikes.
+  [FIX 4] Post-hoc linear calibration on val set removes residual systematic
+          bias before test evaluation.  No leakage, no architecture change.
+  [FIX 5] NMAE / NRMSE added — range-normalised to [0, 1].
+          Combined = max(0, 100 − MAPE − NMAE×100 − NRMSE×100).
+
+  [COMPARISON]
+  After test evaluation the script automatically loads LSTM v4 results from
+  src/outputs/lstm/test_metrics.csv and prints a side-by-side leaderboard.
+  Path can be overridden via CFG["baseline_metrics_path"].
 """
 
 import os
@@ -51,8 +70,9 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────
 CFG = dict(
     # Paths
-    data_path       = "data/features/feature_matrix_lstm.parquet",
-    output_dir      = "src/outputs/gcn_sbu_lstm",
+    data_path             = "data/features/feature_matrix_lstm.parquet",
+    output_dir            = "src/outputs/gcn_sbu_lstm",
+    baseline_metrics_path = "src/outputs/lstm/test_metrics.csv",  # LSTM v4 baseline
 
     # Target
     target_col      = "ridership__bus_rkl",
@@ -79,10 +99,10 @@ CFG = dict(
     weight_decay    = 1e-5,
     patience        = 50,
     grad_clip       = 0.5,
-    huber_delta     = 10000.0,
+    huber_delta     = 10000.0,      # UNUSED in v4 — replaced by MSELoss (FIX 2)
 
     # LR schedule
-    lr_T_max        = 500,
+    lr_T_max        = 100,          # FIX 3: was 500; decays to eta_min by epoch 100
     lr_eta_min      = 1e-7,
 
     # Data split
@@ -244,8 +264,11 @@ def make_splits(df, feature_cols, cfg):
     feat_scaler = StandardScaler()
     feat_scaler.fit(X_all[:train_end])
 
+    # v4 FIX 1: Remove log1p — raw StandardScaler only.
+    # log1p compressed 140K–260K ridership into 0.62 log-units; the GCN
+    # adjacency matrix was being optimised in compressed space where 30K
+    # peak errors looked negligible in loss space.
     tgt_scaler = StandardScaler()
-    y_all = np.log1p(y_all)
     tgt_scaler.fit(y_all[:train_end].reshape(-1, 1))
 
     X_all = feat_scaler.transform(X_all)
@@ -460,10 +483,18 @@ def eval_epoch(model, loader, criterion, device):
 
 
 # ─────────────────────────────────────────────
-# 7. EVALUATION METRICS  (unchanged)
+# 7. EVALUATION METRICS
 # ─────────────────────────────────────────────
 @torch.no_grad()
-def evaluate(model, loader, tgt_scaler, device):
+def evaluate(model, loader, tgt_scaler, device, calibrator=None):
+    """Return metrics in original scale (averaged across horizon steps).
+    See METRICS.md for detailed definitions.
+
+    v4 changes:
+      - log1p/expm1 removed (FIX 1)
+      - NMAE/NRMSE added, Combined updated (FIX 5)
+      - Optional post-hoc linear calibrator applied before metrics (FIX 4)
+    """
     model.eval()
     all_pred, all_true = [], []
     for X_batch, y_batch in loader:
@@ -474,13 +505,13 @@ def evaluate(model, loader, tgt_scaler, device):
     preds = np.concatenate(all_pred, axis=0)
     trues = np.concatenate(all_true, axis=0)
 
-    # Inverse-scale across the horizon
-    # Correct order: 1. Inverse StandardScaler -> 2. expm1 (reverse log1p)
-    preds_scaled_inv = tgt_scaler.inverse_transform(preds.reshape(-1, 1)).reshape(preds.shape)
-    trues_scaled_inv = tgt_scaler.inverse_transform(trues.reshape(-1, 1)).reshape(trues.shape)
-    
-    preds_inv = np.expm1(preds_scaled_inv)
-    trues_inv = np.expm1(trues_scaled_inv)
+    # v4 FIX 1 (mirror): log1p removed → only inverse StandardScaler needed
+    preds_inv = tgt_scaler.inverse_transform(preds.reshape(-1, 1)).reshape(preds.shape)
+    trues_inv = tgt_scaler.inverse_transform(trues.reshape(-1, 1)).reshape(trues.shape)
+
+    # v4 FIX 4: apply linear calibration if provided
+    if calibrator is not None:
+        preds_inv = calibrator.predict(preds_inv.ravel().reshape(-1, 1)).reshape(preds_inv.shape)
 
     mae  = mean_absolute_error(trues_inv.ravel(), preds_inv.ravel())
     rmse = math.sqrt(mean_squared_error(trues_inv.ravel(), preds_inv.ravel()))
@@ -489,12 +520,21 @@ def evaluate(model, loader, tgt_scaler, device):
         np.abs((trues_inv - preds_inv) / (np.abs(trues_inv) + 1e-8))
     ) * 100
 
-    mean_actual = np.abs(trues_inv).mean() + 1e-8
-    mae_pct     = (mae  / mean_actual) * 100
-    rmse_pct    = (rmse / mean_actual) * 100
-    combined    = float(np.clip(100.0 - (mape + mae_pct + rmse_pct), 0.0, 100.0))
+    # v4 FIX 5: NMAE / NRMSE — range-normalised to [0, 1]
+    # Dividing by (max − min) maps onto the actual ridership swing (140K–260K),
+    # making the metric scale-free for cross-model leaderboard comparison.
+    actual_range = float(np.abs(trues_inv).max() - np.abs(trues_inv).min()) + 1e-8
+    nmae  = float(mae  / actual_range)
+    nrmse = float(rmse / actual_range)
 
-    return dict(MAE=mae, RMSE=rmse, R2=r2, MAPE=mape, Combined=combined), preds_inv, trues_inv
+    # Combined = max(0, 100 − MAPE − NMAE×100 − NRMSE×100)
+    combined = float(np.clip(100.0 - (mape + nmae * 100 + nrmse * 100), 0.0, 100.0))
+
+    return dict(
+        MAE=mae, RMSE=rmse,
+        NMAE=nmae, NRMSE=nrmse,
+        R2=r2, MAPE=mape, Combined=combined,
+    ), preds_inv, trues_inv
 
 
 # ─────────────────────────────────────────────
@@ -504,7 +544,7 @@ def save_plots(history: dict, preds, trues, output_dir: Path):
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(history["train_loss"], label="Train loss")
     ax.plot(history["val_loss"],   label="Val loss")
-    ax.set_xlabel("Epoch"); ax.set_ylabel("Huber Loss")
+    ax.set_xlabel("Epoch"); ax.set_ylabel("MSE Loss")
     ax.set_title("GCN-SBULSTM — Training & Validation Loss")
     ax.legend(); ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -523,6 +563,52 @@ def save_plots(history: dict, preds, trues, output_dir: Path):
     fig.savefig(output_dir / "forecast_vs_actual.png", dpi=150)
     plt.close(fig)
     logging.info("Saved forecast_vs_actual.png")
+
+
+def compare_with_baseline(gcn_metrics: dict, baseline_path: str):
+    """
+    Load LSTM v4 test_metrics.csv and print a side-by-side leaderboard.
+    Skips gracefully if file does not exist yet.
+    """
+    baseline_path = Path(baseline_path)
+    if not baseline_path.exists():
+        logging.warning(
+            f"Baseline metrics not found at '{baseline_path}'. "
+            "Run lstm_v4.py first, then re-run to see the comparison."
+        )
+        return
+
+    baseline = pd.read_csv(baseline_path).iloc[0].to_dict()
+
+    metrics_order = ["MAE", "RMSE", "NMAE", "NRMSE", "MAPE", "R2", "Combined"]
+    higher_better = {"R2", "Combined"}
+
+    col_w = 16
+    sep   = "-" * (12 + col_w * 2)
+
+    logging.info("")
+    logging.info("=" * len(sep))
+    logging.info("  MODEL COMPARISON — GCN-SBULSTM v4 vs LSTM v4 (baseline)")
+    logging.info("=" * len(sep))
+    logging.info(f"  {'Metric':<12}{'GCN-SBULSTM v4':>{col_w}}{'LSTM v4':>{col_w}}{'Winner':>{col_w}}")
+    logging.info(sep)
+
+    for m in metrics_order:
+        gcn_val  = gcn_metrics.get(m, float("nan"))
+        base_val = baseline.get(m, float("nan"))
+
+        if m in higher_better:
+            winner = "GCN (W)" if gcn_val > base_val else ("LSTM (W)" if base_val > gcn_val else "TIE")
+        else:
+            winner = "GCN (W)" if gcn_val < base_val else ("LSTM (W)" if base_val < gcn_val else "TIE")
+
+        fmt = ".4f" if m in {"NMAE", "NRMSE", "R2"} else ".2f"
+        logging.info(
+            f"  {m:<12}{gcn_val:>{col_w}{fmt}}{base_val:>{col_w}{fmt}}{winner:>{col_w}}"
+        )
+
+    logging.info(sep)
+    logging.info("")
 
 
 # ─────────────────────────────────────────────
@@ -577,7 +663,10 @@ def main():
     logging.info(model)
 
     # ── Loss, optimiser, scheduler ────────────────────────────────────────
-    criterion = nn.HuberLoss(delta=cfg["huber_delta"])
+    # v4 FIX 2: MSELoss replaces HuberLoss.
+    # Huber discounted 30K peak errors; MSE squares them so the adaptive
+    # adjacency matrix is trained to route signal toward high-ridership days.
+    criterion = nn.MSELoss()
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -585,9 +674,11 @@ def main():
         weight_decay = cfg["weight_decay"],
     )
 
+    # v4 FIX 3: T_max=100 — LR decays to eta_min by epoch 100.
+    # T_max=500 kept LR ~4.9e-4 for first 50+ epochs causing val-loss spikes.
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max   = cfg["lr_T_max"],
+        T_max   = cfg["lr_T_max"],   # 100
         eta_min = cfg["lr_eta_min"],
     )
 
@@ -645,27 +736,53 @@ def main():
 
     logging.info(f"Best val loss: {best_val:.6f} — checkpoint: {best_ckpt}")
 
-    # ── Test evaluation ───────────────────────────────────────────────────
+    # ── Load best checkpoint ──────────────────────────────────────────────
     ckpt = torch.load(best_ckpt, map_location=device)
     model.load_state_dict(ckpt["model_state"])
 
+    # ── v4 FIX 4: Post-hoc linear calibration on val set ─────────────────
+    # y_cal = a·ŷ + b fitted on val predictions (original scale).
+    # Removes residual systematic bias before test evaluation.
+    # No data leakage — val set is never seen during training.
+    from sklearn.linear_model import LinearRegression as _LR
+
+    @torch.no_grad()
+    def _collect_preds(loader):
+        model.eval()
+        ps, ts = [], []
+        for Xb, yb in loader:
+            p = model(Xb.to(device)).cpu().numpy()
+            ps.append(p); ts.append(yb.numpy())
+        p = np.concatenate(ps); t = np.concatenate(ts)
+        p_inv = tgt_scaler.inverse_transform(p.reshape(-1, 1)).reshape(p.shape)
+        t_inv = tgt_scaler.inverse_transform(t.reshape(-1, 1)).reshape(t.shape)
+        return p_inv, t_inv
+
+    val_p, val_t = _collect_preds(loaders["val"])
+    cal = _LR().fit(val_p.ravel().reshape(-1, 1), val_t.ravel())
+    logging.info(f"Calibration  a={cal.coef_[0]:.4f}  b={cal.intercept_:.1f}")
+
+    # ── Test evaluation ───────────────────────────────────────────────────
     test_metrics, preds_inv, trues_inv = evaluate(
-        model, loaders["test"], tgt_scaler, device
+        model, loaders["test"], tgt_scaler, device, calibrator=cal
     )
 
     logging.info("-" * 60)
-    logging.info("TEST RESULTS (original scale, averaged over horizon)")
+    logging.info("TEST RESULTS — GCN-SBULSTM v4 (original scale, averaged over horizon)")
     for k, v in test_metrics.items():
         logging.info(f"  {k:8s}: {v:.4f}")
     logging.info("-" * 60)
 
+    # ── Baseline comparison ───────────────────────────────────────────────
+    compare_with_baseline(test_metrics, cfg["baseline_metrics_path"])
+
+    # ── Plots & artefacts ─────────────────────────────────────────────────
     save_plots(history, preds_inv, trues_inv, output_dir)
 
     np.save(output_dir / "test_preds.npy", preds_inv)
     np.save(output_dir / "test_trues.npy", trues_inv)
 
-    metrics_df = pd.DataFrame([test_metrics])
-    metrics_df.to_csv(output_dir / "test_metrics.csv", index=False)
+    pd.DataFrame([test_metrics]).to_csv(output_dir / "test_metrics.csv", index=False)
     logging.info(f"All outputs saved to {output_dir}/")
 
 
