@@ -54,40 +54,37 @@ CFG = dict(
     data_path  = "data/features/feature_matrix_lstm_clean.parquet",
     output_dir = "src/outputs/lstm",
 
-    # Targets — raw service columns are auto-detected via TARGET_COL_RE.
-    # Negative lookahead excludes derived features (roll, lag, zscore, anomaly,
-    # cyclical encodings, anything with a digit like "7d").
+    # Targets
     target_col_re = r"^ridership__(bus|rail)_(?!.*(?:roll|lag|zscore|anomaly|sin|cos|\d))[a-z_]+$",
 
     # Sequence
-    seq_len  = 28,   # 4-week look-back captures weekly seasonality
-    horizon  = 7,    # forecast horizon (days)
+    seq_len  = 56,      # longer context window
+    horizon  = 7,
 
     # Model
-    proj_dim     = 128,
-    hidden_size  = 128,
-    num_layers   = 2,
-    dropout      = 0.2,
+    proj_dim      = 256,
+    hidden_size   = 256,
+    num_layers    = 3,
+    dropout       = 0.3,
     bidirectional = False,
 
     # Training
-    batch_size   = 32,
-    max_epochs   = 5,
-    lr           = 1e-3,
-    weight_decay = 1e-5,
-    patience     = 2,
-    grad_clip    = 1.0,
+    batch_size    = 64,
+    max_epochs    = 100,
+    lr            = 3e-4,
+    weight_decay  = 1e-4,
+    patience      = 15,
+    grad_clip     = 0.5,
 
-    # LR schedule — Reduce on plateau
-    lr_scheduler = "ReduceLROnPlateau",
-    lr_patience  = 2,
-    lr_factor    = 0.5,
-    lr_min       = 1e-8,
+    # Scheduler
+    lr_scheduler  = "ReduceLROnPlateau",
+    lr_patience   = 3,
+    lr_factor     = 0.5,
+    lr_min        = 1e-7,
 
-    # Data split (chronological)
-    train_ratio = 0.70,
-    val_ratio   = 0.15,
-    # test_ratio = 0.15 (remainder)
+    # Split
+    train_ratio   = 0.70,
+    val_ratio     = 0.15,
 
     # Reproducibility
     seed = 42,

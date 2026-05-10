@@ -73,27 +73,29 @@ CFG = dict(
     target_col_re = r"^ridership__(bus|rail)_(?!.*(?:roll|lag|zscore|anomaly|sin|cos|\d))[a-z_]+$",
 
     # Sequence
-    seq_len       = 28,   # 4-week look-back captures weekly seasonality
+    seq_len       = 56,   # 4-week look-back captures weekly seasonality
     horizon       = 7,    # forecast horizon (days)
 
     # Model
-    proj_dim      = 128,          # input projection dim before BiLSTM
-    hidden_size   = 128,          # per-direction; effective output = 128×2 = 256
-    num_layers    = 2,
-    dropout       = 0.2,
+    proj_dim      = 256,          # input projection dim before BiLSTM
+    hidden_size   = 256,          # per-direction; effective output = 128×2 = 256
+    num_layers    = 3,
+    dropout       = 0.3,
     bidirectional = True,
 
     # Training
-    batch_size    = 32,
-    max_epochs    = 500,
-    lr            = 5e-4,
-    weight_decay  = 1e-5,
-    patience      = 50,
+    batch_size    = 64,
+    max_epochs    = 100,
+    lr            = 3e-4,
+    weight_decay  = 1e-4,
+    patience      = 15,
     grad_clip     = 0.5,
 
-    # LR schedule — cosine annealing
-    lr_T_max      = 100,   # LR reaches eta_min at epoch 100
-    lr_eta_min    = 1e-7,
+    # LR schedule — Reduce on plateau
+    lr_scheduler  = "ReduceLROnPlateau",
+    lr_patience   = 3,
+    lr_factor     = 0.5,
+    lr_min        = 1e-7,
 
     # Data split (chronological)
     train_ratio   = 0.70,
@@ -135,7 +137,7 @@ def setup_logging(output_dir: Path) -> None:
         format   = "%(asctime)s  %(levelname)s  %(message)s",
         handlers = [logging.StreamHandler(), logging.FileHandler(log_path)],
     )
-    logging.info(f"Logs → {log_path}")
+    logging.info(f"Logs -> {log_path}")
 
 
 # ─────────────────────────────────────────────
@@ -222,11 +224,14 @@ class RidershipDataset(Dataset):
         self.y       = torch.tensor(y, dtype=torch.float32)
         self.seq_len = seq_len
         self.horizon = horizon
+        self._len = max(len(self.X) - self.seq_len - self.horizon + 1, 0)
 
     def __len__(self) -> int:
-        return len(self.X) - self.seq_len - self.horizon + 1
+        return self._len
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        if idx < 0 or idx >= self._len:
+            raise IndexError("index out of range")
         x = self.X[idx : idx + self.seq_len]                               # (seq_len, n_features)
         y = self.y[idx + self.seq_len : idx + self.seq_len + self.horizon] # (horizon, n_services)
         return x, y.T                                                       # y: (n_services, horizon)
@@ -240,7 +245,8 @@ def make_splits(
 ) -> tuple[dict, StandardScaler, list[StandardScaler]]:
     """
     Chronological train/val/test split with per-service target scaling.
-    Scales fit on train only to prevent data leakage.
+    Clips extreme outlier values (≥3σ) in target before scaling to improve
+    training stability. Scales fit on train only to prevent data leakage.
     Returns (datasets, feat_scaler, tgt_scalers).
     tgt_scalers is indexed identically to target_cols.
     """
@@ -252,6 +258,14 @@ def make_splits(
 
     X_all = df[feature_cols].values.astype(np.float32)   # (T, n_features)
     y_all = df[target_cols].values.astype(np.float32)    # (T, n_services)
+
+    # ---- pre-scale outlier clip (per-service, fit on train) -----------------
+    for i in range(y_all.shape[1]):
+        tr = y_all[:train_end, i]
+        mu, sg = tr.mean(), tr.std()
+        lower, upper = mu - 3.0 * sg, mu + 3.0 * sg
+        clipped = np.clip(y_all[:, i], lower, upper)
+        y_all[:, i] = clipped
 
     # Fit feature scaler on train only
     feat_scaler = StandardScaler()
@@ -623,7 +637,7 @@ def main() -> None:
         split: DataLoader(
             ds,
             batch_size         = cfg["batch_size"] if split == "train" else cfg["batch_size"] * 2,
-            shuffle            = False,
+            shuffle            = (split == "train"),
             num_workers        = 4,
             pin_memory         = pin_memory,
             persistent_workers = True,
@@ -651,16 +665,18 @@ def main() -> None:
     logging.info(model)
 
     # ── Loss, optimiser, scheduler ────────────────────────────────────────
-    criterion = nn.MSELoss()
+    criterion = nn.SmoothL1Loss()  # Huber (more robust than MSE)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr           = cfg["lr"],
         weight_decay = cfg["weight_decay"],
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        T_max   = cfg["lr_T_max"],
-        eta_min = cfg["lr_eta_min"],
+        mode     = "min",
+        factor   = cfg["lr_factor"],
+        patience = cfg["lr_patience"],
+        min_lr   = cfg["lr_min"],
     )
 
     use_amp    = device.type == "cuda"
@@ -682,7 +698,7 @@ def main() -> None:
             scaler_amp, device, cfg["grad_clip"], use_amp,
         )
         val_loss = eval_epoch(model, loaders["val"], criterion, device)
-        scheduler.step()
+        scheduler.step(val_loss)
 
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
