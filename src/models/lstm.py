@@ -72,15 +72,17 @@ CFG = dict(
 
     # Training
     batch_size   = 32,
-    max_epochs   = 500,
-    lr           = 5e-4,
+    max_epochs   = 5,
+    lr           = 1e-3,
     weight_decay = 1e-5,
-    patience     = 50,
-    grad_clip    = 0.5,
+    patience     = 2,
+    grad_clip    = 1.0,
 
-    # LR schedule — cosine annealing
-    lr_T_max   = 100,   # LR reaches eta_min at epoch 100
-    lr_eta_min = 1e-7,
+    # LR schedule — Reduce on plateau
+    lr_scheduler = "ReduceLROnPlateau",
+    lr_patience  = 2,
+    lr_factor    = 0.5,
+    lr_min       = 1e-8,
 
     # Data split (chronological)
     train_ratio = 0.70,
@@ -122,20 +124,191 @@ def setup_logging(output_dir: Path) -> None:
         format   = "%(asctime)s  %(levelname)s  %(message)s",
         handlers = [logging.StreamHandler(), logging.FileHandler(log_path)],
     )
-    logging.info(f"Logs → {log_path}")
+    logging.info(f"Logs -> {log_path}")
 
 
 # ─────────────────────────────────────────────
 # 2. DATA LOADING & PREPROCESSING
 # ─────────────────────────────────────────────
+
+# Derived ridership suffixes used to detect and normalise feature coverage.
+# Listed longest-first so suffix matching is unambiguous when iterating.
+_RIDERSHIP_DERIVED_SUFFIXES: tuple[str, ...] = (
+    "roll_mean_14d", "roll_max_14d",
+    "roll_mean_7d",  "roll_max_7d",
+    "roll_mean_3d",  "roll_max_3d",
+    "lag_m7d", "lag_m3d", "lag_m1d",
+    "lag_7d",  "lag_3d",  "lag_1d",
+    "zscore",  "anomaly",
+)
+
+# Rainfall temporal windows kept after station aggregation.
+# lag_3d / lag_7d are dropped: they correlate strongly with lag_1d (r ≥ 0.77)
+# and the LSTM already captures multi-step temporal patterns internally.
+_RAIN_KEEP_WINDOWS: frozenset[str] = frozenset(
+    {"raw", "lag_1d", "roll_3d", "roll_7d", "roll_14d"}
+)
+_RAIN_DROP_WINDOWS: frozenset[str] = frozenset({"lag_3d", "lag_7d"})
+
+
+def _aggregate_rainfall(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Audit fix 2 — Reduce rainfall features from ~114 to ~11 aggregated cols.
+
+    Issue (lstm_feature_audit.html): 14 stations × lag(1d/3d/7d) ×
+    roll(3d/7d/14d) + flags expands to 114 columns (8.1× explosion). Nearly
+    all station pairs share the same rainfall signal; per-station detail
+    adds noise rather than useful variance.
+
+    Strategy:
+      • For each temporal window in _RAIN_KEEP_WINDOWS: collapse all station
+        columns to one spatial mean and one spatial max.
+      • Drop per-station lag_3d / lag_7d entirely (lag_m1d vs lag_m7d r = 0.87;
+        the LSTM handles temporal context without redundant lags).
+      • Merge the 14 heavy_rain_flag_* columns into a single any-station flag.
+      • Remove all original per-station columns afterwards.
+
+    Assumes the naming convention:
+      rain[fall]_<station>[_lag_Nd | _roll_Nd]      (raw / lag / rolling)
+      heavy_rain_flag_<station>                      (binary flags)
+    """
+    rain_re   = re.compile(r"^(rain(?:fall)?_|heavy_rain_flag_)", re.IGNORECASE)
+    rain_cols = [c for c in df.columns if rain_re.match(c)]
+
+    if not rain_cols:
+        logging.info("[Audit] No rainfall columns detected — skipping de-bloat step.")
+        return df
+
+    # ── 1. Aggregate heavy_rain_flag_* → single any-station flag ──────────
+    flag_cols = [c for c in rain_cols if "heavy_rain_flag" in c.lower()]
+    if flag_cols:
+        df["rain_any_heavy_flag"] = df[flag_cols].max(axis=1).astype(np.float32)
+        logging.info(
+            f"[Audit] {len(flag_cols)} heavy_rain_flag_* -> rain_any_heavy_flag"
+        )
+
+    # ── 2. Group non-flag rain columns by temporal window ─────────────────
+    window_re = re.compile(r"_(lag_\d+d|roll_\d+d)$", re.IGNORECASE)
+    non_flag  = [c for c in rain_cols if "heavy_rain_flag" not in c.lower()]
+
+    window_groups: dict[str, list[str]] = {}
+    for col in non_flag:
+        m      = window_re.search(col)
+        window = m.group(1).lower() if m else "raw"
+        window_groups.setdefault(window, []).append(col)
+
+    # ── 3. Aggregate KEEP windows; drop DROP windows ───────────────────────
+    cols_to_drop: list[str] = flag_cols[:]
+
+    for window, cols in window_groups.items():
+        sfx = f"__{window}" if window != "raw" else ""
+
+        if window in _RAIN_KEEP_WINDOWS:
+            df[f"rain_spatial_mean{sfx}"] = (
+                df[cols].mean(axis=1).astype(np.float32)
+            )
+            df[f"rain_spatial_max{sfx}"] = (
+                df[cols].max(axis=1).astype(np.float32)
+            )
+            cols_to_drop.extend(cols)
+            logging.info(
+                f"[Audit] {len(cols):>3} rain cols ({window:<10}) "
+                f"-> rain_spatial_mean{sfx}, rain_spatial_max{sfx}"
+            )
+
+        elif window in _RAIN_DROP_WINDOWS:
+            cols_to_drop.extend(cols)
+            logging.info(
+                f"[Audit] Dropped {len(cols):>3} rain cols ({window}) "
+                f"— redundant lag (r ≥ 0.77 with lag_1d)"
+            )
+
+        else:
+            logging.info(
+                f"[Audit] Unknown rainfall window '{window}' "
+                f"({len(cols)} cols) — kept as-is"
+            )
+
+    df = df.drop(columns=cols_to_drop, errors="ignore")
+
+    n_new = sum(
+        1 for c in df.columns
+        if c.startswith("rain_spatial_") or c == "rain_any_heavy_flag"
+    )
+    logging.info(
+        f"[Audit] Rainfall de-bloat complete: {len(rain_cols)} cols -> {n_new} cols"
+    )
+    return df
+
+
+def _enforce_ridership_coverage(df: pd.DataFrame, target_re_str: str) -> pd.DataFrame:
+    """
+    Audit fix 3 — Drop ridership-derived feature types that are absent for
+    any transit line so every service presents a uniform feature space.
+
+    Issue (lstm_feature_audit.html): 6 of 12 lines are missing at least one
+    of roll_mean_7d, roll_max_7d, or anomaly flag. The shared LSTM backbone
+    receives different feature spaces per series, which confuses the input
+    projection and creates implicit data leakage through missingness patterns.
+
+    Strategy: compute the intersection of feature-type suffixes that every
+    line has; drop columns whose suffix falls outside that intersection.
+    Imputing zeros is avoided because zero is a meaningful value in scaled
+    ridership space.
+    """
+    target_re = re.compile(target_re_str)
+
+    # Map col → (line_key, suffix) for every ridership-derived column
+    line_to_suffixes: dict[str, set[str]] = {}
+    col_meta: dict[str, tuple[str, str]] = {}
+
+    for col in df.columns:
+        if target_re.match(col) or not col.startswith("ridership__"):
+            continue
+        for suffix in _RIDERSHIP_DERIVED_SUFFIXES:
+            if col.endswith(f"_{suffix}"):
+                # Everything between "ridership__" and "_<suffix>" is the line key
+                line_key = col[len("ridership__") : -(len(suffix) + 1)]
+                col_meta[col] = (line_key, suffix)
+                line_to_suffixes.setdefault(line_key, set()).add(suffix)
+                break  # longest-first guarantees the correct match
+
+    if not line_to_suffixes:
+        logging.info("[Audit] No ridership-derived columns found — skipping coverage check.")
+        return df
+
+    suffix_sets  = list(line_to_suffixes.values())
+    common       = set.intersection(*suffix_sets)
+    all_seen     = set.union(*suffix_sets)
+    inconsistent = all_seen - common
+
+    if not inconsistent:
+        logging.info("[Audit] Ridership feature coverage is uniform — no columns dropped.")
+        return df
+
+    to_drop = [col for col, (_, sfx) in col_meta.items() if sfx in inconsistent]
+    logging.info(
+        f"[Audit] Dropping {len(to_drop)} ridership-derived cols with "
+        f"inconsistent line coverage (suffixes: {sorted(inconsistent)})"
+    )
+    return df.drop(columns=to_drop, errors="ignore")
+
+
 def load_and_clean(cfg: dict) -> tuple[pd.DataFrame, list[str], list[str]]:
     """
-    Load the pre-cleaned parquet, detect service targets, return
-    (df, feature_cols, target_cols).
+    Load the pre-cleaned parquet, apply feature-audit fixes, detect service
+    targets, and return (df, feature_cols, target_cols).
 
-    Feature engineering is intentionally absent: all lag, rolling, and
-    calendar features are already present in the cleaned parquet. Adding them
-    again would duplicate columns and inflate the input projection unnecessarily.
+    Audit fixes applied (lstm_feature_audit.html):
+      1. Zero-variance columns dropped (e.g. heavy_rain_flag_1902, std = 0).
+      2. Rainfall de-bloat: 114 per-station cols → ~11 spatial aggregates;
+         redundant lag_3d / lag_7d removed (r ≥ 0.77 with lag_1d).
+      3. Ridership coverage normalised: derived feature types absent for any
+         line are dropped so the LSTM sees a uniform input space per service.
+
+    Feature engineering remains absent by design: all lag, rolling, and
+    calendar features are already present in the cleaned parquet. Regenerating
+    them here would duplicate columns and inflate the input projection.
     """
     path = Path(cfg["data_path"])
     if not path.exists():
@@ -164,11 +337,23 @@ def load_and_clean(cfg: dict) -> tuple[pd.DataFrame, list[str], list[str]]:
         logging.warning(f"{remaining:,} NaN found — applying ffill/bfill/zero-fill")
         df = df.ffill().bfill().fillna(0.0)
 
-    # Drop any constant columns that survived cleaning
-    constant = df.nunique()[df.nunique() <= 1].index.tolist()
+    # ── Audit fix 1: Drop zero-variance columns ──────────────────────────────
+    # Catches heavy_rain_flag_1902 (std = 0) and any other constant survivors.
+    # Zero-variance features add noise to the input projection without signal.
+    constant = df.columns[df.nunique() <= 1].tolist()
     if constant:
-        logging.info(f"Dropping {len(constant)} residual constant columns")
+        logging.info(
+            f"[Audit] Dropping {len(constant)} zero-variance column(s): {constant}"
+        )
         df = df.drop(columns=constant)
+
+    # ── Audit fix 2: Rainfall feature de-bloat ───────────────────────────────
+    # 114 per-station cols → ~11 spatial aggregates + 1 any-heavy-rain flag.
+    df = _aggregate_rainfall(df)
+
+    # ── Audit fix 3: Enforce consistent ridership feature coverage ───────────
+    # Drop derived types missing for ≥1 line; LSTM backbone needs uniform input.
+    df = _enforce_ridership_coverage(df, cfg["target_col_re"])
 
     # Auto-detect service targets
     target_re   = re.compile(cfg["target_col_re"])
@@ -209,11 +394,14 @@ class RidershipDataset(Dataset):
         self.y       = torch.tensor(y, dtype=torch.float32)
         self.seq_len = seq_len
         self.horizon = horizon
+        self._len = max(len(self.X) - self.seq_len - self.horizon + 1, 0)
 
     def __len__(self) -> int:
-        return len(self.X) - self.seq_len - self.horizon + 1
+        return self._len
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        if idx < 0 or idx >= self._len:
+            raise IndexError("index out of range")
         x = self.X[idx : idx + self.seq_len]                               # (seq_len, n_features)
         y = self.y[idx + self.seq_len : idx + self.seq_len + self.horizon] # (horizon, n_services)
         return x, y.T                                                       # y: (n_services, horizon)
@@ -227,7 +415,8 @@ def make_splits(
 ) -> tuple[dict, StandardScaler, list[StandardScaler]]:
     """
     Chronological train/val/test split with per-service target scaling.
-    Scales fit on train only to prevent data leakage.
+    Clips extreme outlier values (≥3σ) in target before scaling to improve
+    training stability. Scales fit on train only to prevent data leakage.
     Returns (datasets, feat_scaler, tgt_scalers).
     tgt_scalers is indexed identically to target_cols.
     """
@@ -239,6 +428,14 @@ def make_splits(
 
     X_all = df[feature_cols].values.astype(np.float32)   # (T, n_features)
     y_all = df[target_cols].values.astype(np.float32)    # (T, n_services)
+
+    # ---- pre-scale outlier clip (per-service, fit on train) -----------------
+    for i in range(y_all.shape[1]):
+        tr = y_all[:train_end, i]
+        mu, sg = tr.mean(), tr.std()
+        lower, upper = mu - 3.0 * sg, mu + 3.0 * sg
+        clipped = np.clip(y_all[:, i], lower, upper)
+        y_all[:, i] = clipped
 
     # Fit feature scaler on train only
     feat_scaler = StandardScaler()
@@ -531,7 +728,7 @@ def main() -> None:
         split: DataLoader(
             ds,
             batch_size         = cfg["batch_size"] if split == "train" else cfg["batch_size"] * 2,
-            shuffle            = False,
+            shuffle            = (split == "train"),
             num_workers        = 4,
             pin_memory         = pin_memory,
             persistent_workers = True,
@@ -559,16 +756,18 @@ def main() -> None:
     logging.info(model)
 
     # ── Loss, optimiser, scheduler ────────────────────────────────────────
-    criterion = nn.MSELoss()
+    criterion = nn.SmoothL1Loss()  # Huber (more robust than MSE)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr           = cfg["lr"],
         weight_decay = cfg["weight_decay"],
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        T_max   = cfg["lr_T_max"],
-        eta_min = cfg["lr_eta_min"],
+        mode     = "min",
+        factor   = cfg["lr_factor"],
+        patience = cfg["lr_patience"],
+        min_lr   = cfg["lr_min"],
     )
 
     use_amp    = device.type == "cuda"
@@ -590,7 +789,7 @@ def main() -> None:
             scaler_amp, device, cfg["grad_clip"], use_amp,
         )
         val_loss = eval_epoch(model, loaders["val"], criterion, device)
-        scheduler.step()
+        scheduler.step(val_loss)
 
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
