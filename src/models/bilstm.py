@@ -1,8 +1,8 @@
 """
-Improved BiLSTM v4 - Bus Ridership Forecasting
+Multi-Service BiLSTM v5 — RapidKL Ridership Forecasting
 Hardware target: 13th Gen Intel Core i5-13500HX + NVIDIA RTX 4050 (6 GB VRAM)
 
-Key differences vs LSTM v4 (baseline):
+Key differences vs LSTM v5 (baseline):
   - bidirectional=True  → hidden state is 2× wide (forward + backward pass)
   - hidden_size=128, effective output width = 128×2 = 256
   - BiLSTM sees the full seq_len window in BOTH directions before predicting,
@@ -11,39 +11,36 @@ Key differences vs LSTM v4 (baseline):
     (seq_len past values), never future target values.
 
 Pipeline source: FEATURE.md
-   - Input  : feature_matrix_lstm.parquet  (2637 rows x 1717 cols)
-   - Target : ridership__bus_rkl
+   - Input  : feature_matrix_lstm_clean.parquet
+   - Targets: all 12 ridership services (bus + rail)
    - Range  : 2019-01-01 to 2026-03-21
-   - Missing: ~30 % (mainly rainfall, daily resolution)
 
-v4 fixes (identical to LSTM v4 — required for fair comparison):
-  [FIX 1] Removed log1p / expm1.  Target is StandardScaler-only (linear scale).
-          log1p compressed peaks (260K→12.47) and troughs (140K→11.85) into only
-          0.62 log-units, causing systematic peak under-prediction.
-  [FIX 2] Replaced HuberLoss with MSELoss.  Huber discounted 30K peak errors;
-          MSE squares them so the model is forced to chase weekday peaks.
-  [FIX 3] lr_T_max 500 → 100.  Prevents the large val-loss spikes caused by
-          the LR being nearly unchanged for the first 50+ epochs.
-  [FIX 4] Post-hoc linear calibration on val set removes residual systematic
-          bias before test evaluation.  No leakage, no architecture change.
-  [FIX 5] NMAE / NRMSE added — MAE and RMSE normalised by range (max−min) to
-          [0, 1] so they slot directly into the Combined formula as percentages.
-          Combined = max(0, 100 − MAPE − NMAE×100 − NRMSE×100).
+v5 changes from v4 (single-service bus_rkl only):
+  - Multi-service: shared BiLSTM backbone + per-service MLP heads
+  - Targets auto-detected via TARGET_COL_RE (no hardcoded service name)
+  - Feature engineering removed: all lag/rolling/calendar features already
+    present in the cleaned parquet; duplicating them inflated input size
+    and introduced near-identical columns that confused the input projection
+  - Per-service StandardScaler and post-hoc linear calibration
+  - Metrics reported per-service and as macro-average
+  - Checkpoint saves both feat_scaler and tgt_scalers for inference
+
+Architecture (unchanged from v4 except multi-service heads):
+  Input (B, T, n_features)
+    → InputProj  Linear(n_features, proj_dim) + ReLU + LayerNorm
+    → BiLSTM(proj_dim, hidden=128, layers=2, dropout=0.2)
+    → LayerNorm + Dropout
+    → n_services × [Linear(256, 64) + ReLU + Linear(64, horizon)]
+  Output: (B, n_services, horizon)
 
   [COMPARISON]
-  After test evaluation the script automatically loads LSTM v4 results from
+  After test evaluation the script automatically loads LSTM v5 results from
   src/outputs/lstm/test_metrics.csv and prints a side-by-side leaderboard table.
   The CSV path can be overridden via CFG["baseline_metrics_path"].
-
-  [UNCHANGED from v3]
-  - bidirectional=True, hidden_size=128, num_layers=2, dropout=0.2
-  - Input projection (n_features → proj_dim=128) + ReLU + LayerNorm
-  - Two-layer MLP head (256 → 64 → horizon)
-  - seq_len=28, horizon=7, patience=50, AMP, batch_size=32
-  - All lag/calendar feature engineering
 """
 
 import math
+import re
 import warnings
 import logging
 from pathlib import Path
@@ -54,6 +51,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import matplotlib.pyplot as plt
@@ -65,59 +63,57 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────
 CFG = dict(
     # Paths
-    data_path             = "data/features/feature_matrix_lstm.parquet",
+    data_path             = "data/features/feature_matrix_lstm_clean.parquet",
     output_dir            = "src/outputs/bilstm",
-    baseline_metrics_path = "src/outputs/lstm/test_metrics.csv",  # LSTM v4 results
+    baseline_metrics_path = "src/outputs/lstm/test_metrics.csv",  # LSTM v5 results
 
-    # Target
-    target_col      = "ridership__bus_rkl",
+    # Targets — raw service columns are auto-detected via TARGET_COL_RE.
+    # Negative lookahead excludes derived features (roll, lag, zscore, anomaly,
+    # cyclical encodings, anything with a digit like "7d").
+    target_col_re = r"^ridership__(bus|rail)_(?!.*(?:roll|lag|zscore|anomaly|sin|cos|\d))[a-z_]+$",
 
     # Sequence
-    seq_len         = 28,           # 4-week look-back
-    horizon         = 7,            # forecast horizon (days)
+    seq_len       = 28,   # 4-week look-back captures weekly seasonality
+    horizon       = 7,    # forecast horizon (days)
 
     # Model
-    proj_dim        = 128,          # input projection dim before BiLSTM
-    hidden_size     = 128,          # per-direction; effective output = 128×2 = 256
-    num_layers      = 2,
-    dropout         = 0.2,
-    bidirectional   = True,
+    proj_dim      = 128,          # input projection dim before BiLSTM
+    hidden_size   = 128,          # per-direction; effective output = 128×2 = 256
+    num_layers    = 2,
+    dropout       = 0.2,
+    bidirectional = True,
 
-    # Training — tuned for RTX 4050 6 GB
-    batch_size      = 32,
-    max_epochs      = 500,
-    lr              = 5e-4,
-    weight_decay    = 1e-5,
-    patience        = 50,
-    grad_clip       = 0.5,
-    huber_delta     = 10000.0,      # UNUSED in v4 — replaced by MSELoss (FIX 2)
+    # Training
+    batch_size    = 32,
+    max_epochs    = 500,
+    lr            = 5e-4,
+    weight_decay  = 1e-5,
+    patience      = 50,
+    grad_clip     = 0.5,
 
     # LR schedule — cosine annealing
-    lr_T_max        = 100,          # FIX 3: was 500; decays to eta_min by epoch 100
-    lr_eta_min      = 1e-7,
+    lr_T_max      = 100,   # LR reaches eta_min at epoch 100
+    lr_eta_min    = 1e-7,
 
     # Data split (chronological)
-    train_ratio     = 0.70,
-    val_ratio       = 0.15,
-    # test_ratio    = 0.15 (remainder)
-
-    # Imputation strategy for ~30 % NaN
-    impute_method   = "ffill",      # "ffill" | "median" | "zero"
+    train_ratio   = 0.70,
+    val_ratio     = 0.15,
+    # test_ratio  = 0.15 (remainder)
 
     # Reproducibility
-    seed            = 42,
+    seed          = 42,
 )
 
 
 # ─────────────────────────────────────────────
 # 1. UTILITIES
 # ─────────────────────────────────────────────
-def set_seed(seed: int):
+def set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark     = False   # flip to True to trade reproducibility for speed
+    torch.backends.cudnn.benchmark     = False
 
 
 def get_device() -> torch.device:
@@ -127,92 +123,47 @@ def get_device() -> torch.device:
         logging.info(f"GPU  : {props.name}  |  VRAM: {props.total_memory / 1e9:.1f} GB")
     else:
         dev = torch.device("cpu")
-        logging.info("GPU not available – running on CPU")
+        logging.info("GPU not available — running on CPU")
     return dev
 
 
-def setup_logging(output_dir: Path):
+def setup_logging(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = output_dir / f"train_{datetime.now():%Y%m%d_%H%M%S}.log"
     logging.basicConfig(
-        level   = logging.INFO,
-        format  = "%(asctime)s  %(levelname)s  %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_path),
-        ],
+        level    = logging.INFO,
+        format   = "%(asctime)s  %(levelname)s  %(message)s",
+        handlers = [logging.StreamHandler(), logging.FileHandler(log_path)],
     )
-    logging.info(f"Logs -> {log_path}")
+    logging.info(f"Logs → {log_path}")
 
 
 # ─────────────────────────────────────────────
-# 2. FEATURE ENGINEERING
+# 2. DATA LOADING & PREPROCESSING
 # ─────────────────────────────────────────────
-def add_engineered_features(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
+def load_and_clean(cfg: dict) -> tuple[pd.DataFrame, list[str], list[str]]:
     """
-    Inject autoregressive lags, rolling statistics, and cyclical calendar
-    features into the dataframe.
+    Load the pre-cleaned parquet, detect service targets, return
+    (df, feature_cols, target_cols).
 
-    Why this fixes the flat-prediction problem
-    ──────────────────────────────────────────
-    Without lag features the BiLSTM receives only exogenous signals (weather,
-    economic indicators, etc.) but never sees past ridership values.  Bus
-    ridership has an extremely strong weekly cycle (~140K on weekends, ~260K
-    on weekdays). The model cannot learn this oscillation unless it can observe
-    "yesterday was a peak day" vs "yesterday was a trough day". Lag-7 alone
-    gives it the answer: whatever happened last Monday will very likely happen
-    this Monday.
-
-    Rolling stats give the model a smoothed reference level so the head can
-    learn to predict *deviations* from the recent mean rather than absolute
-    counts — this stabilises gradients and speeds convergence.
-
-    All features use shift(≥1) so no future information leaks into the input.
-    NaN values introduced at the start of the series are filled by the caller's
-    imputation step (ffill/bfill).
+    Feature engineering is intentionally absent: all lag, rolling, and
+    calendar features are already present in the cleaned parquet. Adding them
+    again would duplicate columns and inflate the input projection unnecessarily.
     """
-    # ── Autoregressive target lags ────────────────────────────────────────
-    for lag in [1, 7, 14, 21]:
-        df[f"_tgt_lag_{lag}"] = df[target_col].shift(lag)
-
-    # ── 7-day rolling mean and std (shifted 1 to avoid leakage) ──────────
-    shifted = df[target_col].shift(1)
-    df["_tgt_roll7_mean"] = shifted.rolling(7, min_periods=7).mean()
-    df["_tgt_roll7_std"]  = shifted.rolling(7, min_periods=1).std().fillna(0)
-
-    # ── Cyclical calendar encoding ────────────────────────────────────────
-    # sin/cos pairs produce continuous, periodic representations with no
-    # arbitrary ordinal distance between e.g. Sunday (6) and Monday (0).
-    dow = df.index.dayofweek.astype(float)           # 0=Mon … 6=Sun
-    df["_dow_sin"]    = np.sin(2 * np.pi * dow / 7)
-    df["_dow_cos"]    = np.cos(2 * np.pi * dow / 7)
-    df["_month_sin"]  = np.sin(2 * np.pi * df.index.month / 12)
-    df["_month_cos"]  = np.cos(2 * np.pi * df.index.month / 12)
-    df["_is_weekend"] = (dow >= 5).astype(float)     # 1.0 = Sat/Sun
-
-    return df
-
-
-# ─────────────────────────────────────────────
-# 3. DATA LOADING & PREPROCESSING
-# ─────────────────────────────────────────────
-def load_and_clean(cfg: dict) -> tuple[pd.DataFrame, list[str]]:
-    """Load parquet, impute NaN, return cleaned df and feature columns."""
     path = Path(cfg["data_path"])
     if not path.exists():
         raise FileNotFoundError(
             f"Feature matrix not found at '{path}'.\n"
-            "Run the feature engineering pipeline first."
+            "Run pretrain_clean.py first."
         )
 
     logging.info(f"Loading {path} …")
     df = pd.read_parquet(path)
-    logging.info(f"Raw shape: {df.shape}  |  NaN%: {df.isna().mean().mean()*100:.1f}")
+    logging.info(f"Raw shape: {df.shape}  |  NaN%: {df.isna().mean().mean() * 100:.1f}")
 
-    # Replace infinite values with NaN
     df = df.replace([np.inf, -np.inf], np.nan)
 
-    # ── Parse date index ──────────────────────────────────────────────────
+    # Ensure DatetimeIndex
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date")
@@ -220,133 +171,139 @@ def load_and_clean(cfg: dict) -> tuple[pd.DataFrame, list[str]]:
         df.index = pd.to_datetime(df.index)
     df = df.sort_index()
 
-    # ── Inject lag / calendar features BEFORE imputation ─────────────────
-    # Lag NaNs at the series start will be resolved by the ffill/bfill below
-    # along with any pre-existing missing data — no special casing needed.
-    df = add_engineered_features(df, cfg["target_col"])
+    # Safety impute (parquet should already be clean)
+    remaining = df.isna().sum().sum()
+    if remaining:
+        logging.warning(f"{remaining:,} NaN found — applying ffill/bfill/zero-fill")
+        df = df.ffill().bfill().fillna(0.0)
 
-    # ── Impute ────────────────────────────────────────────────────────────
-    method = cfg["impute_method"]
-    if method == "ffill":
-        df = df.ffill().bfill()
-    elif method == "median":
-        df = df.fillna(df.median(numeric_only=True))
-    elif method == "zero":
-        df = df.fillna(0.0)
-    else:
-        raise ValueError(f"Unknown impute_method: {method}")
+    # Drop any constant columns that survived cleaning
+    constant = df.nunique()[df.nunique() <= 1].index.tolist()
+    if constant:
+        logging.info(f"Dropping {len(constant)} residual constant columns")
+        df = df.drop(columns=constant)
 
-    remaining_nan = df.isna().sum().sum()
-    if remaining_nan:
-        logging.warning(f"{remaining_nan} NaN remain after imputation — filling with 0")
-        df = df.fillna(0.0)
-
-    # ── Drop constant / all-zero columns ─────────────────────────────────
-    nunique   = df.nunique()
-    drop_cols = nunique[nunique <= 1].index.tolist()
-    if drop_cols:
-        logging.info(f"Dropping {len(drop_cols)} constant columns")
-        df = df.drop(columns=drop_cols)
-
-    if cfg["target_col"] not in df.columns:
-        raise KeyError(
-            f"Target '{cfg['target_col']}' not found. "
-            f"Available: {list(df.columns[:10])} …"
+    # Auto-detect service targets
+    target_re   = re.compile(cfg["target_col_re"])
+    target_cols = [c for c in df.columns if target_re.match(c)]
+    if not target_cols:
+        raise RuntimeError(
+            f"No target columns matched '{cfg['target_col_re']}'. "
+            f"Sample columns: {list(df.columns[:8])}"
         )
 
-    feature_cols = [c for c in df.columns if c != cfg["target_col"]]
-    logging.info(f"Clean shape: {df.shape}  |  features: {len(feature_cols)}")
-    return df, feature_cols
+    feature_cols = [c for c in df.columns if c not in target_cols]
+    logging.info(
+        f"Clean shape: {df.shape}  |  "
+        f"features: {len(feature_cols)}  |  services: {len(target_cols)}"
+    )
+    logging.info(f"Services: {target_cols}")
+    return df, feature_cols, target_cols
 
 
 # ─────────────────────────────────────────────
-# 4. DATASET
+# 3. DATASET
 # ─────────────────────────────────────────────
 class RidershipDataset(Dataset):
     """
-    Sliding-window dataset.
+    Sliding-window multi-service dataset.
     X : (seq_len, n_features)
-    y : (horizon,)
+    y : (n_services, horizon)
     """
 
-    def __init__(self, X: np.ndarray, y: np.ndarray, seq_len: int, horizon: int):
+    def __init__(
+        self,
+        X: np.ndarray,   # (T, n_features)
+        y: np.ndarray,   # (T, n_services)
+        seq_len: int,
+        horizon: int,
+    ):
         self.X       = torch.tensor(X, dtype=torch.float32)
         self.y       = torch.tensor(y, dtype=torch.float32)
         self.seq_len = seq_len
         self.horizon = horizon
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.X) - self.seq_len - self.horizon + 1
 
-    def __getitem__(self, idx):
-        x = self.X[idx : idx + self.seq_len]
-        y = self.y[idx + self.seq_len : idx + self.seq_len + self.horizon]
-        return x, y
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        x = self.X[idx : idx + self.seq_len]                               # (seq_len, n_features)
+        y = self.y[idx + self.seq_len : idx + self.seq_len + self.horizon] # (horizon, n_services)
+        return x, y.T                                                       # y: (n_services, horizon)
 
 
-def make_splits(df, feature_cols, cfg):
-
-    T = len(df)
-
+def make_splits(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    target_cols: list[str],
+    cfg: dict,
+) -> tuple[dict, StandardScaler, list[StandardScaler]]:
+    """
+    Chronological train/val/test split with per-service target scaling.
+    Scales fit on train only to prevent data leakage.
+    Returns (datasets, feat_scaler, tgt_scalers).
+    tgt_scalers is indexed identically to target_cols.
+    """
+    T         = len(df)
     n_train   = int(T * cfg["train_ratio"])
     n_val     = int(T * cfg["val_ratio"])
     train_end = n_train
     val_end   = n_train + n_val
 
-    X_all = df[feature_cols].values
-    y_all = df[cfg["target_col"]].values
+    X_all = df[feature_cols].values.astype(np.float32)   # (T, n_features)
+    y_all = df[target_cols].values.astype(np.float32)    # (T, n_services)
 
-    # Scale on TRAIN ONLY — prevents data leakage
+    # Fit feature scaler on train only
     feat_scaler = StandardScaler()
     feat_scaler.fit(X_all[:train_end])
-
-    # v4 FIX 1: Remove log1p — use raw StandardScaler only.
-    # log1p compressed the 140K–260K ridership range into 0.62 log-units,
-    # making peak errors look small in loss space while being huge in reality.
-    tgt_scaler = StandardScaler()
-    tgt_scaler.fit(y_all[:train_end].reshape(-1, 1))
-
     X_all = feat_scaler.transform(X_all)
-    y_all = tgt_scaler.transform(y_all.reshape(-1, 1)).ravel()
+
+    # Fit one target scaler per service on train only
+    tgt_scalers: list[StandardScaler] = []
+    y_scaled = np.zeros_like(y_all)
+    for i in range(y_all.shape[1]):
+        sc = StandardScaler()
+        sc.fit(y_all[:train_end, i : i + 1])
+        y_scaled[:, i] = sc.transform(y_all[:, i : i + 1]).ravel()
+        tgt_scalers.append(sc)
 
     seq_len = cfg["seq_len"]
     horizon = cfg["horizon"]
 
-    train_X = X_all[:train_end]
-    train_y = y_all[:train_end]
-
-    # Overlap by seq_len so the first val/test window has full context
-    val_X = X_all[train_end - seq_len : val_end]
-    val_y = y_all[train_end - seq_len : val_end]
-
-    test_X = X_all[val_end - seq_len :]
-    test_y = y_all[val_end - seq_len :]
-
-    datasets = {
-        "train": RidershipDataset(train_X, train_y, seq_len, horizon),
-        "val"  : RidershipDataset(val_X,   val_y,   seq_len, horizon),
-        "test" : RidershipDataset(test_X,  test_y,  seq_len, horizon),
+    # Overlap by seq_len so val/test windows have full context at their start
+    splits = {
+        "train": (X_all[:train_end],              y_scaled[:train_end]),
+        "val"  : (X_all[train_end - seq_len : val_end], y_scaled[train_end - seq_len : val_end]),
+        "test" : (X_all[val_end - seq_len :],     y_scaled[val_end - seq_len :]),
     }
-
-    return datasets, feat_scaler, tgt_scaler
+    datasets = {
+        name: RidershipDataset(X, y, seq_len, horizon)
+        for name, (X, y) in splits.items()
+    }
+    return datasets, feat_scaler, tgt_scalers
 
 
 # ─────────────────────────────────────────────
-# 5. MODEL — BiLSTM
+# 4. MODEL — BiLSTM
 # ─────────────────────────────────────────────
 class ImprovedBiLSTM(nn.Module):
     """
-    Input projection → Stacked Bidirectional LSTM → MLP head.
+    Shared BiLSTM backbone + per-service heads for multi-step, multi-service forecasting.
 
     Architecture:
       Input (B, T, n_features)
         → InputProj  Linear(n_features, proj_dim) + ReLU + LayerNorm
-        → BiLSTM(proj_dim, hidden=64, layers=2, dropout=0.3)
-             output width = 64×2 = 128  (same VRAM footprint as LSTM hidden=128)
-        → LayerNorm(128)
-        → Dropout(0.3)
-        → Linear(128, 64) + ReLU
-        → Linear(64, horizon)
+        → BiLSTM(proj_dim, hidden_size, num_layers, dropout)
+             output width = hidden_size×2  (forward + backward)
+        → LayerNorm + Dropout  (on last time-step hidden state)
+        → n_services × [Linear(hidden×2, 64) + ReLU + Linear(64, horizon)]
+      Output: (B, n_services, horizon)
+
+    The shared backbone learns cross-service temporal dynamics; each head
+    specialises in one service's prediction distribution. The bidirectional
+    pass sees the full look-back window in both directions, capturing long-range
+    temporal dependencies that a unidirectional LSTM misses — with no leakage
+    since both directions only observe past values within the seq_len window.
 
     Why the input projection matters
     ─────────────────────────────────
@@ -358,52 +315,53 @@ class ImprovedBiLSTM(nn.Module):
 
     def __init__(
         self,
-        input_size  : int,
-        proj_dim    : int,
-        hidden_size : int,
-        num_layers  : int,
-        dropout     : float,
-        horizon     : int,
+        input_size   : int,
+        proj_dim     : int,
+        hidden_size  : int,
+        num_layers   : int,
+        dropout      : float,
+        horizon      : int,
+        n_services   : int,
         bidirectional: bool = True,
     ):
         super().__init__()
-        self.bidirectional = bidirectional
         D = 2 if bidirectional else 1
 
-        # ── Input projection ──────────────────────────────────────────────
         self.input_proj = nn.Sequential(
             nn.Linear(input_size, proj_dim),
             nn.ReLU(),
             nn.LayerNorm(proj_dim),
         )
-
-        # ── Recurrent core ────────────────────────────────────────────────
         self.lstm = nn.LSTM(
-            input_size   = proj_dim,
-            hidden_size  = hidden_size,
-            num_layers   = num_layers,
-            dropout      = dropout if num_layers > 1 else 0.0,
-            bidirectional= bidirectional,
-            batch_first  = True,
+            input_size    = proj_dim,
+            hidden_size   = hidden_size,
+            num_layers    = num_layers,
+            dropout       = dropout if num_layers > 1 else 0.0,
+            bidirectional = bidirectional,
+            batch_first   = True,
         )
         self.norm    = nn.LayerNorm(hidden_size * D)
         self.dropout = nn.Dropout(dropout)
 
-        # ── MLP head ──────────────────────────────────────────────────────
-        self.head = nn.Sequential(
-            nn.Linear(hidden_size * D, 64),
-            nn.ReLU(),
-            nn.Linear(64, horizon),
-        )
+        self.heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(hidden_size * D, 64),
+                nn.ReLU(),
+                nn.Linear(64, horizon),
+            )
+            for _ in range(n_services)
+        ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, seq_len, n_features)
         x      = self.input_proj(x)        # (B, seq_len, proj_dim)
         out, _ = self.lstm(x)              # (B, seq_len, D*hidden)
-        last   = out[:, -1, :]             # last time-step
+        last   = out[:, -1, :]             # (B, D*hidden)
         last   = self.norm(last)
         last   = self.dropout(last)
-        return self.head(last)             # (B, horizon)
+        return torch.stack(               # (B, n_services, horizon)
+            [head(last) for head in self.heads], dim=1
+        )
 
 
 def count_params(model: nn.Module) -> int:
@@ -411,9 +369,11 @@ def count_params(model: nn.Module) -> int:
 
 
 # ─────────────────────────────────────────────
-# 6. TRAINING & EVALUATION
+# 5. TRAINING & VALIDATION
 # ─────────────────────────────────────────────
-def train_epoch(model, loader, optimizer, criterion, scaler_amp, device, grad_clip, use_amp):
+def train_epoch(
+    model, loader, optimizer, criterion, scaler_amp, device, grad_clip, use_amp
+) -> float:
     """Single training epoch with mixed-precision support."""
     model.train()
     total_loss = 0.0
@@ -422,8 +382,7 @@ def train_epoch(model, loader, optimizer, criterion, scaler_amp, device, grad_cl
         y_batch = y_batch.to(device, non_blocking=True)
         optimizer.zero_grad()
         with torch.amp.autocast("cuda", enabled=use_amp):
-            pred = model(X_batch)
-            loss = criterion(pred, y_batch)
+            loss = criterion(model(X_batch), y_batch)
         scaler_amp.scale(loss).backward()
         scaler_amp.unscale_(optimizer)
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -434,83 +393,106 @@ def train_epoch(model, loader, optimizer, criterion, scaler_amp, device, grad_cl
 
 
 @torch.no_grad()
-def eval_epoch(model, loader, criterion, device):
+def eval_epoch(model, loader, criterion, device) -> float:
     model.eval()
-    total = 0.0
+    total_loss = 0.0
     for X_batch, y_batch in loader:
         X_batch = X_batch.to(device, non_blocking=True)
         y_batch = y_batch.to(device, non_blocking=True)
-        total += criterion(model(X_batch), y_batch).item() * X_batch.size(0)
-    return total / len(loader.dataset)
+        total_loss += criterion(model(X_batch), y_batch).item() * X_batch.size(0)
+    return total_loss / len(loader.dataset)
 
 
 # ─────────────────────────────────────────────
-# 7. EVALUATION METRICS
+# 6. METRICS
 # ─────────────────────────────────────────────
 @torch.no_grad()
-def evaluate(model, loader, tgt_scaler, device, calibrator=None):
-    """Return metrics in original scale (averaged across horizon steps).
-    See METRICS.md for detailed definitions.
-
-    v4 changes vs v3:
-      - log1p/expm1 removed (FIX 1)
-      - NMAE/NRMSE added — range-normalised to [0,1] (FIX 5)
-      - Combined updated to use NMAE/NRMSE instead of mean-% (FIX 5)
-      - Optional post-hoc linear calibrator applied before metrics (FIX 4)
+def collect_predictions(
+    model       : nn.Module,
+    loader      : DataLoader,
+    tgt_scalers : list[StandardScaler],
+    device      : torch.device,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Collect and inverse-scale model predictions without calibration.
+    Returns (preds_inv, trues_inv), each shaped (N, n_services, horizon).
+    Used to fit per-service calibrators on the validation set.
     """
     model.eval()
     all_pred, all_true = [], []
     for X_batch, y_batch in loader:
-        pred = model(X_batch.to(device)).cpu().numpy()
-        all_pred.append(pred)
+        all_pred.append(model(X_batch.to(device)).cpu().numpy())
         all_true.append(y_batch.numpy())
 
-    preds = np.concatenate(all_pred, axis=0)   # (N, H)
-    trues = np.concatenate(all_true, axis=0)   # (N, H)
+    preds = np.concatenate(all_pred, axis=0)   # (N, n_services, horizon)
+    trues = np.concatenate(all_true, axis=0)
 
-    # v4 FIX 1 (mirror): log1p removed → only inverse StandardScaler needed
-    preds_inv = tgt_scaler.inverse_transform(preds.reshape(-1, 1)).reshape(preds.shape)
-    trues_inv = tgt_scaler.inverse_transform(trues.reshape(-1, 1)).reshape(trues.shape)
+    preds_inv, trues_inv = np.zeros_like(preds), np.zeros_like(trues)
+    H = preds.shape[2]
+    for i, sc in enumerate(tgt_scalers):
+        preds_inv[:, i, :] = sc.inverse_transform(preds[:, i, :].reshape(-1, 1)).reshape(-1, H)
+        trues_inv[:, i, :] = sc.inverse_transform(trues[:, i, :].reshape(-1, 1)).reshape(-1, H)
+    return preds_inv, trues_inv
 
-    # v4 FIX 4: apply linear calibration if provided
-    if calibrator is not None:
-        preds_inv = calibrator.predict(preds_inv.ravel().reshape(-1, 1)).reshape(preds_inv.shape)
 
-    mae  = mean_absolute_error(trues_inv.ravel(), preds_inv.ravel())
-    rmse = math.sqrt(mean_squared_error(trues_inv.ravel(), preds_inv.ravel()))
-    r2   = r2_score(trues_inv.ravel(), preds_inv.ravel())
-    mape = np.mean(
-        np.abs((trues_inv - preds_inv) / (np.abs(trues_inv) + 1e-8))
-    ) * 100
+@torch.no_grad()
+def evaluate(
+    model        : nn.Module,
+    loader       : DataLoader,
+    tgt_scalers  : list[StandardScaler],
+    target_cols  : list[str],
+    device       : torch.device,
+    calibrators  : dict[str, LinearRegression] | None = None,
+) -> tuple[dict, dict, np.ndarray, np.ndarray]:
+    """
+    Return per-service and macro-aggregate metrics in original scale.
+    Combined = max(0, 100 − MAPE − MAE% − RMSE%).
+    """
+    preds_inv, trues_inv = collect_predictions(model, loader, tgt_scalers, device)
+    H = preds_inv.shape[2]
 
-    # ── MAE% and RMSE% — mean-demand-normalised percentages ──────────────
-    # MAE%  = Σ|pred − actual| / Σ(actual) × 100
-    #       = MAE / mean(actual) × 100          (equivalent, since both ÷ n)
-    # RMSE% = RMSE / mean(actual) × 100
-    #
-    # Both use mean(actual) as the denominator, making them scale-free
-    # percentages directly comparable to MAPE in the Combined formula.
-    mean_actual = float(np.abs(trues_inv).mean()) + 1e-8
-    mae_pct  = float(mae  / mean_actual * 100)
-    rmse_pct = float(rmse / mean_actual * 100)
+    if calibrators is not None:
+        for i, col in enumerate(target_cols):
+            cal = calibrators[col]
+            preds_inv[:, i, :] = (
+                cal.predict(preds_inv[:, i, :].ravel().reshape(-1, 1)).reshape(-1, H)
+            )
 
-    # Combined Accuracy ∈ [0, 100]
-    # ─────────────────────────────────────────────────────────────────────
-    #   Combined = max(0,  100 − MAPE − MAE% − RMSE%)
-    combined = float(np.clip(100.0 - (mape + mae_pct + rmse_pct), 0.0, 100.0))
+    per_service: dict[str, dict] = {}
+    for i, col in enumerate(target_cols):
+        p = preds_inv[:, i, :].ravel()
+        t = trues_inv[:, i, :].ravel()
+        mae  = mean_absolute_error(t, p)
+        rmse = math.sqrt(mean_squared_error(t, p))
+        r2   = r2_score(t, p)
+        mape = float(np.mean(np.abs((t - p) / (np.abs(t) + 1e-8))) * 100)
+        mean_t   = float(np.abs(t).mean()) + 1e-8
+        mae_pct  = mae / mean_t * 100
+        rmse_pct = rmse / mean_t * 100
+        per_service[col] = dict(
+            MAE=mae, RMSE=rmse, R2=r2, MAPE=mape,
+            MAE_pct=mae_pct, RMSE_pct=rmse_pct,
+            Combined=float(np.clip(100.0 - (mape + mae_pct + rmse_pct), 0, 100)),
+        )
 
-    return dict(
-        MAE=mae, RMSE=rmse,
-        MAE_pct=mae_pct, RMSE_pct=rmse_pct,
-        R2=r2, MAPE=mape, Combined=combined,
-    ), preds_inv, trues_inv
+    # Macro-average across services
+    agg = {k: float(np.mean([m[k] for m in per_service.values()]))
+           for k in ["MAE", "RMSE", "R2", "MAPE", "MAE_pct", "RMSE_pct", "Combined"]}
+
+    return agg, per_service, preds_inv, trues_inv
 
 
 # ─────────────────────────────────────────────
-# 8. PLOTTING
+# 7. PLOTTING
 # ─────────────────────────────────────────────
-def save_plots(history: dict, preds, trues, output_dir: Path):
-    # ── Loss curves ───────────────────────────────────────────────────────
+def save_plots(
+    history     : dict,
+    preds_inv   : np.ndarray,
+    trues_inv   : np.ndarray,
+    target_cols : list[str],
+    output_dir  : Path,
+) -> None:
+    # Loss curves
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(history["train_loss"], label="Train loss")
     ax.plot(history["val_loss"],   label="Val loss")
@@ -524,84 +506,93 @@ def save_plots(history: dict, preds, trues, output_dir: Path):
     plt.close(fig)
     logging.info("Saved loss_curves.png")
 
-    # ── Forecast vs actual (first 90 days, step-1 horizon) ────────────────
-    n = min(90, len(trues))
-    fig, ax = plt.subplots(figsize=(14, 4))
-    ax.plot(trues[:n, 0], label="Actual",    linewidth=1.5)
-    ax.plot(preds[:n, 0], label="Predicted", linewidth=1.5, linestyle="--")
-    ax.set_xlabel("Sample")
-    ax.set_ylabel("bus_rkl (original scale)")
-    ax.set_title("BiLSTM Test Set — 1-Day-Ahead Forecast vs Actual")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    # Per-service 1-day-ahead forecast vs actual (first 90 samples)
+    n          = min(90, preds_inv.shape[0])
+    n_services = len(target_cols)
+    ncols      = 2
+    nrows      = math.ceil(n_services / ncols)
+    fig, axes  = plt.subplots(nrows, ncols, figsize=(14, 3 * nrows))
+    axes       = axes.ravel()
+
+    for i, (col, ax) in enumerate(zip(target_cols, axes)):
+        ax.plot(trues_inv[:n, i, 0], label="Actual",    linewidth=1.2)
+        ax.plot(preds_inv[:n, i, 0], label="Predicted", linewidth=1.2, linestyle="--")
+        ax.set_title(col.replace("ridership__", ""), fontsize=8)
+        ax.grid(True, alpha=0.3)
+        if i == 0:
+            ax.legend(fontsize=7)
+
+    for j in range(n_services, len(axes)):
+        axes[j].set_visible(False)
+
+    plt.suptitle("BiLSTM Test Set — 1-Day-Ahead Forecast vs Actual (per service)", y=1.01)
     plt.tight_layout()
-    fig.savefig(output_dir / "forecast_vs_actual.png", dpi=150)
+    fig.savefig(output_dir / "forecast_vs_actual.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
     logging.info("Saved forecast_vs_actual.png")
 
 
 # ─────────────────────────────────────────────
-# 9. MAIN
+# 8. BASELINE COMPARISON
 # ─────────────────────────────────────────────
-def compare_with_baseline(bilstm_metrics: dict, baseline_path: str):
+def compare_with_baseline(bilstm_metrics: dict, baseline_path: str) -> None:
     """
-    Load LSTM v4 test_metrics.csv and print a side-by-side leaderboard table.
-    Gracefully skips if the file does not exist yet.
+    Load LSTM v5 test_metrics.csv and print a side-by-side leaderboard table
+    using the AGGREGATE row. Gracefully skips if the file does not exist yet.
     """
     baseline_path = Path(baseline_path)
 
     if not baseline_path.exists():
         logging.warning(
             f"Baseline metrics not found at '{baseline_path}'. "
-            "Run lstm_v4.py first, then re-run this script to see the comparison."
+            "Run lstm.py first, then re-run this script to see the comparison."
         )
         return
 
-    baseline = pd.read_csv(baseline_path).iloc[0].to_dict()
+    df_base  = pd.read_csv(baseline_path)
+    agg_rows = df_base[df_base["service"] == "AGGREGATE"]
+    if agg_rows.empty:
+        logging.warning("AGGREGATE row not found in baseline CSV — skipping comparison.")
+        return
+    baseline = agg_rows.iloc[0].to_dict()
 
     metrics_order = ["MAE", "RMSE", "MAE_pct", "RMSE_pct", "MAPE", "R2", "Combined"]
-
-    # Higher-is-better metrics
     higher_better = {"R2", "Combined"}
 
     col_w = 14
-    sep = "-" * (12 + col_w * 3)
+    sep   = "-" * (12 + col_w * 3)
 
     logging.info("")
     logging.info("=" * len(sep))
-    logging.info("  MODEL COMPARISON — BiLSTM v4 vs LSTM v4 (baseline)")
+    logging.info("  MODEL COMPARISON — BiLSTM v5 vs LSTM v5 (baseline, AGGREGATE)")
     logging.info("=" * len(sep))
     logging.info(
         f"  {'Metric':<12}"
-        f"{'BiLSTM v4':>{col_w}}"
-        f"{'LSTM v4':>{col_w}}"
+        f"{'BiLSTM v5':>{col_w}}"
+        f"{'LSTM v5':>{col_w}}"
         f"{'Winner':>{col_w}}"
     )
     logging.info(sep)
 
     for m in metrics_order:
-        bi_val = bilstm_metrics.get(m, float("nan"))
+        bi_val   = bilstm_metrics.get(m, float("nan"))
         base_val = baseline.get(m, float("nan"))
 
         if m in higher_better:
             winner = (
-                "BiLSTM (W)"
-                if bi_val > base_val
+                "BiLSTM (W)" if bi_val > base_val
                 else ("LSTM (W)" if base_val > bi_val else "TIE")
             )
         else:
             winner = (
-                "BiLSTM (W)"
-                if bi_val < base_val
+                "BiLSTM (W)" if bi_val < base_val
                 else ("LSTM (W)" if base_val < bi_val else "TIE")
             )
 
-        fmt = ".4f"
-
         logging.info(
             f"  {m:<12}"
-            f"{bi_val:>{col_w}{fmt}}"
-            f"{base_val:>{col_w}{fmt}}"
+            f"{bi_val:>{col_w}.4f}"
+            f"{base_val:>{col_w}.4f}"
             f"{winner:>{col_w}}"
         )
 
@@ -612,7 +603,7 @@ def compare_with_baseline(bilstm_metrics: dict, baseline_path: str):
 # ─────────────────────────────────────────────
 # 9. MAIN
 # ─────────────────────────────────────────────
-def main():
+def main() -> None:
     cfg = CFG
     set_seed(cfg["seed"])
 
@@ -621,11 +612,13 @@ def main():
     device = get_device()
 
     # ── Data ──────────────────────────────────────────────────────────────
-    df, feature_cols = load_and_clean(cfg)
-    datasets, feat_scaler, tgt_scaler = make_splits(df, feature_cols, cfg)
-    n_features = len(feature_cols)
+    df, feature_cols, target_cols = load_and_clean(cfg)
+    datasets, feat_scaler, tgt_scalers = make_splits(df, feature_cols, target_cols, cfg)
 
+    n_features = len(feature_cols)
+    n_services = len(target_cols)
     pin_memory = device.type == "cuda"
+
     loaders = {
         split: DataLoader(
             ds,
@@ -637,7 +630,6 @@ def main():
         )
         for split, ds in datasets.items()
     }
-
     logging.info(
         f"Batches — train: {len(loaders['train'])}  "
         f"val: {len(loaders['val'])}  test: {len(loaders['test'])}"
@@ -645,35 +637,29 @@ def main():
 
     # ── Model ─────────────────────────────────────────────────────────────
     model = ImprovedBiLSTM(
-        input_size   = n_features,
-        proj_dim     = cfg["proj_dim"],
-        hidden_size  = cfg["hidden_size"],
-        num_layers   = cfg["num_layers"],
-        dropout      = cfg["dropout"],
-        horizon      = cfg["horizon"],
-        bidirectional= cfg["bidirectional"],
+        input_size    = n_features,
+        proj_dim      = cfg["proj_dim"],
+        hidden_size   = cfg["hidden_size"],
+        num_layers    = cfg["num_layers"],
+        dropout       = cfg["dropout"],
+        horizon       = cfg["horizon"],
+        n_services    = n_services,
+        bidirectional = cfg["bidirectional"],
     ).to(device)
 
     logging.info(f"Model parameters: {count_params(model):,}")
     logging.info(model)
 
     # ── Loss, optimiser, scheduler ────────────────────────────────────────
-    # v4 FIX 2: MSELoss replaces HuberLoss.
-    # Huber discounted 30K peak errors (by design); MSE squares every error
-    # so weekday-peak misses are penalised 9× more than mid-week misses.
     criterion = nn.MSELoss()
-
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr           = cfg["lr"],
         weight_decay = cfg["weight_decay"],
     )
-
-    # v4 FIX 3: T_max=100 — LR reaches eta_min at epoch 100, eliminating the
-    # large val-loss spikes that occurred when LR barely decayed in first 50 epochs.
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max   = cfg["lr_T_max"],   # 100
+        T_max   = cfg["lr_T_max"],
         eta_min = cfg["lr_eta_min"],
     )
 
@@ -687,7 +673,7 @@ def main():
     no_improve = 0
 
     logging.info("-" * 60)
-    logging.info("Starting training...")
+    logging.info("Starting training …")
     logging.info("-" * 60)
 
     for epoch in range(1, cfg["max_epochs"] + 1):
@@ -707,17 +693,20 @@ def main():
             f"train={train_loss:.6f}  val={val_loss:.6f}  lr={lr_now:.2e}"
         )
 
-        # ── Checkpoint & early stopping ───────────────────────────────────
         if val_loss < best_val:
             best_val   = val_loss
             no_improve = 0
             torch.save(
                 {
-                    "epoch"      : epoch,
-                    "model_state": model.state_dict(),
-                    "optim_state": optimizer.state_dict(),
-                    "val_loss"   : val_loss,
-                    "cfg"        : cfg,
+                    "epoch"       : epoch,
+                    "model_state" : model.state_dict(),
+                    "optim_state" : optimizer.state_dict(),
+                    "val_loss"    : val_loss,
+                    "cfg"         : cfg,
+                    "feature_cols": feature_cols,
+                    "target_cols" : target_cols,
+                    "feat_scaler" : feat_scaler,
+                    "tgt_scalers" : tgt_scalers,
                 },
                 best_ckpt,
             )
@@ -733,50 +722,53 @@ def main():
     logging.info(f"Best val loss: {best_val:.6f} — checkpoint: {best_ckpt}")
 
     # ── Load best checkpoint ──────────────────────────────────────────────
-    ckpt = torch.load(best_ckpt, map_location=device)
+    ckpt = torch.load(best_ckpt, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model_state"])
 
-    # ── v4 FIX 4: Post-hoc linear calibration on val set ─────────────────
-    # Fit y_cal = a·ŷ + b on val predictions (original scale) to remove any
-    # residual systematic bias.  No data leakage — val never seen in training.
-    from sklearn.linear_model import LinearRegression as _LR
-
-    @torch.no_grad()
-    def _collect_preds(loader):
-        model.eval()
-        ps, ts = [], []
-        for Xb, yb in loader:
-            p = model(Xb.to(device)).cpu().numpy()
-            ps.append(p); ts.append(yb.numpy())
-        p = np.concatenate(ps); t = np.concatenate(ts)
-        p_inv = tgt_scaler.inverse_transform(p.reshape(-1, 1)).reshape(p.shape)
-        t_inv = tgt_scaler.inverse_transform(t.reshape(-1, 1)).reshape(t.shape)
-        return p_inv, t_inv
-
-    val_p, val_t = _collect_preds(loaders["val"])
-    cal = _LR().fit(val_p.ravel().reshape(-1, 1), val_t.ravel())
-    logging.info(f"Calibration  a={cal.coef_[0]:.4f}  b={cal.intercept_:.1f}")
+    # ── Per-service post-hoc linear calibration on val set ───────────────
+    # Fit y_cal = a·ŷ + b per service on val predictions (no leakage).
+    # Corrects any residual systematic bias before test evaluation.
+    val_p, val_t = collect_predictions(model, loaders["val"], tgt_scalers, device)
+    calibrators: dict[str, LinearRegression] = {}
+    logging.info("Calibration coefficients:")
+    for i, col in enumerate(target_cols):
+        cal = LinearRegression().fit(
+            val_p[:, i, :].ravel().reshape(-1, 1),
+            val_t[:, i, :].ravel(),
+        )
+        calibrators[col] = cal
+        logging.info(f"  {col}: a={cal.coef_[0]:.4f}  b={cal.intercept_:.1f}")
 
     # ── Test evaluation ───────────────────────────────────────────────────
-    test_metrics, preds_inv, trues_inv = evaluate(
-        model, loaders["test"], tgt_scaler, device, calibrator=cal
+    agg_metrics, per_service_metrics, preds_inv, trues_inv = evaluate(
+        model, loaders["test"], tgt_scalers, target_cols, device, calibrators,
     )
 
     logging.info("-" * 60)
-    logging.info("TEST RESULTS — BiLSTM v4 (original scale, averaged over horizon)")
-    for k, v in test_metrics.items():
-        logging.info(f"  {k:8s}: {v:.4f}")
+    logging.info("TEST RESULTS — macro-average across all services")
+    for k, v in agg_metrics.items():
+        logging.info(f"  {k:10s}: {v:.4f}")
+    logging.info("-" * 60)
+    logging.info("TEST RESULTS — per service")
+    for col, m in per_service_metrics.items():
+        logging.info(f"  [{col}]")
+        for k, v in m.items():
+            logging.info(f"    {k:10s}: {v:.4f}")
     logging.info("-" * 60)
 
     # ── Baseline comparison ───────────────────────────────────────────────
-    compare_with_baseline(test_metrics, cfg["baseline_metrics_path"])
+    compare_with_baseline(agg_metrics, cfg["baseline_metrics_path"])
 
     # ── Plots & artefacts ─────────────────────────────────────────────────
-    save_plots(history, preds_inv, trues_inv, output_dir)
+    save_plots(history, preds_inv, trues_inv, target_cols, output_dir)
 
     np.save(output_dir / "test_preds.npy", preds_inv)
     np.save(output_dir / "test_trues.npy", trues_inv)
-    pd.DataFrame([test_metrics]).to_csv(output_dir / "test_metrics.csv", index=False)
+
+    rows = [{"service": col, **m} for col, m in per_service_metrics.items()]
+    rows.append({"service": "AGGREGATE", **agg_metrics})
+    pd.DataFrame(rows).to_csv(output_dir / "test_metrics.csv", index=False)
+
     logging.info(f"All outputs saved to {output_dir}/")
 
 
