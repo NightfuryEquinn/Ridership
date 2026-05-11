@@ -2,6 +2,8 @@ gtfs_reports
 journal_articles
 timeline_submission_research_project.pdf
 src/outputs/**/*.pt
+data/sequences/
+data/graph/
 *.npy
 
 # Byte-compiled / optimized / DLL files
