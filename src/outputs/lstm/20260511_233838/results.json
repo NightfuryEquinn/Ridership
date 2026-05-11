@@ -1,0 +1,114 @@
+{
+  "run_id": "20260511_233838",
+  "model": "LSTMForecaster",
+  "hparams": {
+    "hidden": 512,
+    "layers": 1,
+    "dropout": 0.2,
+    "T_in": 14,
+    "T_out": 7,
+    "n_features": 59,
+    "batch_size": 32,
+    "lr": 0.001
+  },
+  "training": {
+    "best_epoch": 30,
+    "best_val_loss": 0.01165816,
+    "total_epochs": 40
+  },
+  "split_dates": {
+    "train": {
+      "start": "2022-01-01",
+      "end": "2024-10-18"
+    },
+    "val": {
+      "start": "2024-10-19",
+      "end": "2025-05-25"
+    },
+    "test": {
+      "start": "2025-05-26",
+      "end": "2025-12-31"
+    },
+    "T_in": 14,
+    "T_out": 7,
+    "n_features": 59,
+    "target_col": "total_ridership",
+    "target_col_idx": 12
+  },
+  "test_metrics": {
+    "overall": {
+      "Combined": 78.2676,
+      "MAPE": 6.7663,
+      "MAE_pct": 6.1915,
+      "RMSE_pct": 8.7746,
+      "R2": 0.7708,
+      "MAE": 77813.0252,
+      "RMSE": 110277.0052
+    },
+    "per_step": [
+      {
+        "Combined": 80.6262,
+        "MAPE": 5.9747,
+        "MAE_pct": 5.3098,
+        "RMSE_pct": 8.0894,
+        "R2": 0.8021,
+        "MAE": 66914.4987,
+        "RMSE": 101943.7201
+      },
+      {
+        "Combined": 75.5862,
+        "MAPE": 7.7396,
+        "MAE_pct": 7.3321,
+        "RMSE_pct": 9.3422,
+        "R2": 0.7364,
+        "MAE": 92373.4044,
+        "RMSE": 117698.1569
+      },
+      {
+        "Combined": 77.3253,
+        "MAPE": 7.1291,
+        "MAE_pct": 6.5334,
+        "RMSE_pct": 9.0122,
+        "R2": 0.7567,
+        "MAE": 82164.4366,
+        "RMSE": 113337.6325
+      },
+      {
+        "Combined": 79.212,
+        "MAPE": 6.4542,
+        "MAE_pct": 5.7828,
+        "RMSE_pct": 8.551,
+        "R2": 0.7843,
+        "MAE": 72565.4444,
+        "RMSE": 107301.8812
+      },
+      {
+        "Combined": 79.372,
+        "MAPE": 6.3485,
+        "MAE_pct": 5.7002,
+        "RMSE_pct": 8.5793,
+        "R2": 0.7827,
+        "MAE": 71483.4441,
+        "RMSE": 107588.3811
+      },
+      {
+        "Combined": 76.7642,
+        "MAPE": 7.2959,
+        "MAE_pct": 6.8794,
+        "RMSE_pct": 9.0604,
+        "R2": 0.7575,
+        "MAE": 86234.9716,
+        "RMSE": 113573.6263
+      },
+      {
+        "Combined": 79.0453,
+        "MAPE": 6.4222,
+        "MAE_pct": 5.8024,
+        "RMSE_pct": 8.7301,
+        "R2": 0.7758,
+        "MAE": 72954.9766,
+        "RMSE": 109765.2312
+      }
+    ]
+  }
+}
