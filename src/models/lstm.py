@@ -40,8 +40,6 @@ matplotlib.use("Agg")   # headless — no display required
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-os.makedirs("outputs/lstm", exist_ok=True)
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CLI
@@ -533,7 +531,7 @@ def main():
 
     # ── Save artefacts ────────────────────────────────────────────────────────
     run_id  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = f"outputs/lstm/{run_id}"
+    out_dir = f"src/outputs/lstm/{run_id}"
     os.makedirs(out_dir, exist_ok=True)
 
     torch.save(model.state_dict(), f"{out_dir}/model.pt")
