@@ -2,8 +2,3 @@ docs
 gtfs_reports
 journal_articles
 timeline_submission_research_project.pdf
-
-To train a BiLSTM model to compare with baseline LSTM to predict future ridership trends across 12 distinct public transit services (Komuter, Komuter Utara, Komuter   
-Terbau, ETS, Intercity, Monorail, RapidBus Penang, RapidBus KL, MRT Putrajaya (less data), MRT Kajang, LRT Kelana Jaya, LRT Ampang) using GTFS static data, fuel price,  
-GADM administrative boundaries, population density, rainfall, OSM points of interest, ridership, school & public holiday, and walking friction. Evaluate using 100% -    
-(MAE% + RMSE% + MAPE%) as model accuracy and R2 metric.
