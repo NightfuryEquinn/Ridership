@@ -1,18 +1,20 @@
 """
 graph_builder.py  — Graph Utility Functions for Graph-Based ST Models
 
-Provides shared adjacency normalisation helpers used by the five graph-based
-comparative models in the stack:
+Provides shared adjacency normalisation helpers used by the six graph-based
+models in the stack:
 
-  STGCN        — Chebyshev GCN + gated temporal conv
-  Graph WaveNet — adaptive adjacency + WaveNet dilated conv
-  DCRNN        — diffusion convolution GRU
-  STGAT        — multi-head graph attention + LSTM
+  STGCN          — Chebyshev GCN + gated temporal conv
+  Graph WaveNet  — adaptive adjacency + WaveNet dilated conv
+  DCRNN          — diffusion convolution GRU
+  STGAT          — multi-head graph attention + LSTM
   PatchTST+Graph — PatchTST Transformer + GCN
+  ASTGCN         — spatial + temporal attention + Chebyshev GCN
 
 Graph approach (features-as-nodes)
 ────────────────────────────────────
-All five models treat the 59 input features as graph nodes (N=59).
+All models treat the N input features as graph nodes (N = total features
+from features_aligned.csv — all 8 spatio-temporal sources combined).
 Adjacency is built at training time from the absolute Pearson correlation
 of feature columns in the training split (threshold=0.1). No external
 node/edge files are needed — models call their own build_feature_adj()
@@ -20,9 +22,11 @@ at initialisation and store the result as a model buffer.
 
   GraphWaveNet uses a fully learnable adaptive adjacency instead.
   STGAT uses multi-head attention; no fixed adjacency is needed.
+  ASTGCN also builds a scaled Chebyshev Laplacian L_tilde = -A_sym.
 
 This module provides:
   symmetric_normalise(A)   — D^{-1/2}(A+I)D^{-1/2}, used by PatchTST+Graph
+                             and ASTGCN
   row_normalise(A)         — D^{-1}A, used in diffusion random walks (DCRNN)
 """
 

@@ -1,12 +1,13 @@
 """
 sequence_builder.py  — Sequence & Tensor Assembly for All Models
 
-Consumes features_aligned.csv and produces ready-to-train sliding-window
-sequences for all 11 models in the stack (LSTM-family + graph-based).
+Consumes features_aligned.csv (all 8 spatio-temporal feature sources) and
+produces ready-to-train sliding-window sequences for all 15 models in the stack.
 
 All models load from data/sequences/lstm/:
-  LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
-  STGCN, Graph WaveNet, DCRNN, STGAT, PatchTST+Graph
+  LSTM-family      : LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
+  Graph-based      : STGCN, Graph WaveNet, DCRNN, STGAT, PatchTST+Graph
+  Attention-based  : TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
 
 Graph models build their adjacency matrices on-the-fly from the training
 data (Pearson correlation, threshold 0.1) — no external graph files needed.
@@ -21,8 +22,10 @@ Output (data/sequences/lstm/)
 
 Tensor shapes
 ─────────────
-  X : (N_samples, T_in=14, F=59)
+  X : (N_samples, T_in=14, F=N_features)   — N_features from features_aligned.csv
   y : (N_samples, T_out=7)
+
+  Actual N_features is logged at runtime and stored in split_dates.json.
 
 Design notes
 ────────────
@@ -31,6 +34,8 @@ Design notes
 • MCO-gap rows excluded by default (--include-mco to override).
 • Pre-launch structural nulls (rail services not yet running) filled
   with 0.0 — not median — because no service = zero ridership.
+• Static features (population, GTFS, OSM POI, GADM) are broadcast to all
+  dates in feature_align.py and scale normally through MinMaxScaler.
 • --dtype float16 (default) is safe for MinMax-scaled [0,1] data.
 • --compress writes .npz (zlib) for an extra 1.5–3× disk saving;
   load via np.load(...)['arr'].
@@ -248,9 +253,11 @@ def build_sequences(cfg: dict) -> None:
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Build model-ready sequences from aligned features (all 11 models)"
+        description="Build model-ready sequences from aligned features (all 15 models)"
     )
-    p.add_argument("--features-path", default=DEFAULTS["features_path"])
+    p.add_argument("--features-path", default=DEFAULTS["features_path"],
+                   help="Path to features_aligned.csv from feature_align.py "
+                        "(all 8 spatio-temporal sources)")
     p.add_argument("--T-in",    type=int,   default=DEFAULTS["T_in"])
     p.add_argument("--T-out",   type=int,   default=DEFAULTS["T_out"])
     p.add_argument("--target",  default=DEFAULTS["target_col"])
