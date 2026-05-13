@@ -73,9 +73,9 @@ def parse_args():
     p = argparse.ArgumentParser(description="STGCN forecaster with 7-way comparison")
     p.add_argument("--seq-dir",           default="data/sequences/lstm",
                    help="Directory with X/y .npy splits")
-    p.add_argument("--hidden",            type=int,   default=64,
+    p.add_argument("--hidden",            type=int,   default=128,
                    help="Graph conv channel width (C_mid = C_out = hidden)")
-    p.add_argument("--cheb-k",            type=int,   default=2,
+    p.add_argument("--cheb-k",            type=int,   default=3,
                    help="Chebyshev polynomial order K")
     p.add_argument("--kt",                type=int,   default=3,
                    help="Temporal conv kernel size")
@@ -83,12 +83,14 @@ def parse_args():
                    help="Number of ST-Conv blocks")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge")
-    p.add_argument("--dropout",           type=float, default=0.1,
+    p.add_argument("--dropout",           type=float, default=0.15,
                    help="Dropout on graph conv output")
-    p.add_argument("--batch-size",        type=int,   default=16)
-    p.add_argument("--epochs",            type=int,   default=50)
-    p.add_argument("--lr",                type=float, default=1e-3)
-    p.add_argument("--patience",          type=int,   default=10)
+    p.add_argument("--weight-decay",      type=float, default=1e-4,
+                   help="Adam weight decay")
+    p.add_argument("--batch-size",        type=int,   default=32)
+    p.add_argument("--epochs",            type=int,   default=200)
+    p.add_argument("--lr",                type=float, default=3e-4)
+    p.add_argument("--patience",          type=int,   default=20)
     p.add_argument("--device",            default="auto", help="cpu | cuda | mps | auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -114,6 +116,7 @@ def build_feature_adj(X_train: torch.Tensor, threshold: float = 0.1) -> torch.Te
     X_flat = X_np.reshape(-1, X_np.shape[-1])   # (N*T, F)
     corr   = np.corrcoef(X_flat.T).astype(np.float32)   # (F, F)
     A      = np.abs(corr)
+    np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0, copy=False)  # guard: zero-variance cols
     A[A < threshold] = 0.0
     np.fill_diagonal(A, 0.0)
     return torch.from_numpy(A)
@@ -125,13 +128,13 @@ def compute_scaled_laplacian(A: torch.Tensor) -> torch.Tensor:
     Approximates lambda_max = 2 → L_tilde = L_sym - I = -D^{-1/2} A D^{-1/2}.
 
     A : (N, N) raw adjacency (no self-loops, non-negative).
-    Returns L_tilde : (N, N), eigenvalues ≈ [-1, 1].
+    Returns L_tilde : (N, N), eigenvalues in [-1, 1].
     """
     N           = A.shape[0]
     D           = A.sum(dim=1).clamp(min=1e-9)   # (N,)
     D_inv_sqrt  = D.pow(-0.5)                    # (N,)
     A_sym       = D_inv_sqrt.unsqueeze(1) * A * D_inv_sqrt.unsqueeze(0)
-    L_tilde     = A_sym - torch.eye(N, device=A.device, dtype=A.dtype)
+    L_tilde     = -A_sym                         # = L_sym - I (lambda_max ≈ 2 approx)
     return L_tilde
 
 
@@ -357,13 +360,19 @@ def load_splits(seq_dir: str, device: torch.device):
 def train_one_epoch(model, loader, optimiser, criterion, device) -> float:
     model.train()
     total = 0.0
+    n_skipped = 0
     for X_b, y_b in loader:
         optimiser.zero_grad()
         loss = criterion(model(X_b), y_b)
+        if not torch.isfinite(loss):
+            n_skipped += 1
+            continue
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimiser.step()
         total += loss.item() * X_b.size(0)
+    if n_skipped:
+        print(f"  [WARN] {n_skipped} batch(es) skipped — non-finite loss")
     return total / len(loader.dataset)
 
 
@@ -552,7 +561,8 @@ def main():
 
     # ── Optimiser / loss ──────────────────────────────────────────────────────
     criterion = nn.MSELoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr,
+                                 weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5)
 
@@ -651,6 +661,7 @@ def main():
             "n_blocks":       args.n_blocks,
             "adj_threshold":  args.adj_threshold,
             "dropout":        args.dropout,
+            "weight_decay":   args.weight_decay,
             "T_in":           T_in,
             "T_out":          T_out,
             "n_features":     n_features,

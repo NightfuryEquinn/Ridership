@@ -1,0 +1,202 @@
+{
+  "run_id": "20260513_160724",
+  "model": "CNNBiLSTMForecaster",
+  "hparams": {
+    "cnn_filters": 128,
+    "cnn_layers": 3,
+    "cnn_kernel_size": 3,
+    "hidden": 512,
+    "lstm_layers": 1,
+    "dropout": 0.2,
+    "bidirectional": true,
+    "T_in": 14,
+    "T_out": 7,
+    "n_features": 74,
+    "batch_size": 32,
+    "lr": 0.001
+  },
+  "training": {
+    "best_epoch": 11,
+    "best_val_loss": 0.0122882,
+    "total_epochs": 21
+  },
+  "split_dates": {
+    "train": {
+      "start": "2022-01-01",
+      "end": "2024-10-18"
+    },
+    "val": {
+      "start": "2024-10-19",
+      "end": "2025-05-25"
+    },
+    "test": {
+      "start": "2025-05-26",
+      "end": "2025-12-31"
+    },
+    "T_in": 14,
+    "T_out": 7,
+    "n_features": 74,
+    "target_col": "total_ridership",
+    "target_col_idx": 12,
+    "dtype": "float16",
+    "compressed": false
+  },
+  "test_metrics": {
+    "overall": {
+      "Combined": 75.5347,
+      "MAPE": 7.6448,
+      "MAE_pct": 7.2785,
+      "RMSE_pct": 9.542,
+      "R2": 0.729,
+      "MAE": 91473.8326,
+      "RMSE": 119919.8034
+    },
+    "per_step": [
+      {
+        "Combined": 77.4084,
+        "MAPE": 7.0773,
+        "MAE_pct": 6.6932,
+        "RMSE_pct": 8.8211,
+        "R2": 0.7647,
+        "MAE": 84348.0228,
+        "RMSE": 111164.0508
+      },
+      {
+        "Combined": 76.9657,
+        "MAPE": 7.0781,
+        "MAE_pct": 6.7586,
+        "RMSE_pct": 9.1976,
+        "R2": 0.7444,
+        "MAE": 85147.8119,
+        "RMSE": 115875.3728
+      },
+      {
+        "Combined": 77.3208,
+        "MAPE": 7.1166,
+        "MAE_pct": 6.5654,
+        "RMSE_pct": 8.9971,
+        "R2": 0.7575,
+        "MAE": 82565.9847,
+        "RMSE": 113147.3282
+      },
+      {
+        "Combined": 75.6302,
+        "MAPE": 7.5883,
+        "MAE_pct": 7.3327,
+        "RMSE_pct": 9.4488,
+        "R2": 0.7366,
+        "MAE": 92013.0181,
+        "RMSE": 118566.7134
+      },
+      {
+        "Combined": 77.8322,
+        "MAPE": 6.9117,
+        "MAE_pct": 6.3139,
+        "RMSE_pct": 8.9421,
+        "R2": 0.7639,
+        "MAE": 79179.4241,
+        "RMSE": 112138.0336
+      },
+      {
+        "Combined": 72.9239,
+        "MAPE": 8.5367,
+        "MAE_pct": 8.2679,
+        "RMSE_pct": 10.2715,
+        "R2": 0.6882,
+        "MAE": 103639.2178,
+        "RMSE": 128754.6727
+      },
+      {
+        "Combined": 70.8493,
+        "MAPE": 9.2047,
+        "MAE_pct": 9.0211,
+        "RMSE_pct": 10.9249,
+        "R2": 0.6488,
+        "MAE": 113423.3488,
+        "RMSE": 137359.6693
+      }
+    ]
+  },
+  "comparison": {
+    "lstm": {
+      "run_id": "20260513_160613",
+      "overall": {
+        "Combined": 74.3424,
+        "MAPE": 8.0484,
+        "MAE_pct": 7.8425,
+        "RMSE_pct": 9.7666,
+        "R2": 0.7161,
+        "MAE": 98562.119,
+        "RMSE": 122743.2923
+      }
+    },
+    "bilstm": {
+      "run_id": "20260513_160702",
+      "overall": {
+        "Combined": 75.9055,
+        "MAPE": 7.5783,
+        "MAE_pct": 7.2778,
+        "RMSE_pct": 9.2385,
+        "R2": 0.7459,
+        "MAE": 91464.3443,
+        "RMSE": 116106.0212
+      }
+    },
+    "tpa_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "cnn_lstm": {
+      "run_id": "20260513_160644",
+      "overall": {
+        "Combined": 71.3454,
+        "MAPE": 8.9922,
+        "MAE_pct": 8.9854,
+        "RMSE_pct": 10.677,
+        "R2": 0.6607,
+        "MAE": 112924.711,
+        "RMSE": 134185.1533
+      }
+    },
+    "cnn_bilstm": {
+      "run_id": "20260513_160724",
+      "overall": {
+        "Combined": 75.5347,
+        "MAPE": 7.6448,
+        "MAE_pct": 7.2785,
+        "RMSE_pct": 9.542,
+        "R2": 0.729,
+        "MAE": 91473.8326,
+        "RMSE": 119919.8034
+      }
+    },
+    "delta_vs_lstm": {
+      "Combined": 1.1923,
+      "MAPE": -0.4036,
+      "MAE_pct": -0.564,
+      "RMSE_pct": -0.2246,
+      "R2": 0.0129,
+      "MAE": -7088.2864,
+      "RMSE": -2823.4889
+    },
+    "delta_vs_bilstm": {
+      "Combined": -0.3708,
+      "MAPE": 0.0665,
+      "MAE_pct": 0.0007,
+      "RMSE_pct": 0.3035,
+      "R2": -0.0169,
+      "MAE": 9.4883,
+      "RMSE": 3813.7822
+    },
+    "delta_vs_tpalstm": null,
+    "delta_vs_cnnlstm": {
+      "Combined": 4.1893,
+      "MAPE": -1.3474,
+      "MAE_pct": -1.7069,
+      "RMSE_pct": -1.135,
+      "R2": 0.0683,
+      "MAE": -21450.8784,
+      "RMSE": -14265.3499
+    }
+  }
+}

@@ -72,19 +72,21 @@ from src.utils.comparison_table import (
 def parse_args():
     p = argparse.ArgumentParser(description="DCRNN forecaster with 9-way comparison")
     p.add_argument("--seq-dir",           default="data/sequences/lstm")
-    p.add_argument("--hidden",            type=int,   default=64,
+    p.add_argument("--hidden",            type=int,   default=128,
                    help="DCGRU hidden size per node")
-    p.add_argument("--n-layers",          type=int,   default=2,
+    p.add_argument("--n-layers",          type=int,   default=1,
                    help="Number of stacked DCGRUCells")
-    p.add_argument("--k-diffusion",       type=int,   default=2,
+    p.add_argument("--k-diffusion",       type=int,   default=1,
                    help="Diffusion steps K (K+1 hops including identity)")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge")
-    p.add_argument("--dropout",           type=float, default=0.1)
-    p.add_argument("--batch-size",        type=int,   default=16)
-    p.add_argument("--epochs",            type=int,   default=50)
+    p.add_argument("--dropout",           type=float, default=0.2)
+    p.add_argument("--weight-decay",      type=float, default=1e-4,
+                   help="Adam weight decay")
+    p.add_argument("--batch-size",        type=int,   default=32)
+    p.add_argument("--epochs",            type=int,   default=150)
     p.add_argument("--lr",                type=float, default=1e-3)
-    p.add_argument("--patience",          type=int,   default=10)
+    p.add_argument("--patience",          type=int,   default=20)
     p.add_argument("--device",            default="auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -107,6 +109,7 @@ def build_feature_adj(X_train: torch.Tensor, threshold: float = 0.1) -> torch.Te
     X_flat = X_np.reshape(-1, X_np.shape[-1])
     corr   = np.corrcoef(X_flat.T).astype(np.float32)
     A      = np.abs(corr)
+    np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0, copy=False)  # guard: zero-variance cols
     A[A < threshold] = 0.0
     np.fill_diagonal(A, 0.0)
     return torch.from_numpy(A)
@@ -321,11 +324,14 @@ def load_splits(seq_dir, device):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def train_one_epoch(model, loader, optimiser, criterion, device) -> float:
-    model.train(); total=0.0
+    model.train(); total=0.0; n_skipped=0
     for X_b,y_b in loader:
-        optimiser.zero_grad(); loss=criterion(model(X_b),y_b); loss.backward()
+        optimiser.zero_grad(); loss=criterion(model(X_b),y_b)
+        if not torch.isfinite(loss): n_skipped+=1; continue
+        loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(),max_norm=1.0); optimiser.step()
         total+=loss.item()*X_b.size(0)
+    if n_skipped: print(f"  [WARN] {n_skipped} batch(es) skipped — non-finite loss")
     return total/len(loader.dataset)
 
 @torch.no_grad()
@@ -432,7 +438,7 @@ def main():
     print(f"  Params      : {n_params:,}")
 
     criterion=nn.MSELoss()
-    optimiser=torch.optim.Adam(model.parameters(),lr=args.lr)
+    optimiser=torch.optim.Adam(model.parameters(),lr=args.lr,weight_decay=args.weight_decay)
     scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser,mode="min",factor=0.5,patience=5)
 
     best_val_loss=float("inf"); best_epoch=0; patience_count=0
@@ -483,7 +489,8 @@ def main():
     os.makedirs(out_dir,exist_ok=True); torch.save(model.state_dict(),f"{out_dir}/model.pt")
     results={"run_id":run_id,"model":"DCRNNForecaster",
              "hparams":{"hidden":args.hidden,"n_layers":args.n_layers,"k_diffusion":args.k_diffusion,
-                        "adj_threshold":args.adj_threshold,"dropout":args.dropout,"T_in":T_in,"T_out":T_out,
+                        "adj_threshold":args.adj_threshold,"dropout":args.dropout,"weight_decay":args.weight_decay,
+                        "T_in":T_in,"T_out":T_out,
                         "n_features":n_features,"n_edges":n_edges,"batch_size":args.batch_size,"lr":args.lr},
              "training":{"best_epoch":best_epoch,"best_val_loss":round(best_val_loss,8),"total_epochs":len(train_losses)},
              "split_dates":split_meta,

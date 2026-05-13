@@ -124,6 +124,8 @@ def build_adj_and_laplacian(X_train: torch.Tensor, threshold: float = 0.1):
     X_np   = X_train.cpu().numpy()
     X_flat = X_np.reshape(-1, X_np.shape[-1])
     corr   = np.corrcoef(X_flat.T).astype(np.float32)
+    # Zero-variance features produce NaN rows/cols in corrcoef; replace with 0
+    corr   = np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
     A      = np.abs(corr)
     A[A < threshold] = 0.0
     np.fill_diagonal(A, 0.0)

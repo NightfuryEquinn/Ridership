@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Malaysian transit ridership forecasting research (Masters FYP). Compares 15 deep-learning models across three series against a shared dataset of 8 spatio-temporal feature sources.
 
+## Hardware
+
+- CPU: 13th Gen Intel Core i5
+- RAM: 32 GB
+- GPU: NVIDIA GeForce RTX 4050 (6 GB VRAM)
+
 ## Environment
 
 ```bash

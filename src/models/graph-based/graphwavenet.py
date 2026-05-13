@@ -72,17 +72,17 @@ def parse_args():
     p.add_argument("--seq-dir",           default="data/sequences/lstm")
     p.add_argument("--hidden",            type=int,   default=64,
                    help="Residual and skip channel width")
-    p.add_argument("--n-layers",          type=int,   default=8,
-                   help="Number of WaveNet blocks")
+    p.add_argument("--n-layers",          type=int,   default=4,
+                   help="Number of WaveNet blocks (4 gives receptive field ~16 matching T_in=14)")
     p.add_argument("--d-emb",             type=int,   default=10,
                    help="Node embedding dimension for adaptive adjacency")
     p.add_argument("--kernel-size",       type=int,   default=2,
                    help="Dilated temporal conv kernel size")
-    p.add_argument("--dropout",           type=float, default=0.3)
-    p.add_argument("--batch-size",        type=int,   default=16)
-    p.add_argument("--epochs",            type=int,   default=50)
-    p.add_argument("--lr",                type=float, default=2e-3)
-    p.add_argument("--patience",          type=int,   default=10)
+    p.add_argument("--dropout",           type=float, default=0.1)
+    p.add_argument("--batch-size",        type=int,   default=32)
+    p.add_argument("--epochs",            type=int,   default=150)
+    p.add_argument("--lr",                type=float, default=5e-4)
+    p.add_argument("--patience",          type=int,   default=20)
     p.add_argument("--device",            default="auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -321,13 +321,19 @@ def load_splits(seq_dir: str, device: torch.device):
 def train_one_epoch(model, loader, optimiser, criterion, device) -> float:
     model.train()
     total = 0.0
+    n_skipped = 0
     for X_b, y_b in loader:
         optimiser.zero_grad()
         loss = criterion(model(X_b), y_b)
+        if not torch.isfinite(loss):
+            n_skipped += 1
+            continue
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimiser.step()
         total += loss.item() * X_b.size(0)
+    if n_skipped:
+        print(f"  [WARN] {n_skipped} batch(es) skipped — non-finite loss")
     return total / len(loader.dataset)
 
 

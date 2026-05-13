@@ -78,27 +78,29 @@ def parse_args():
         description="PatchTST+Graph hybrid forecaster with 11-way comparison"
     )
     p.add_argument("--seq-dir",           default="data/sequences/lstm")
-    p.add_argument("--patch-len",         type=int,   default=2,
+    p.add_argument("--patch-len",         type=int,   default=4,
                    help="Patch length (number of timesteps per patch)")
     p.add_argument("--patch-stride",      type=int,   default=2,
                    help="Stride between patches")
-    p.add_argument("--d-model",           type=int,   default=64,
+    p.add_argument("--d-model",           type=int,   default=128,
                    help="Transformer model dimension")
     p.add_argument("--n-heads",           type=int,   default=4,
                    help="Number of attention heads")
     p.add_argument("--n-layers",          type=int,   default=3,
                    help="Number of Transformer encoder layers")
-    p.add_argument("--ffn-dim",           type=int,   default=128,
+    p.add_argument("--ffn-dim",           type=int,   default=256,
                    help="Transformer FFN inner dimension")
-    p.add_argument("--n-gcn-layers",      type=int,   default=1,
+    p.add_argument("--n-gcn-layers",      type=int,   default=2,
                    help="Number of GCN layers after Transformer")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
                    help="Min abs correlation to keep graph edge")
-    p.add_argument("--dropout",           type=float, default=0.1)
-    p.add_argument("--batch-size",        type=int,   default=16)
-    p.add_argument("--epochs",            type=int,   default=50)
-    p.add_argument("--lr",                type=float, default=1e-3)
-    p.add_argument("--patience",          type=int,   default=10)
+    p.add_argument("--dropout",           type=float, default=0.15)
+    p.add_argument("--weight-decay",      type=float, default=1e-4,
+                   help="Adam weight decay")
+    p.add_argument("--batch-size",        type=int,   default=32)
+    p.add_argument("--epochs",            type=int,   default=150)
+    p.add_argument("--lr",                type=float, default=3e-4)
+    p.add_argument("--patience",          type=int,   default=20)
     p.add_argument("--device",            default="auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -129,6 +131,7 @@ def build_feature_adj_norm(X_train: torch.Tensor, threshold: float = 0.1) -> tor
     X_flat = X_np.reshape(-1, X_np.shape[-1])
     corr   = np.corrcoef(X_flat.T).astype(np.float32)
     A      = np.abs(corr)
+    np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0, copy=False)  # guard: zero-variance cols
     A[A < threshold] = 0.0
     np.fill_diagonal(A, 0.0)
 
@@ -337,11 +340,14 @@ def load_splits(seq_dir, device):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def train_one_epoch(model, loader, optimiser, criterion, device) -> float:
-    model.train(); total=0.0
+    model.train(); total=0.0; n_skipped=0
     for X_b,y_b in loader:
-        optimiser.zero_grad(); loss=criterion(model(X_b),y_b); loss.backward()
+        optimiser.zero_grad(); loss=criterion(model(X_b),y_b)
+        if not torch.isfinite(loss): n_skipped+=1; continue
+        loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(),max_norm=1.0); optimiser.step()
         total+=loss.item()*X_b.size(0)
+    if n_skipped: print(f"  [WARN] {n_skipped} batch(es) skipped — non-finite loss")
     return total/len(loader.dataset)
 
 @torch.no_grad()
@@ -454,7 +460,7 @@ def main():
     print(f"  Params      : {n_params:,}")
 
     criterion=nn.MSELoss()
-    optimiser=torch.optim.Adam(model.parameters(),lr=args.lr,weight_decay=1e-5)
+    optimiser=torch.optim.Adam(model.parameters(),lr=args.lr,weight_decay=args.weight_decay)
     scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser,mode="min",factor=0.5,patience=5)
 
     best_val_loss=float("inf"); best_epoch=0; patience_count=0
@@ -507,6 +513,7 @@ def main():
              "hparams":{"patch_len":args.patch_len,"patch_stride":args.patch_stride,"n_patches":n_patches,
                         "d_model":args.d_model,"n_heads":args.n_heads,"n_layers":args.n_layers,"ffn_dim":args.ffn_dim,
                         "n_gcn_layers":args.n_gcn_layers,"adj_threshold":args.adj_threshold,"dropout":args.dropout,
+                        "weight_decay":args.weight_decay,
                         "T_in":T_in,"T_out":T_out,"n_features":n_features,"batch_size":args.batch_size,"lr":args.lr},
              "training":{"best_epoch":best_epoch,"best_val_loss":round(best_val_loss,8),"total_epochs":len(train_losses)},
              "split_dates":split_meta,

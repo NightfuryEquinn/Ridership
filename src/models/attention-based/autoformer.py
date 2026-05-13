@@ -398,8 +398,8 @@ class AutoformerForecaster(nn.Module):
         ])
         self.dec_norm = nn.LayerNorm(d_model)
 
-        # Output projection: (B, T_out, n_features) → (B, T_out)
-        self.out_proj = nn.Linear(n_features, 1)
+        # Output projection: (B, T_out, d_model) → (B, T_out)
+        self.out_proj = nn.Linear(d_model, 1)
 
     @staticmethod
     def _sinusoidal_pe(length: int, d_model: int) -> torch.Tensor:

@@ -74,21 +74,23 @@ from src.utils.comparison_table import (
 def parse_args():
     p = argparse.ArgumentParser(description="STGAT forecaster with 10-way comparison")
     p.add_argument("--seq-dir",           default="data/sequences/lstm")
-    p.add_argument("--d-emb",             type=int,   default=16,
+    p.add_argument("--d-emb",             type=int,   default=32,
                    help="Per-node initial embedding dimension")
     p.add_argument("--n-heads",           type=int,   default=4,
                    help="Number of attention heads in each GAT layer")
     p.add_argument("--n-gat-layers",      type=int,   default=2,
                    help="Number of stacked GAT layers")
-    p.add_argument("--lstm-hidden",       type=int,   default=128,
+    p.add_argument("--lstm-hidden",       type=int,   default=256,
                    help="LSTM hidden size for temporal encoding")
     p.add_argument("--lstm-layers",       type=int,   default=1,
                    help="Number of LSTM layers")
-    p.add_argument("--dropout",           type=float, default=0.1)
-    p.add_argument("--batch-size",        type=int,   default=8)
-    p.add_argument("--epochs",            type=int,   default=50)
+    p.add_argument("--dropout",           type=float, default=0.2)
+    p.add_argument("--weight-decay",      type=float, default=1e-4,
+                   help="Adam weight decay")
+    p.add_argument("--batch-size",        type=int,   default=16)
+    p.add_argument("--epochs",            type=int,   default=150)
     p.add_argument("--lr",                type=float, default=1e-3)
-    p.add_argument("--patience",          type=int,   default=10)
+    p.add_argument("--patience",          type=int,   default=20)
     p.add_argument("--device",            default="auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -190,8 +192,9 @@ class STGATForecaster(nn.Module):
     Steps:
       1. Per-node linear embedding (shared across time)
       2. Multi-layer GAT at every timestep simultaneously
-      3. LSTM over time (treating flattened node-features as input)
-      4. MLP head → T_out
+      3. Mean-pool over N nodes → (B, T, d_gat)
+      4. LSTM over time on the pooled spatial embedding
+      5. MLP head → T_out
 
     forward(x) only takes x — no external adjacency required (fully learned).
 
@@ -227,8 +230,12 @@ class STGATForecaster(nn.Module):
 
         self.gat_dropout = nn.Dropout(dropout)
 
-        # ── Temporal LSTM (input = flattened N * d_gat per timestep) ─────────
-        lstm_in = n_features * d_gat
+        # ── Temporal LSTM (input = mean-pooled d_gat per timestep) ───────────
+        # Node-mean pooling (B*T, N, d_gat) → (B*T, d_gat) avoids the
+        # infeasibly large lstm_in = N * d_gat (e.g. 74*128=9472) that
+        # caused poor training.  The GAT attention already aggregates
+        # cross-node information; the LSTM then learns temporal dynamics.
+        lstm_in = d_gat
         self.lstm = nn.LSTM(
             input_size  = lstm_in,
             hidden_size = lstm_hidden,
@@ -260,9 +267,9 @@ class STGATForecaster(nn.Module):
             h = gat(h)                           # (B*T, N, d_gat)
             h = self.gat_dropout(h)
 
-        # ── Reshape for LSTM ──────────────────────────────────────────────────
+        # ── Pool nodes, reshape for LSTM ─────────────────────────────────────
         d_gat = h.shape[-1]
-        h = h.reshape(B, T, N * d_gat)          # (B, T, N*d_gat)
+        h = h.reshape(B, T, N, d_gat).mean(dim=2)   # (B, T, d_gat)
 
         # ── LSTM over temporal dim ────────────────────────────────────────────
         _, (h_n, _) = self.lstm(h)
@@ -291,11 +298,14 @@ def load_splits(seq_dir, device):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def train_one_epoch(model, loader, optimiser, criterion, device) -> float:
-    model.train(); total=0.0
+    model.train(); total=0.0; n_skipped=0
     for X_b,y_b in loader:
-        optimiser.zero_grad(); loss=criterion(model(X_b),y_b); loss.backward()
+        optimiser.zero_grad(); loss=criterion(model(X_b),y_b)
+        if not torch.isfinite(loss): n_skipped+=1; continue
+        loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(),max_norm=1.0); optimiser.step()
         total+=loss.item()*X_b.size(0)
+    if n_skipped: print(f"  [WARN] {n_skipped} batch(es) skipped — non-finite loss")
     return total/len(loader.dataset)
 
 @torch.no_grad()
@@ -399,7 +409,7 @@ def main():
     print(f"  Params      : {n_params:,}")
 
     criterion=nn.MSELoss()
-    optimiser=torch.optim.Adam(model.parameters(),lr=args.lr,weight_decay=1e-5)
+    optimiser=torch.optim.Adam(model.parameters(),lr=args.lr,weight_decay=args.weight_decay)
     scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser,mode="min",factor=0.5,patience=5)
 
     best_val_loss=float("inf"); best_epoch=0; patience_count=0
@@ -451,6 +461,7 @@ def main():
     results={"run_id":run_id,"model":"STGATForecaster",
              "hparams":{"d_emb":args.d_emb,"n_heads":args.n_heads,"n_gat_layers":args.n_gat_layers,
                         "lstm_hidden":args.lstm_hidden,"lstm_layers":args.lstm_layers,"dropout":args.dropout,
+                        "weight_decay":args.weight_decay,
                         "T_in":T_in,"T_out":T_out,"n_features":n_features,"batch_size":args.batch_size,"lr":args.lr},
              "training":{"best_epoch":best_epoch,"best_val_loss":round(best_val_loss,8),"total_epochs":len(train_losses)},
              "split_dates":split_meta,
