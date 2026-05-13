@@ -1,38 +1,50 @@
 """
-stgcn.py  — Spatio-Temporal Graph Convolutional Network (STGCN)
+stsgcn.py  — Spatial-Temporal Synchronous Graph Convolutional Network (STSGCN)
 
-Implements the ST-Conv block from:
-  Yu, B., Yin, H., & Zhu, Z. (2018). "Spatio-Temporal Graph Convolutional
-  Networks: A Deep Learning Framework for Traffic Forecasting."
-  IJCAI 2018.  arXiv:1709.04875
+Implements the architecture from:
+  Song, C., Lin, Y., Guo, S., & Wan, H. (2020).
+  "Spatial-Temporal Synchronous Graph Convolutional Networks: A New Framework
+  for Spatial-Temporal Network Data Forecasting."  AAAI 2020.
+  arXiv:1903.02495
 
 Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes. The temporal
-  dimension (T_in=14) provides the scalar signal for each node. The adjacency
-  matrix is derived from absolute Pearson correlation between features on
-  training data, symmetrically normalised into a scaled Laplacian L_tilde
-  stored as a model buffer (so it travels with .to(device)).
+  The n_features input features are treated as N graph nodes. STSGCN builds a
+  Spatial-Temporal Synchronous Graph (STSG) that captures both spatial and
+  temporal correlations in a single 3N×3N adjacency matrix for each sliding
+  window of 3 consecutive timesteps:
+
+    STSG = [[A_spa,  I,      0    ],
+            [I,      A_spa,  I    ],
+            [0,      I,      A_spa]]
+
+  where A_spa is the N×N feature-correlation graph (absolute Pearson,
+  threshold=0.1) and I is the N×N identity (temporal self-connections).
+
+  The STSG Convolutional Layer (STSGCL) applies a K-order Chebyshev graph
+  convolution on this 3N×3N graph for every sliding window of 3 timesteps
+  and extracts the centre N nodes as output, producing a synchronous
+  spatio-temporal representation at each timestep.
 
 Architecture:
-  X (B, T_in, N)  →  reshape  →  (B, N, 1, T_in)
+  Input: X (B, T_in, N)
+  Input projection: → (B, T_in, N, hidden)
 
-  ST-Conv Block k:
-    TemporalGatedConv   (B, N, C_in,  T)    →  (B, N, C_mid, T-Kt+1)
-    ChebGraphConv       (B*T', N, C_mid)    →  (B*T', N, C_mid)
-    TemporalGatedConv   (B, N, C_mid, T')   →  (B, N, C_out, T'-Kt+1)
-    BatchNorm2d
+  STSGCL × n_layers:
+    Unfold T into windows: (B, T-2, 3N, C_in)
+    ChebConv on L_stsg (3N×3N) + GLU: → (B, T-2, 3N, C_out)
+    Extract centre N nodes:           → (B, T-2, N,  C_out)
 
-  Output Layer:
-    TemporalGatedConv → pool over N (mean) → flatten → MLP head → (B, T_out)
+  Mean pool over N, flatten T, MLP head → (B, T_out)
 
 Comparison:
   --lstm-results, --bilstm-results, --tpalstm-results,
-  --cnnlstm-results, --cnnbilstm-results, --stlstm-results
+  --cnnlstm-results, --cnnbilstm-results, --stlstm-results,
+  --stgcn-results, --mtgnn-results
   All optional; each auto-detects the most recent run if omitted.
 
 Usage:
-  python stgcn.py
-  python stgcn.py --hidden 64 --cheb-k 2 --n-blocks 2 --kt 3
+  python stsgcn.py
+  python stsgcn.py --hidden 64 --n-layers 2 --cheb-k 2
 """
 
 import os
@@ -64,34 +76,28 @@ from src.utils.comparison_table import (
 )
 
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # CLI
 # ══════════════════════════════════════════════════════════════════════════════
 
 def parse_args():
-    p = argparse.ArgumentParser(description="STGCN forecaster with 7-way comparison")
-    p.add_argument("--seq-dir",           default="data/sequences/lstm",
-                   help="Directory with X/y .npy splits")
-    p.add_argument("--hidden",            type=int,   default=128,
-                   help="Graph conv channel width (C_mid = C_out = hidden)")
-    p.add_argument("--cheb-k",            type=int,   default=3,
-                   help="Chebyshev polynomial order K")
-    p.add_argument("--kt",                type=int,   default=3,
-                   help="Temporal conv kernel size")
-    p.add_argument("--n-blocks",          type=int,   default=2,
-                   help="Number of ST-Conv blocks")
+    p = argparse.ArgumentParser(description="STSGCN forecaster — 10-way comparison")
+    p.add_argument("--seq-dir",           default="data/sequences/lstm")
+    p.add_argument("--hidden",            type=int,   default=64,
+                   help="Channel width in STSGCL layers")
+    p.add_argument("--n-layers",          type=int,   default=2,
+                   help="Number of STSGCL layers (each shrinks T by 2)")
+    p.add_argument("--cheb-k",            type=int,   default=2,
+                   help="Chebyshev polynomial order K for STSG conv")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
-                   help="Min abs Pearson correlation to keep an edge")
-    p.add_argument("--dropout",           type=float, default=0.15,
-                   help="Dropout on graph conv output")
-    p.add_argument("--weight-decay",      type=float, default=1e-4,
-                   help="Adam weight decay")
+                   help="Min abs Pearson correlation to keep a spatial edge")
+    p.add_argument("--dropout",           type=float, default=0.1)
+    p.add_argument("--weight-decay",      type=float, default=1e-4)
     p.add_argument("--batch-size",        type=int,   default=32)
     p.add_argument("--epochs",            type=int,   default=200)
     p.add_argument("--lr",                type=float, default=3e-4)
     p.add_argument("--patience",          type=int,   default=20)
-    p.add_argument("--device",            default="auto", help="cpu | cuda | mps | auto")
+    p.add_argument("--device",            default="auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
     p.add_argument("--bilstm-results",    default=None)
@@ -99,8 +105,8 @@ def parse_args():
     p.add_argument("--cnnlstm-results",   default=None)
     p.add_argument("--cnnbilstm-results", default=None)
     p.add_argument("--stlstm-results",    default=None)
+    p.add_argument("--stgcn-results",     default=None)
     p.add_argument("--mtgnn-results",     default=None)
-    p.add_argument("--stsgcn-results",    default=None)
     p.add_argument("--stfgnn-results",    default=None)
     p.add_argument("--mdstgcn-results",   default=None)
     p.add_argument("--astgcn-results",    default=None)
@@ -111,39 +117,47 @@ def parse_args():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Graph construction helpers
+# Graph construction
 # ══════════════════════════════════════════════════════════════════════════════
 
 def build_feature_adj(X_train: torch.Tensor, threshold: float = 0.1) -> torch.Tensor:
-    """
-    Build a raw adjacency matrix from absolute Pearson correlation of features.
-    X_train : (N_samples, T_in, N_features)
-    Returns  : A_raw (N, N) float32, diagonal = 0, values >= threshold.
-    """
+    """Absolute Pearson correlation adjacency between features. (N, N) float32."""
     X_np   = X_train.cpu().numpy()
-    X_flat = X_np.reshape(-1, X_np.shape[-1])   # (N*T, F)
-    corr   = np.corrcoef(X_flat.T).astype(np.float32)   # (F, F)
+    X_flat = X_np.reshape(-1, X_np.shape[-1])
+    corr   = np.corrcoef(X_flat.T).astype(np.float32)
     A      = np.abs(corr)
-    np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0, copy=False)  # guard: zero-variance cols
+    np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0, copy=False)
     A[A < threshold] = 0.0
     np.fill_diagonal(A, 0.0)
     return torch.from_numpy(A)
 
 
 def compute_scaled_laplacian(A: torch.Tensor) -> torch.Tensor:
-    """
-    Scaled Laplacian L_tilde = 2*L_sym/lambda_max - I.
-    Approximates lambda_max = 2 → L_tilde = L_sym - I = -D^{-1/2} A D^{-1/2}.
+    """L_tilde = -D^{-½} A D^{-½}  (approximates scaled Laplacian in [-1,1])."""
+    D          = A.sum(dim=1).clamp(min=1e-9)
+    D_inv_sqrt = D.pow(-0.5)
+    A_sym      = D_inv_sqrt.unsqueeze(1) * A * D_inv_sqrt.unsqueeze(0)
+    return -A_sym
 
-    A : (N, N) raw adjacency (no self-loops, non-negative).
-    Returns L_tilde : (N, N), eigenvalues in [-1, 1].
+
+def build_stsg(A_spa: torch.Tensor) -> torch.Tensor:
     """
-    N           = A.shape[0]
-    D           = A.sum(dim=1).clamp(min=1e-9)   # (N,)
-    D_inv_sqrt  = D.pow(-0.5)                    # (N,)
-    A_sym       = D_inv_sqrt.unsqueeze(1) * A * D_inv_sqrt.unsqueeze(0)
-    L_tilde     = -A_sym                         # = L_sym - I (lambda_max ≈ 2 approx)
-    return L_tilde
+    Build the 3N×3N Spatial-Temporal Synchronous Graph adjacency.
+
+      STSG = [[A_spa,  I,      zeros],
+              [I,      A_spa,  I    ],
+              [zeros,  I,      A_spa]]
+
+    Temporal I blocks encode self-connections across consecutive time steps.
+    A_spa: (N, N)  →  returns STSG_raw (3N, 3N).
+    """
+    N = A_spa.shape[0]
+    I = torch.eye(N, dtype=A_spa.dtype)
+    Z = torch.zeros(N, N, dtype=A_spa.dtype)
+    row0 = torch.cat([A_spa, I,     Z    ], dim=1)
+    row1 = torch.cat([I,     A_spa, I    ], dim=1)
+    row2 = torch.cat([Z,     I,     A_spa], dim=1)
+    return torch.cat([row0, row1, row2], dim=0)   # (3N, 3N)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -151,18 +165,7 @@ def compute_scaled_laplacian(A: torch.Tensor) -> torch.Tensor:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class ChebConv(nn.Module):
-    """
-    K-order Chebyshev spectral graph convolution.
-
-    Input  : x (B, N, C_in),  L_tilde (N, N) scaled Laplacian
-    Output : (B, N, C_out)
-
-    Chebyshev recursion:
-      T_0 = x
-      T_1 = L_tilde @ x
-      T_k = 2 * L_tilde @ T_{k-1} - T_{k-2}
-      out = sum_k T_k @ theta_k
-    """
+    """K-order Chebyshev spectral graph convolution. (B, N, C_in) → (B, N, C_out)."""
 
     def __init__(self, in_channels: int, out_channels: int, K: int = 2):
         super().__init__()
@@ -175,171 +178,113 @@ class ChebConv(nn.Module):
     def forward(self, x: torch.Tensor, L_tilde: torch.Tensor) -> torch.Tensor:
         T0  = x
         out = T0 @ self.theta[0]
-
         if self.K >= 2:
             T1  = torch.einsum("nm,bmc->bnc", L_tilde, x)
             out = out + T1 @ self.theta[1]
-
         for k in range(2, self.K):
             T2  = 2.0 * torch.einsum("nm,bmc->bnc", L_tilde, T1) - T0
             out = out + T2 @ self.theta[k]
             T0, T1 = T1, T2
+        return out
 
-        return out   # (B, N, C_out)
 
-
-class TemporalGatedConv(nn.Module):
+class STSGCL(nn.Module):
     """
-    Gated 1-D temporal convolution (GLU gate: tanh * sigmoid).
-    Input  : (B, C_in, T)
-    Output : (B, C_out, T - kernel_size + 1)   [no padding — causal shrinkage]
+    Spatial-Temporal Synchronous Graph Convolutional Layer.
+
+    For each sliding window of 3 consecutive timesteps the layer:
+      1. Stacks node features into (B*W, 3N, C) — layout [t-1 | t | t+1]
+      2. Applies ChebConv on the 3N×3N STSG → GLU activation
+      3. Extracts the centre N nodes (time t) as output
+
+    Input : (B, T', N, C_in)   T' ≥ 3
+    Output: (B, T'-2, N, C_out)
     """
 
-    def __init__(self, in_channels: int, out_channels: int, kernel_size: int):
+    def __init__(self, in_channels: int, out_channels: int, K: int = 2,
+                 dropout: float = 0.1):
         super().__init__()
-        self.conv = nn.Conv1d(in_channels, out_channels * 2, kernel_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h       = self.conv(x)
-        h1, h2  = h.chunk(2, dim=1)
-        return torch.tanh(h1) * torch.sigmoid(h2)
-
-
-class STConvBlock(nn.Module):
-    """
-    One ST-Conv block: TemporalGated → ChebGraph → TemporalGated → BN.
-
-    Each block reduces T by 2*(Kt - 1).
-    Input/Output shape: (B, N, C_in, T) / (B, N, C_out, T - 2*(Kt-1))
-    """
-
-    def __init__(
-        self,
-        in_channels:  int,
-        mid_channels: int,
-        out_channels: int,
-        K:            int = 2,
-        Kt:           int = 3,
-        dropout:      float = 0.1,
-    ):
-        super().__init__()
-        self.temp1   = TemporalGatedConv(in_channels,  mid_channels, Kt)
-        self.graph   = ChebConv(mid_channels, mid_channels, K)
-        self.temp2   = TemporalGatedConv(mid_channels, out_channels, Kt)
-        self.bn      = nn.BatchNorm2d(out_channels)
+        # GLU: produce 2×C_out then split
+        self.cheb    = ChebConv(in_channels, out_channels * 2, K)
+        self.ln      = nn.LayerNorm(out_channels)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor, L_tilde: torch.Tensor) -> torch.Tensor:
-        """
-        x       : (B, N, C_in, T)
-        L_tilde : (N, N)
-        Returns : (B, N, C_out, T - 2*(Kt-1))
-        """
-        B, N, C, T = x.shape
+    def forward(self, x: torch.Tensor, L_stsg: torch.Tensor) -> torch.Tensor:
+        B, T, N, C = x.shape
+        assert T >= 3, f"STSGCL: T={T} < 3, cannot form 3-step windows"
 
-        # ── Temporal conv 1 ───────────────────────────────────────────────────
-        xt = x.reshape(B * N, C, T)
-        xt = self.temp1(xt)                          # (B*N, C_mid, T1)
-        T1, C1 = xt.shape[-1], xt.shape[1]
-        xt = xt.reshape(B, N, C1, T1)
+        # ── Vectorised window extraction via unfold ───────────────────────────
+        # unfold(dim=1, size=3, step=1): (B, T-2, N, C, 3)
+        wins = x.unfold(1, 3, 1)                          # (B, W, N, C, 3)
+        wins = wins.permute(0, 1, 4, 2, 3).contiguous()  # (B, W, 3, N, C)
+        W    = wins.shape[1]
+        # Layout within each window: [t-1 nodes | t nodes | t+1 nodes]
+        wins = wins.reshape(B * W, 3 * N, C)              # (B*W, 3N, C)
 
-        # ── Graph conv (applied to every timestep at once) ────────────────────
-        xg = xt.permute(0, 3, 1, 2).reshape(B * T1, N, C1)   # (B*T1, N, C_mid)
-        xg = self.graph(xg, L_tilde)
-        xg = F.relu(xg)
-        xg = self.dropout(xg)
-        xg = xg.reshape(B, T1, N, C1).permute(0, 2, 3, 1)    # (B, N, C_mid, T1)
+        # ── Chebyshev graph conv on STSG + GLU ───────────────────────────────
+        h       = self.cheb(wins, L_stsg)                 # (B*W, 3N, C_out*2)
+        h1, h2  = h.chunk(2, dim=-1)
+        h       = torch.tanh(h1) * torch.sigmoid(h2)      # (B*W, 3N, C_out)
+        h       = self.dropout(h)
 
-        # ── Temporal conv 2 ───────────────────────────────────────────────────
-        xt2 = xg.reshape(B * N, C1, T1)
-        xt2 = self.temp2(xt2)                        # (B*N, C_out, T2)
-        T2, C2 = xt2.shape[-1], xt2.shape[1]
-        xt2 = xt2.reshape(B, N, C2, T2)
-
-        # ── BatchNorm (treat N as H, T2 as W) ────────────────────────────────
-        xt2 = self.bn(xt2.permute(0, 2, 1, 3)).permute(0, 2, 1, 3)
-
-        return xt2
+        # ── Extract centre N nodes (time t) ──────────────────────────────────
+        C_out  = h.shape[-1]
+        h_mid  = h[:, N : 2 * N, :]                       # (B*W, N, C_out)
+        h_out  = self.ln(h_mid.reshape(B, W, N, C_out))   # (B, W, N, C_out)
+        return h_out
 
 
-class STGCNForecaster(nn.Module):
+class STSGCNForecaster(nn.Module):
     """
-    Spatio-Temporal Graph Convolutional Network forecaster.
+    STSGCN forecaster.
 
-    The scaled Laplacian L_tilde is precomputed from training-data feature
-    correlation and registered as a buffer, so forward(x) only takes x.
+    Builds and stores the 3N×3N STSG scaled Laplacian as a buffer; forward(x)
+    takes only the input sequence x.
 
-    Input  : (B, T_in, n_features)
-    Output : (B, T_out)
+    Input : (B, T_in, N)
+    Output: (B, T_out)
     """
 
-    def __init__(
-        self,
-        n_features: int,
-        hidden:     int,
-        n_blocks:   int,
-        K:          int,
-        Kt:         int,
-        T_in:       int,
-        T_out:      int,
-        A_raw:      torch.Tensor,
-        dropout:    float = 0.1,
-    ):
+    def __init__(self, n_features: int, hidden: int, n_layers: int, K: int,
+                 T_in: int, T_out: int, A_spa: torch.Tensor, dropout: float = 0.1):
         super().__init__()
-        self.n_features = n_features
-
-        # ── Scaled Laplacian (buffer) ─────────────────────────────────────────
-        L_tilde = compute_scaled_laplacian(A_raw)
-        self.register_buffer("L_tilde", L_tilde)
-
-        # ── ST-Conv blocks ────────────────────────────────────────────────────
-        self.blocks = nn.ModuleList()
-        for i in range(n_blocks):
-            c_in = 1 if i == 0 else hidden
-            self.blocks.append(STConvBlock(c_in, hidden, hidden, K, Kt, dropout))
-
-        # ── Output temporal conv ──────────────────────────────────────────────
-        self.out_temp = TemporalGatedConv(hidden, hidden, Kt)
-
-        # ── Compute flattened head input size ─────────────────────────────────
-        # Each ST block: T → T - 2*(Kt-1).  Output conv: T → T - (Kt-1).
-        T_after = T_in - (Kt - 1) * (2 * n_blocks + 1)
-        assert T_after > 0, (
-            f"T_after={T_after} ≤ 0 with Kt={Kt}, n_blocks={n_blocks}, T_in={T_in}. "
-            f"Reduce Kt or n_blocks."
+        T_final = T_in - 2 * n_layers
+        assert T_final > 0, (
+            f"T_final={T_final} ≤ 0 with n_layers={n_layers}, T_in={T_in}. "
+            f"Reduce n_layers."
         )
 
-        head_in = hidden * T_after
+        # STSG scaled Laplacian (3N × 3N) — registered buffer
+        STSG_raw = build_stsg(A_spa)
+        L_stsg   = compute_scaled_laplacian(STSG_raw)
+        self.register_buffer("L_stsg", L_stsg)
+
+        # Input projection: scalar signal → hidden channels
+        self.input_proj = nn.Linear(1, hidden)
+
+        # STSGCL stack
+        self.layers = nn.ModuleList([
+            STSGCL(hidden, hidden, K, dropout) for _ in range(n_layers)
+        ])
+
+        # Output head
+        head_in = hidden * T_final
         self.head = nn.Sequential(
             nn.Linear(head_in, hidden * 2),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(hidden * 2, T_out),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x : (B, T_in, N)   N = n_features
-        """
+        """x: (B, T_in, N)"""
         B, T, N = x.shape
-        # (B, N, 1, T)
-        x = x.permute(0, 2, 1).unsqueeze(2)
-
-        # ST blocks
-        for block in self.blocks:
-            x = block(x, self.L_tilde)       # (B, N, C_out, T')
-
-        # Output temporal conv
-        B2, N2, C2, T2 = x.shape
-        x = x.reshape(B2 * N2, C2, T2)
-        x = self.out_temp(x)                 # (B*N, C_out, T'')
-        T3 = x.shape[-1]
-        x = x.reshape(B2, N2, C2, T3)
-
-        # Pool over nodes (mean), flatten, MLP
-        x = x.mean(dim=1)                    # (B, C_out, T'')
-        x = x.reshape(B2, -1)               # (B, C_out * T'')
-        return self.head(x)
-
+        h = self.input_proj(x.unsqueeze(-1))  # (B, T, N, hidden)
+        for layer in self.layers:
+            h = layer(h, self.L_stsg)         # (B, T-2, N, hidden) each pass
+        h = h.mean(dim=2)                     # (B, T_final, hidden)
+        h = h.reshape(B, -1)                  # (B, T_final * hidden)
+        return self.head(h)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -349,11 +294,9 @@ class STGCNForecaster(nn.Module):
 def load_splits(seq_dir: str, device: torch.device):
     def t(name):
         return torch.from_numpy(np.load(os.path.join(seq_dir, name))).float().to(device)
-
     X_tr, y_tr = t("X_train.npy"), t("y_train.npy")
     X_va, y_va = t("X_val.npy"),   t("y_val.npy")
     X_te, y_te = t("X_test.npy"),  t("y_test.npy")
-
     print(f"Shapes loaded from {seq_dir}:")
     print(f"  X_train {tuple(X_tr.shape)}   y_train {tuple(y_tr.shape)}")
     print(f"  X_val   {tuple(X_va.shape)}   y_val   {tuple(y_va.shape)}")
@@ -367,20 +310,18 @@ def load_splits(seq_dir: str, device: torch.device):
 
 def train_one_epoch(model, loader, optimiser, criterion, device) -> float:
     model.train()
-    total = 0.0
-    n_skipped = 0
+    total, n_skip = 0.0, 0
     for X_b, y_b in loader:
         optimiser.zero_grad()
         loss = criterion(model(X_b), y_b)
         if not torch.isfinite(loss):
-            n_skipped += 1
-            continue
+            n_skip += 1; continue
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimiser.step()
         total += loss.item() * X_b.size(0)
-    if n_skipped:
-        print(f"  [WARN] {n_skipped} batch(es) skipped — non-finite loss")
+    if n_skip:
+        print(f"  [WARN] {n_skip} batch(es) skipped — non-finite loss")
     return total / len(loader.dataset)
 
 
@@ -393,7 +334,6 @@ def evaluate(model, loader, criterion) -> float:
     return total / len(loader.dataset)
 
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Plotting helpers
 # ══════════════════════════════════════════════════════════════════════════════
@@ -401,10 +341,9 @@ def evaluate(model, loader, criterion) -> float:
 def plot_loss_curves(train_losses, val_losses, out_path: str) -> None:
     fig, ax = plt.subplots(figsize=(9, 4))
     ax.plot(train_losses, label="Train MSE", linewidth=1.5, color="#dc2626")
-    ax.plot(val_losses,   label="Val MSE",   linewidth=1.5, color="#f97316",
-            linestyle="--")
+    ax.plot(val_losses,   label="Val MSE",   linewidth=1.5, color="#f97316", linestyle="--")
     ax.set_xlabel("Epoch"); ax.set_ylabel("MSE loss (scaled)")
-    ax.set_title("STGCN — Training curves")
+    ax.set_title("STSGCN — Training curves")
     ax.legend(); ax.grid(alpha=0.3)
     fig.tight_layout(); fig.savefig(out_path, dpi=150); plt.close(fig)
     print(f"  Saved: {out_path}")
@@ -415,42 +354,31 @@ def plot_predictions(y_true, y_pred, metrics, out_path: str) -> None:
     idx_full = np.arange(N)
     zoom_n   = min(60, N)
     idx_zoom = np.arange(N - zoom_n, N)
-
     actual_s1    = y_true[:, 0]
     predicted_s1 = y_pred[:, 0]
-    pred_min     = y_pred.min(axis=1)
-    pred_max     = y_pred.max(axis=1)
-
-    C_ACT  = "#1d4ed8"; C_PRED = "#10b981"; C_BAND = "#a7f3d0"
-    C_MID  = "#0891b2"; C_LAST = "#7c3aed"
-
+    pred_min = y_pred.min(axis=1); pred_max = y_pred.max(axis=1)
+    C_ACT = "#1d4ed8"; C_PRED = "#0ea5e9"; C_BAND = "#e0f2fe"
+    C_MID = "#0891b2"; C_LAST = "#7c3aed"
     fig = plt.figure(figsize=(14, 8))
     gs  = gridspec.GridSpec(2, 1, hspace=0.48)
-
     ax1 = fig.add_subplot(gs[0])
     ax1.fill_between(idx_full, pred_min, pred_max, alpha=0.22, color=C_BAND,
                      label=f"Forecast spread (step 1–{T_out})")
     ax1.plot(idx_full, actual_s1,    color=C_ACT,  linewidth=1.5, label="Actual", zorder=4)
     ax1.plot(idx_full, predicted_s1, color=C_PRED, linewidth=1.2, linestyle="--",
-             alpha=0.88, label="STGCN predicted (step 1)", zorder=5)
-    ann = (
-        f"Combined = {metrics['Combined']:.2f}%\n"
-        f"MAPE     = {metrics['MAPE']:.2f}%\n"
-        f"MAE%     = {metrics['MAE_pct']:.2f}%\n"
-        f"RMSE%    = {metrics['RMSE_pct']:.2f}%\n"
-        f"R²       = {metrics['R2']:.4f}\n"
-        f"MAE      = {metrics['MAE']:.0f} riders\n"
-        f"RMSE     = {metrics['RMSE']:.0f} riders"
-    )
+             alpha=0.88, label="STSGCN predicted (step 1)", zorder=5)
+    ann = (f"Combined = {metrics['Combined']:.2f}%\nMAPE     = {metrics['MAPE']:.2f}%\n"
+           f"MAE%     = {metrics['MAE_pct']:.2f}%\nRMSE%    = {metrics['RMSE_pct']:.2f}%\n"
+           f"R²       = {metrics['R2']:.4f}\nMAE      = {metrics['MAE']:.0f} riders\n"
+           f"RMSE     = {metrics['RMSE']:.0f} riders")
     ax1.text(0.01, 0.97, ann, transform=ax1.transAxes, fontsize=8,
              verticalalignment="top", fontfamily="monospace",
              bbox=dict(boxstyle="round,pad=0.45", facecolor="white",
                        edgecolor="#d1d5db", alpha=0.92))
-    ax1.set_title("STGCN — Test set: Actual vs Predicted (full period)",
+    ax1.set_title("STSGCN — Test set: Actual vs Predicted (full period)",
                   fontsize=11, fontweight="bold")
     ax1.set_xlabel("Test sample index"); ax1.set_ylabel("Ridership (riders)")
     ax1.legend(loc="upper right", fontsize=8); ax1.grid(alpha=0.25)
-
     ax2 = fig.add_subplot(gs[1])
     ax2.fill_between(idx_zoom, pred_min[idx_zoom], pred_max[idx_zoom],
                      alpha=0.18, color=C_BAND)
@@ -465,19 +393,17 @@ def plot_predictions(y_true, y_pred, metrics, out_path: str) -> None:
                   fontsize=10, fontweight="bold")
     ax2.set_xlabel("Test sample index"); ax2.set_ylabel("Ridership (riders)")
     ax2.legend(loc="upper right", fontsize=8, ncol=2); ax2.grid(alpha=0.25)
-
     fig.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
     print(f"  Saved: {out_path}")
 
 
 def plot_per_step_metrics(per_step: list, out_path: str) -> None:
     steps    = [f"t+{i+1}" for i in range(len(per_step))]
-    combined = [m["Combined"]  for m in per_step]
-    mape     = [m["MAPE"]      for m in per_step]
-    mae_pct  = [m["MAE_pct"]   for m in per_step]
-    rmse_pct = [m["RMSE_pct"]  for m in per_step]
-    r2       = [m["R2"]        for m in per_step]
-
+    combined = [m["Combined"] for m in per_step]
+    mape     = [m["MAPE"]     for m in per_step]
+    mae_pct  = [m["MAE_pct"]  for m in per_step]
+    rmse_pct = [m["RMSE_pct"] for m in per_step]
+    r2       = [m["R2"]       for m in per_step]
     x, w = np.arange(len(steps)), 0.2
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(max(8, len(steps)*0.85), 7),
                                    gridspec_kw={"hspace": 0.48})
@@ -487,23 +413,17 @@ def plot_per_step_metrics(per_step: list, out_path: str) -> None:
     ax1.bar(x+1.5*w, rmse_pct, w, label="RMSE%",     color="#f97316", alpha=0.85)
     ax1.set_xticks(x); ax1.set_xticklabels(steps)
     ax1.set_ylabel("% of mean demand / score")
-    ax1.set_title("STGCN — Per-horizon metrics", fontweight="bold")
+    ax1.set_title("STSGCN — Per-horizon metrics", fontweight="bold")
     ax1.legend(fontsize=8); ax1.grid(axis="y", alpha=0.3)
-
     ax2.plot(steps, r2, marker="o", color="#dc2626", linewidth=1.8, markersize=5)
     ax2.axhline(0, color="#9ca3af", linewidth=0.8, linestyle="--")
     ax2.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":")
     ax2.set_ylim(min(min(r2)-0.05, -0.1), 1.08)
-    ax2.set_ylabel("R²"); ax2.set_title("STGCN — R² per horizon step", fontweight="bold")
+    ax2.set_ylabel("R²"); ax2.set_title("STSGCN — R² per horizon step", fontweight="bold")
     ax2.grid(alpha=0.3)
-
     fig.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
     print(f"  Saved: {out_path}")
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Comparison table
-# ══════════════════════════════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Main
@@ -514,7 +434,6 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # ── Device ────────────────────────────────────────────────────────────────
     if args.device == "auto":
         if   torch.cuda.is_available():         device = torch.device("cuda")
         elif torch.backends.mps.is_available(): device = torch.device("mps")
@@ -523,12 +442,10 @@ def main():
         device = torch.device(args.device)
     print(f"Device: {device}")
 
-    # ── Data ──────────────────────────────────────────────────────────────────
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
     T_in       = X_tr.shape[1]
     n_features = X_tr.shape[2]
     T_out      = y_tr.shape[1]
-
     meta_path  = os.path.join(args.seq_dir, "split_dates.json")
     split_meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
 
@@ -537,44 +454,40 @@ def main():
     val_loader   = DataLoader(TensorDataset(X_va, y_va), batch_size=args.batch_size)
     test_loader  = DataLoader(TensorDataset(X_te, y_te), batch_size=args.batch_size)
 
-    # ── Build adjacency ───────────────────────────────────────────────────────
-    print(f"\nBuilding feature correlation adjacency (threshold={args.adj_threshold})...")
-    A_raw = build_feature_adj(X_tr, threshold=args.adj_threshold)
-    n_edges = int((A_raw > 0).sum().item() // 2)
-    density = float((A_raw > 0).float().mean().item())
+    print(f"\nBuilding spatial feature-correlation adjacency "
+          f"(threshold={args.adj_threshold})...")
+    A_spa  = build_feature_adj(X_tr, threshold=args.adj_threshold)
+    n_edges = int((A_spa > 0).sum().item() // 2)
+    density = float((A_spa > 0).float().mean().item())
     print(f"  Nodes: {n_features}  Edges: {n_edges}  Density: {density:.4f}")
 
-    # ── Model ─────────────────────────────────────────────────────────────────
-    model = STGCNForecaster(
+    T_final = T_in - 2 * args.n_layers
+    model = STSGCNForecaster(
         n_features = n_features,
         hidden     = args.hidden,
-        n_blocks   = args.n_blocks,
+        n_layers   = args.n_layers,
         K          = args.cheb_k,
-        Kt         = args.kt,
         T_in       = T_in,
         T_out      = T_out,
-        A_raw      = A_raw,
+        A_spa      = A_spa,
         dropout    = args.dropout,
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    T_after  = T_in - (args.kt - 1) * (2 * args.n_blocks + 1)
-    print(f"\nModel         : STGCNForecaster")
-    print(f"  Nodes (N)   : {n_features}   Cheb-K={args.cheb_k}   Kt={args.kt}")
-    print(f"  ST blocks   : {args.n_blocks}   hidden={args.hidden}")
-    print(f"  T_in→T_after: {T_in}→{T_after}")
+    print(f"\nModel         : STSGCNForecaster")
+    print(f"  Nodes (N)   : {n_features}   Cheb-K={args.cheb_k}   n_layers={args.n_layers}")
+    print(f"  T_in→T_final: {T_in}→{T_final}   hidden={args.hidden}")
+    print(f"  STSG size   : {3*n_features}×{3*n_features}")
     print(f"  In          : (batch, {T_in}, {n_features})")
     print(f"  Out         : (batch, {T_out})")
     print(f"  Params      : {n_params:,}")
 
-    # ── Optimiser / loss ──────────────────────────────────────────────────────
     criterion = nn.MSELoss()
     optimiser = torch.optim.Adam(model.parameters(), lr=args.lr,
                                  weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5)
 
-    # ── Training loop ─────────────────────────────────────────────────────────
     best_val_loss  = float("inf")
     best_epoch     = 0
     patience_count = 0
@@ -588,12 +501,10 @@ def main():
     for epoch in range(1, args.epochs + 1):
         tr_loss = train_one_epoch(model, train_loader, optimiser, criterion, device)
         va_loss = evaluate(model, val_loader, criterion)
-        train_losses.append(tr_loss)
-        val_losses.append(va_loss)
+        train_losses.append(tr_loss); val_losses.append(va_loss)
         scheduler.step(va_loss)
         lr_now = optimiser.param_groups[0]["lr"]
         print(f"{epoch:6d}  {tr_loss:10.6f}  {va_loss:10.6f}  {lr_now:10.2e}")
-
         if va_loss < best_val_loss:
             best_val_loss, best_epoch, patience_count = va_loss, epoch, 0
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
@@ -605,19 +516,15 @@ def main():
                 break
 
     model.load_state_dict(best_state)
-
-    # ── Collect predictions ───────────────────────────────────────────────────
     model.eval()
     preds_s, trues_s = [], []
     with torch.no_grad():
         for X_b, y_b in test_loader:
             preds_s.append(model(X_b).cpu().numpy())
             trues_s.append(y_b.cpu().numpy())
-
     y_pred_s = np.concatenate(preds_s)
     y_true_s = np.concatenate(trues_s)
 
-    # ── Inverse-transform ─────────────────────────────────────────────────────
     scaler_y_path = os.path.join(args.seq_dir, "scaler_y.pkl")
     if os.path.exists(scaler_y_path):
         scaler_y = joblib.load(scaler_y_path)
@@ -628,10 +535,9 @@ def main():
         print("[WARN] scaler_y.pkl not found — metrics in scaled units.")
         y_pred, y_true = y_pred_s, y_true_s
 
-    # ── Per-horizon metrics ───────────────────────────────────────────────────
     W = 10
     print(f"\n{'='*85}")
-    print("STGCN — TEST SET METRICS")
+    print("STSGCN — TEST SET METRICS")
     print(f"{'='*85}")
     header = (f"{'Step':>5}  {'Combined%':>{W}}  {'MAPE%':>{W}}  {'MAE%':>{W}}  "
               f"{'RMSE%':>{W}}  {'R²':>{W}}  {'MAE':>{W}}  {'RMSE':>{W}}")
@@ -653,30 +559,27 @@ def main():
           f"{overall['MAE_pct']:>{W}.2f}  {overall['RMSE_pct']:>{W}.2f}  "
           f"{overall['R2']:>{W}.4f}  {overall['MAE']:>{W}.0f}  {overall['RMSE']:>{W}.0f}")
 
-    # ── Save artefacts ────────────────────────────────────────────────────────
     run_id  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = f"src/outputs/stgcn/{run_id}"
+    out_dir = f"src/outputs/stsgcn/{run_id}"
     os.makedirs(out_dir, exist_ok=True)
     torch.save(model.state_dict(), f"{out_dir}/model.pt")
 
     results = {
         "run_id": run_id,
-        "model":  "STGCNForecaster",
+        "model":  "STSGCNForecaster",
         "hparams": {
-            "hidden":         args.hidden,
-            "cheb_k":         args.cheb_k,
-            "kt":             args.kt,
-            "n_blocks":       args.n_blocks,
-            "adj_threshold":  args.adj_threshold,
-            "dropout":        args.dropout,
-            "weight_decay":   args.weight_decay,
-            "T_in":           T_in,
-            "T_out":          T_out,
-            "n_features":     n_features,
-            "n_graph_nodes":  n_features,
-            "n_edges":        n_edges,
-            "batch_size":     args.batch_size,
-            "lr":             args.lr,
+            "hidden":        args.hidden,
+            "n_layers":      args.n_layers,
+            "cheb_k":        args.cheb_k,
+            "adj_threshold": args.adj_threshold,
+            "dropout":       args.dropout,
+            "weight_decay":  args.weight_decay,
+            "T_in":          T_in,
+            "T_out":         T_out,
+            "n_features":    n_features,
+            "n_edges":       n_edges,
+            "batch_size":    args.batch_size,
+            "lr":            args.lr,
         },
         "training": {
             "best_epoch":    best_epoch,
@@ -692,15 +595,13 @@ def main():
     with open(f"{out_dir}/results.json", "w") as f:
         json.dump(results, f, indent=2)
 
-    # ── Plots ─────────────────────────────────────────────────────────────────
     print(f"\nSaving plots...")
     plot_loss_curves(train_losses, val_losses, f"{out_dir}/loss_curves.png")
     plot_predictions(y_true, y_pred, overall,  f"{out_dir}/test_predictions.png")
     plot_per_step_metrics(per_step,            f"{out_dir}/per_step_metrics.png")
 
-    # ── Summary ───────────────────────────────────────────────────────────────
     print(f"\n{'='*85}")
-    print(f"STGCN run complete  →  {out_dir}/")
+    print(f"STSGCN run complete  →  {out_dir}/")
     print(f"{'='*85}")
     print(f"  Combined  : {overall['Combined']:.2f}%")
     print(f"  MAPE      : {overall['MAPE']:.2f}%")
@@ -708,26 +609,24 @@ def main():
     print(f"  RMSE%     : {overall['RMSE_pct']:.2f}%   (raw RMSE = {overall['RMSE']:.0f} riders)")
     print(f"  R²        : {overall['R2']:.4f}")
 
-    # ── Multi-way comparison ──────────────────────────────────────────────────
     PRIOR_MODELS = [
-        ("LSTM",       args.lstm_results,      "src/outputs/lstm",       "#2563eb"),
-        ("BiLSTM",     args.bilstm_results,    "src/outputs/bilstm",     "#7c3aed"),
-        ("TPA-LSTM",   args.tpalstm_results,   "src/outputs/tpa_lstm",   "#0891b2"),
-        ("CNN-LSTM",   args.cnnlstm_results,   "src/outputs/cnn_lstm",   "#16a34a"),
-        ("CNN-BiLSTM", args.cnnbilstm_results, "src/outputs/cnn_bilstm", "#d97706"),
-        ("ST-LSTM",    args.stlstm_results,    "src/outputs/st_lstm",    "#dc2626"),
-        ("MTGNN",      args.mtgnn_results,     "src/outputs/mtgnn",      "#f472b6"),
-        ("STSGCN",     args.stsgcn_results,    "src/outputs/stsgcn",     "#0ea5e9"),
-        ("STFGNN",     args.stfgnn_results,    "src/outputs/stfgnn",     "#a855f7"),
-        ("MD-STGCN",   args.mdstgcn_results,   "src/outputs/md_stgcn",   "#f97316"),
-        ("ASTGCN",     args.astgcn_results,    "src/outputs/astgcn",     "#e11d48"),
-        ("TFT",        args.tft_results,       "src/outputs/tft",        "#ca8a04"),
-        ("Autoformer", args.autoformer_results,"src/outputs/autoformer", "#047857"),
-        ("Informer",   args.informer_results,  "src/outputs/informer",   "#9333ea"),
+        ("LSTM",       args.lstm_results,       "src/outputs/lstm",      "#2563eb"),
+        ("BiLSTM",     args.bilstm_results,     "src/outputs/bilstm",    "#7c3aed"),
+        ("TPA-LSTM",   args.tpalstm_results,    "src/outputs/tpa_lstm",  "#0891b2"),
+        ("CNN-LSTM",   args.cnnlstm_results,    "src/outputs/cnn_lstm",  "#16a34a"),
+        ("CNN-BiLSTM", args.cnnbilstm_results,  "src/outputs/cnn_bilstm","#d97706"),
+        ("ST-LSTM",    args.stlstm_results,     "src/outputs/st_lstm",   "#dc2626"),
+        ("STGCN",      args.stgcn_results,      "src/outputs/stgcn",     "#10b981"),
+        ("MTGNN",      args.mtgnn_results,      "src/outputs/mtgnn",     "#f472b6"),
+        ("STFGNN",     args.stfgnn_results,     "src/outputs/stfgnn",    "#a855f7"),
+        ("MD-STGCN",   args.mdstgcn_results,    "src/outputs/md_stgcn",  "#f97316"),
+        ("ASTGCN",     args.astgcn_results,     "src/outputs/astgcn",    "#e11d48"),
+        ("TFT",        args.tft_results,        "src/outputs/tft",       "#ca8a04"),
+        ("Autoformer", args.autoformer_results, "src/outputs/autoformer","#047857"),
+        ("Informer",   args.informer_results,   "src/outputs/informer",  "#9333ea"),
     ]
 
-    models_data = []
-    comparison  = {}
+    models_data = []; comparison = {}
     for name, path, model_dir, color in PRIOR_MODELS:
         key  = name.lower().replace("-", "_")
         data = load_model_results(path, model_dir, name)
@@ -739,26 +638,24 @@ def main():
         else:
             comparison[key] = {"run_id": None, "overall": None}
 
-    models_data.append(("STGCN", overall, per_step, "#10b981"))
+    models_data.append(("STSGCN", overall, per_step, "#0ea5e9"))
 
     if len(models_data) > 1:
-        print_comparison_table(models_data[:-1], overall, "STGCN")
+        print_comparison_table(models_data[:-1], overall, "STSGCN")
         plot_comparison(models_data,
                         out_path=f"{out_dir}/comparison_{len(models_data)}_way.png")
 
-    comparison["stgcn"] = {"run_id": run_id,
-                            "overall": {k: round(v, 4) for k, v in overall.items()}}
+    comparison["stsgcn"] = {"run_id": run_id,
+                             "overall": {k: round(v, 4) for k, v in overall.items()}}
     for name, m_overall, _, __ in models_data[:-1]:
         key = name.lower().replace("-", "_")
         comparison[f"delta_vs_{key}"] = {
             k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall
         }
-
     results["comparison"] = comparison
     with open(f"{out_dir}/results.json", "w") as f:
         json.dump(results, f, indent=2)
 
-    # ── Naive persistence baseline ────────────────────────────────────────────
     target_idx   = split_meta.get("target_col_idx", 0)
     last_obs_s   = X_te[:, -1, target_idx:target_idx+1].cpu().numpy()
     naive_pred_s = np.tile(last_obs_s, (1, T_out))
@@ -774,7 +671,7 @@ def main():
     print(f"\n  Naive persistence  "
           f"Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  "
           f"R²={naive['R2']:.4f}")
-    print(f"  STGCN vs naive     "
+    print(f"  STSGCN vs naive    "
           f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
 
 

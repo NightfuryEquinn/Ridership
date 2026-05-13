@@ -56,6 +56,9 @@ All 15 models are run the same way — from the repo root, passing the script pa
 ```bash
 python src/models/spatio-temporal-based/lstm.py
 python src/models/graph-based/stgcn.py
+python src/models/graph-based/stsgcn.py
+python src/models/graph-based/stfgnn.py
+python src/models/graph-based/md_stgcn.py
 python src/models/attention-based/tft.py
 ```
 
@@ -82,14 +85,14 @@ src/outputs/{model}/        timestamped run dirs with results.json, plots, model
 | Series | Location | Models |
 |---|---|---|
 | Spatio-temporal (LSTM-family) | `src/models/spatio-temporal-based/` | LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
-| Graph-based | `src/models/graph-based/` | STGCN, Graph WaveNet, DCRNN, STGAT, PatchTST+Graph |
+| Graph-based | `src/models/graph-based/` | STGCN, MTGNN, STSGCN, STFGNN, MD-STGCN |
 | Attention-based | `src/models/attention-based/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
 
 **Canonical reference model:** `src/models/spatio-temporal-based/stlstm.py` — the training loop, output structure, and comparison pattern here should be followed when adding new models.
 
 ### Graph Approach (features-as-nodes)
 
-All graph-based and ASTGCN models treat the N input features as graph nodes rather than geographic locations. The adjacency matrix is built at training time from absolute Pearson correlation of feature columns in `X_train` (threshold=0.1), symmetrically normalised and stored as a model buffer. No external graph files are consumed at training time. `src/features/graph_builder.py` provides `symmetric_normalise()` and `row_normalise()` as shared utilities.
+All graph-based and ASTGCN models treat the N input features as graph nodes rather than geographic locations. STGCN, ASTGCN, STSGCN, STFGNN, and MD-STGCN build a fixed spatial adjacency from absolute Pearson correlation of feature columns in `X_train` (threshold=0.1). STFGNN additionally builds a temporal adjacency from the correlation of each node's mean temporal profile. STSGCN constructs a 3N×3N Spatial-Temporal Synchronous Graph (STSG) that captures both spatial and temporal correlations in one synchronous adjacency. MD-STGCN uses bidirectional K-step diffusion convolution (forward D^{-1}A and backward D^{-1}A^T) with multi-scale temporal convolutions. MTGNN learns its adjacency end-to-end from node embeddings.
 
 ASTGCN additionally computes a scaled Chebyshev Laplacian `L_tilde = -A_sym`.
 
@@ -99,8 +102,8 @@ Each model auto-detects and compares against all prior model runs. Results are l
 
 ```
 LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
-→ CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way) → Graph WaveNet (9-way)
-→ DCRNN (10-way) → STGAT (11-way) → PatchTST+Graph (12-way)
+→ CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
+→ MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → MD-STGCN (12-way)
 → ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
 ```
 

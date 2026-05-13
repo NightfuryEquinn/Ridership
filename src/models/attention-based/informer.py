@@ -117,10 +117,10 @@ def parse_args():
     p.add_argument("--cnnbilstm-results",    default=None)
     p.add_argument("--stlstm-results",       default=None)
     p.add_argument("--stgcn-results",        default=None)
-    p.add_argument("--wavenet-results",      default=None)
-    p.add_argument("--dcrnn-results",        default=None)
-    p.add_argument("--stgat-results",        default=None)
-    p.add_argument("--patchtstgraph-results",default=None)
+    p.add_argument("--mtgnn-results",        default=None)
+    p.add_argument("--stsgcn-results",       default=None)
+    p.add_argument("--stfgnn-results",       default=None)
+    p.add_argument("--mdstgcn-results",      default=None)
     p.add_argument("--astgcn-results",       default=None)
     p.add_argument("--tft-results",          default=None)
     p.add_argument("--autoformer-results",   default=None)
@@ -695,10 +695,10 @@ def main():
         ("CNN-BiLSTM",    args.cnnbilstm_results,     "src/outputs/cnn_bilstm",     "#d97706"),
         ("ST-LSTM",       args.stlstm_results,        "src/outputs/st_lstm",        "#dc2626"),
         ("STGCN",         args.stgcn_results,         "src/outputs/stgcn",          "#10b981"),
-        ("WaveNet",       args.wavenet_results,       "src/outputs/graph_wavenet",  "#f472b6"),
-        ("DCRNN",         args.dcrnn_results,         "src/outputs/dcrnn",          "#38bdf8"),
-        ("STGAT",         args.stgat_results,         "src/outputs/stgat",          "#fb923c"),
-        ("PatchTST-Gr",   args.patchtstgraph_results, "src/outputs/patchtst_graph", "#818cf8"),
+        ("MTGNN",         args.mtgnn_results,         "src/outputs/mtgnn",          "#f472b6"),
+        ("STSGCN",        args.stsgcn_results,        "src/outputs/stsgcn",         "#0ea5e9"),
+        ("STFGNN",        args.stfgnn_results,        "src/outputs/stfgnn",         "#a855f7"),
+        ("MD-STGCN",      args.mdstgcn_results,       "src/outputs/md_stgcn",       "#f97316"),
         ("ASTGCN",        args.astgcn_results,        "src/outputs/astgcn",         "#e11d48"),
         ("TFT",           args.tft_results,           "src/outputs/tft",            "#ca8a04"),
         ("Autoformer",    args.autoformer_results,    "src/outputs/autoformer",     "#047857"),

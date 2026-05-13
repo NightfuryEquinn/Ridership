@@ -6,7 +6,7 @@ produces ready-to-train sliding-window sequences for all 15 models in the stack.
 
 All models load from data/sequences/lstm/:
   LSTM-family      : LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
-  Graph-based      : STGCN, Graph WaveNet, DCRNN, STGAT, PatchTST+Graph
+  Graph-based      : STGCN, MTGNN, STSGCN, STFGNN, MD-STGCN
   Attention-based  : TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
 
 Graph models build their adjacency matrices on-the-fly from the training

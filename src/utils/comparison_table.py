@@ -131,7 +131,16 @@ def plot_comparison(models_data, out_path):
                (0, (1, 1)), (0, (3, 5, 1, 5)), "--", "-.", "-", "--",
                "-.", ":", "--", "-"]
 
-    fig = plt.figure(figsize=(16, 13))
+    # Scale figure and fonts with the number of models
+    fig_w      = max(16, 12 + n_models * 0.35)
+    fig_h      = max(13, 10 + n_models * 0.25)
+    lbl_fs     = max(4,  9  - n_models // 3)   # axis tick labels
+    annot_fs   = max(3,  6  - n_models // 4)   # bar value annotations
+    legend_fs  = max(4,  7  - n_models // 4)   # legend entries
+    title_fs   = max(7,  9  - n_models // 6)   # suptitle
+    r2_bar_w   = max(0.2, min(0.6, 4.0 / n_models))  # R² bar width
+
+    fig = plt.figure(figsize=(fig_w, fig_h))
     gs  = gridspec.GridSpec(3, 2, hspace=0.52, wspace=0.32)
 
     # ── Overall percentage metrics bar chart ──────────────────────────────────
@@ -143,12 +152,12 @@ def plot_comparison(models_data, out_path):
         for bar in bars:
             h = bar.get_height()
             ax00.text(bar.get_x() + bar.get_width() / 2, h + 0.25,
-                      f"{h:.1f}", ha="center", va="bottom", fontsize=4)
+                      f"{h:.1f}", ha="center", va="bottom", fontsize=annot_fs)
     ax00.set_xticks(x)
-    ax00.set_xticklabels(PCT_LABELS, fontsize=9)
+    ax00.set_xticklabels(PCT_LABELS, fontsize=lbl_fs)
     ax00.set_ylabel("% / score")
     ax00.set_title("Overall — Percentage Metrics", fontweight="bold")
-    ax00.legend(fontsize=5)
+    ax00.legend(fontsize=legend_fs)
     ax00.grid(axis="y", alpha=0.3)
 
     # ── Overall R² bar chart ──────────────────────────────────────────────────
@@ -156,14 +165,14 @@ def plot_comparison(models_data, out_path):
     names = [d[0] for d in models_data]
     r2s   = [d[1]["R2"] for d in models_data]
     cols  = [d[3] for d in models_data]
-    bars  = ax01.bar(names, r2s, color=cols, alpha=0.82, width=0.4)
+    bars  = ax01.bar(names, r2s, color=cols, alpha=0.82, width=r2_bar_w)
     for bar in bars:
         h = bar.get_height()
         ax01.text(bar.get_x() + bar.get_width() / 2, h + 0.004,
-                  f"{h:.4f}", ha="center", va="bottom", fontsize=6)
+                  f"{h:.4f}", ha="center", va="bottom", fontsize=annot_fs)
     ax01.set_ylim(0, min(1.12, max(r2s) * 1.15 + 0.05))
     ax01.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":")
-    ax01.tick_params(axis="x", labelsize=5, rotation=30)
+    ax01.tick_params(axis="x", labelsize=lbl_fs, rotation=30)
     ax01.set_ylabel("R²")
     ax01.set_title("Overall — R²", fontweight="bold")
     ax01.grid(axis="y", alpha=0.3)
@@ -185,12 +194,12 @@ def plot_comparison(models_data, out_path):
             ax.axhline(0, color="#9ca3af", linewidth=0.8, linestyle="--")
             ax.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":")
         ax.set_title(title, fontweight="bold")
-        ax.legend(fontsize=5)
+        ax.legend(fontsize=legend_fs)
         ax.grid(alpha=0.3)
 
     fig.suptitle(
         " vs ".join(d[0] for d in models_data) + " — Test Set Comparison",
-        fontsize=9, fontweight="bold", y=1.01,
+        fontsize=title_fs, fontweight="bold", y=1.01,
     )
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)

@@ -106,8 +106,20 @@ def parse_args():
     p.add_argument("--seed",           type=int,   default=42)
     p.add_argument("--lstm-results",   default=None,
                    help="Path to lstm_baseline results.json (auto-detected if omitted)")
-    p.add_argument("--bilstm-results", default=None,
+    p.add_argument("--bilstm-results",     default=None,
                    help="Path to bilstm results.json (auto-detected if omitted)")
+    p.add_argument("--cnnlstm-results",    default=None)
+    p.add_argument("--cnnbilstm-results",  default=None)
+    p.add_argument("--stlstm-results",     default=None)
+    p.add_argument("--stgcn-results",      default=None)
+    p.add_argument("--mtgnn-results",      default=None)
+    p.add_argument("--stsgcn-results",     default=None)
+    p.add_argument("--stfgnn-results",     default=None)
+    p.add_argument("--mdstgcn-results",    default=None)
+    p.add_argument("--astgcn-results",     default=None)
+    p.add_argument("--tft-results",        default=None)
+    p.add_argument("--autoformer-results", default=None)
+    p.add_argument("--informer-results",   default=None)
     return p.parse_args()
 
 
@@ -750,42 +762,46 @@ def main():
           f"{float(-(attn_weights * np.log(attn_weights + 1e-9)).sum(axis=1).mean()):.4f}"
           f"  (higher = more distributed; lower = more selective)")
 
-    # ── 3-way comparison ──────────────────────────────────────────────────────
-    lstm_data = load_model_results(
-        args.lstm_results, "src/outputs/lstm", "LSTM"
-    )
-    bi_data = load_model_results(
-        args.bilstm_results, "src/outputs/bilstm", "BiLSTM"
-    )
-
-    lstm_m,  lstm_ps  = None, None
-    bi_m,    bi_ps    = None, None
-
-    if lstm_data:
-        lstm_m  = lstm_data["test_metrics"]["overall"]
-        lstm_ps = lstm_data["test_metrics"]["per_step"]
-
-    if bi_data:
-        bi_m  = bi_data["test_metrics"]["overall"]
-        bi_ps = bi_data["test_metrics"]["per_step"]
+    # ── Multi-way comparison ──────────────────────────────────────────────────
+    PRIOR_MODELS = [
+        ("LSTM",       args.lstm_results,       "src/outputs/lstm",       "#2563eb"),
+        ("BiLSTM",     args.bilstm_results,     "src/outputs/bilstm",     "#7c3aed"),
+        ("CNN-LSTM",   args.cnnlstm_results,    "src/outputs/cnn_lstm",   "#16a34a"),
+        ("CNN-BiLSTM", args.cnnbilstm_results,  "src/outputs/cnn_bilstm", "#d97706"),
+        ("ST-LSTM",    args.stlstm_results,     "src/outputs/st_lstm",    "#dc2626"),
+        ("STGCN",      args.stgcn_results,      "src/outputs/stgcn",      "#10b981"),
+        ("MTGNN",      args.mtgnn_results,      "src/outputs/mtgnn",      "#f472b6"),
+        ("STSGCN",     args.stsgcn_results,     "src/outputs/stsgcn",     "#0ea5e9"),
+        ("STFGNN",     args.stfgnn_results,     "src/outputs/stfgnn",     "#a855f7"),
+        ("MD-STGCN",   args.mdstgcn_results,    "src/outputs/md_stgcn",   "#f97316"),
+        ("ASTGCN",     args.astgcn_results,     "src/outputs/astgcn",     "#e11d48"),
+        ("TFT",        args.tft_results,        "src/outputs/tft",        "#ca8a04"),
+        ("Autoformer", args.autoformer_results, "src/outputs/autoformer", "#047857"),
+        ("Informer",   args.informer_results,   "src/outputs/informer",   "#9333ea"),
+    ]
 
     models_data = []
-    if lstm_m is not None: models_data.append(("LSTM",     lstm_m, lstm_ps, "#2563eb"))
-    if bi_m   is not None: models_data.append(("BiLSTM",   bi_m,   bi_ps,   "#7c3aed"))
+    comparison  = {}
+    for name, path, model_dir, color in PRIOR_MODELS:
+        key  = name.lower().replace("-", "_").replace(" ", "_")
+        data = load_model_results(path, model_dir, name)
+        if data:
+            m_overall = data["test_metrics"]["overall"]
+            m_ps      = data["test_metrics"]["per_step"]
+            models_data.append((name, m_overall, m_ps, color))
+            comparison[key] = {"run_id": data.get("run_id"), "overall": m_overall}
+        else:
+            comparison[key] = {"run_id": None, "overall": None}
+
     models_data.append(("TPA-LSTM", overall, per_step, "#0891b2"))
+
     if len(models_data) > 1:
         print_comparison_table(models_data[:-1], overall, "TPA-LSTM")
         plot_comparison(models_data, out_path=f"{out_dir}/comparison_{len(models_data)}_way.png")
 
-    # Embed comparison in results.json
-    comparison = {}
-    if lstm_data: comparison["lstm"]   = {"run_id": lstm_data.get("run_id"), "overall": lstm_m}
-    else:         comparison["lstm"]   = {"run_id": None, "overall": None}
-    if bi_data:   comparison["bilstm"] = {"run_id": bi_data.get("run_id"),   "overall": bi_m}
-    else:         comparison["bilstm"] = {"run_id": None, "overall": None}
     comparison["tpa_lstm"] = {"run_id": run_id, "overall": {k: round(v, 4) for k, v in overall.items()}}
     for name, m_overall, _, __ in models_data[:-1]:
-        key = name.lower().replace("-", "_")
+        key = name.lower().replace("-", "_").replace(" ", "_")
         comparison[f"delta_vs_{key}"] = {k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall}
     results["comparison"] = comparison
     with open(f"{out_dir}/results.json", "w") as f:

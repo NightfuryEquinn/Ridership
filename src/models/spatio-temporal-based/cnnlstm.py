@@ -26,15 +26,30 @@ Supports two fusion modes via --mode:
     X → LSTM → h_T            ─┘
     head_in = cnn_filters + hidden
 
-Why two modes?
+  augmented
+    Augmented Sequential CNN-LSTM (Khalil, 2023).
+    Retains the sequential CNN→LSTM hierarchy but adds a skip connection
+    that globally pools the raw input and concatenates it with the LSTM
+    final hidden state before the MLP head.  The LSTM still only sees
+    higher-level CNN representations (not raw features), preserving the
+    hierarchical abstraction of sequential, while the skip path restores
+    direct access to low-level temporal signals that aggressive CNN
+    filtering may suppress (e.g. absolute ridership level, rare spikes).
+
+    X → CNN → LSTM → h_T ─────────────────┐
+                                            ├─ cat → MLP
+    X → global avg pool → skip_vec ────────┘
+    head_in = hidden + n_features
+
+Why three modes?
   Sequential is the classic stacked design — strong when CNN features are
   a better input to the LSTM than raw features (noisy, high-dimensional).
   Parallel preserves the original feature sequence for the LSTM branch,
   which can matter when raw temporal correlations (e.g. absolute ridership
   level at t−1) carry information that the CNN discards through its
-  filters.  Comparing the two on the same dataset reveals whether local
-  feature extraction benefits from being upstream of recurrence (sequential)
-  or complementary to it (parallel).
+  filters.  Augmented Sequential bridges both: the LSTM still benefits from
+  CNN abstraction while the skip connection prevents information loss,
+  typically yielding stronger generalisation than either alone (Khalil, 2023).
 
 Architecture — sequential:
   X             : (B, T_in, F)
@@ -53,6 +68,16 @@ Architecture — parallel:
   cat            → (B, cnn_filters + hidden)
   MLP            → (B, T_out)
 
+Architecture — augmented:
+  X             : (B, T_in, F)
+  permute        → (B, F, T_in)
+  Conv1d × L    → (B, cnn_filters, T_in)   # same-padding
+  permute        → (B, T_in, cnn_filters)
+  LSTM           → h_n[-1] : (B, hidden)
+  mean(dim=1, X) → skip    : (B, n_features) # global avg pool of raw input
+  cat            → (B, hidden + n_features)
+  MLP            → (B, T_out)
+
 Each CNN block: Conv1d → BatchNorm1d → ReLU.
 
 Comparison:
@@ -64,6 +89,7 @@ Comparison:
 Usage:
   python cnnlstm.py                                    # sequential, auto-compare
   python cnnlstm.py --mode parallel                    # parallel mode
+  python cnnlstm.py --mode augmented                   # augmented sequential mode
   python cnnlstm.py --cnn-filters 64 --cnn-layers 2 --cnn-kernel-size 3
   python cnnlstm.py --lstm-results src/outputs/lstm/<id>/results.json \\
                     --bilstm-results src/outputs/bilstm/<id>/results.json \\
@@ -122,8 +148,10 @@ def parse_args():
     p.add_argument("--cnn-kernel-size",  type=int,   default=3,
                    help="1-D CNN kernel size (same-padding applied)")
     p.add_argument("--mode",             default="sequential",
-                   choices=["sequential", "parallel"],
-                   help="sequential: CNN→LSTM→head; parallel: CNN‖LSTM→head")
+                   choices=["sequential", "parallel", "augmented"],
+                   help=("sequential: CNN→LSTM→head; "
+                         "parallel: CNN‖LSTM→head; "
+                         "augmented: CNN→LSTM→head + raw skip connection"))
     p.add_argument("--batch-size",       type=int,   default=32)
     p.add_argument("--epochs",           type=int,   default=50)
     p.add_argument("--lr",               type=float, default=1e-3)
@@ -134,8 +162,19 @@ def parse_args():
                    help="Path to lstm results.json (auto-detected if omitted)")
     p.add_argument("--bilstm-results",   default=None,
                    help="Path to bilstm results.json (auto-detected if omitted)")
-    p.add_argument("--tpalstm-results",  default=None,
+    p.add_argument("--tpalstm-results",   default=None,
                    help="Path to tpa_lstm results.json (auto-detected if omitted)")
+    p.add_argument("--cnnbilstm-results", default=None)
+    p.add_argument("--stlstm-results",    default=None)
+    p.add_argument("--stgcn-results",     default=None)
+    p.add_argument("--mtgnn-results",     default=None)
+    p.add_argument("--stsgcn-results",    default=None)
+    p.add_argument("--stfgnn-results",    default=None)
+    p.add_argument("--mdstgcn-results",   default=None)
+    p.add_argument("--astgcn-results",    default=None)
+    p.add_argument("--tft-results",       default=None)
+    p.add_argument("--autoformer-results",default=None)
+    p.add_argument("--informer-results",  default=None)
     return p.parse_args()
 
 
@@ -145,7 +184,7 @@ def parse_args():
 
 class CNNLSTMForecaster(nn.Module):
     """
-    CNN-LSTM with two fusion modes.
+    CNN-LSTM with three fusion modes.
 
     Input:  (batch, T_in, n_features)
     Output: (batch, T_out)
@@ -160,6 +199,13 @@ class CNNLSTMForecaster(nn.Module):
       LSTM receives X directly → h_T: (B, hidden_size).
       Both are concatenated before the MLP head.
       LSTM input_size = n_features.  head_in = cnn_filters + hidden_size.
+
+    mode='augmented'
+      Augmented Sequential (Khalil, 2023).
+      CNN output feeds LSTM exactly as in sequential (LSTM never sees raw X).
+      Additionally, raw X is globally average-pooled into a skip vector and
+      concatenated with the LSTM's final hidden state before the MLP head.
+      LSTM input_size = cnn_filters.  head_in = hidden_size + n_features.
     """
 
     def __init__(
@@ -175,8 +221,9 @@ class CNNLSTMForecaster(nn.Module):
         mode:         str   = "sequential",
     ):
         super().__init__()
-        assert mode in ("sequential", "parallel"), f"Unknown mode: {mode}"
-        self.mode = mode
+        assert mode in ("sequential", "parallel", "augmented"), f"Unknown mode: {mode}"
+        self.mode        = mode
+        self.n_features  = n_features
 
         # ── CNN front-end (shared by both modes) ──────────────────────────────
         pad = kernel_size // 2
@@ -192,9 +239,9 @@ class CNNLSTMForecaster(nn.Module):
         self.cnn = nn.Sequential(*cnn_blocks)
 
         # ── LSTM encoder ──────────────────────────────────────────────────────
-        # sequential: LSTM reads CNN features    → input_size = cnn_filters
-        # parallel:   LSTM reads raw features    → input_size = n_features
-        lstm_input = cnn_filters if mode == "sequential" else n_features
+        # sequential/augmented: LSTM reads CNN features → input_size = cnn_filters
+        # parallel:             LSTM reads raw features → input_size = n_features
+        lstm_input = n_features if mode == "parallel" else cnn_filters
         self.lstm = nn.LSTM(
             input_size  = lstm_input,
             hidden_size = hidden_size,
@@ -206,7 +253,13 @@ class CNNLSTMForecaster(nn.Module):
         # ── MLP head ──────────────────────────────────────────────────────────
         # sequential: head_in = hidden_size
         # parallel:   head_in = cnn_filters + hidden_size
-        head_in = hidden_size if mode == "sequential" else cnn_filters + hidden_size
+        # augmented:  head_in = hidden_size + n_features  (LSTM h_T + raw skip)
+        if mode == "sequential":
+            head_in = hidden_size
+        elif mode == "parallel":
+            head_in = cnn_filters + hidden_size
+        else:  # augmented
+            head_in = hidden_size + n_features
         self.head = nn.Sequential(
             nn.Linear(head_in, head_in // 2),
             nn.ReLU(),
@@ -233,6 +286,16 @@ class CNNLSTMForecaster(nn.Module):
             _, (h_n, _) = self.lstm(x_cnn)
             h_T = h_n[-1]                          # (B, hidden)
             return self.head(h_T)
+
+        elif self.mode == "augmented":
+            # Same CNN→LSTM hierarchy as sequential …
+            x_cnn = x_cnn.permute(0, 2, 1)        # (B, T_in, cnn_filters)
+            _, (h_n, _) = self.lstm(x_cnn)
+            h_T = h_n[-1]                          # (B, hidden)
+            # … plus a skip connection: global avg pool of raw input
+            skip = x.mean(dim=1)                   # (B, n_features)
+            h_cat = torch.cat([h_T, skip], dim=-1) # (B, hidden + n_features)
+            return self.head(h_cat)
 
         else:  # parallel
             # CNN branch: global average pool over time
@@ -491,17 +554,29 @@ def main():
     ).to(device)
 
     n_params  = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    head_in   = args.hidden if args.mode == "sequential" else args.cnn_filters + args.hidden
-    lstm_in   = args.cnn_filters if args.mode == "sequential" else n_features
+    if args.mode == "sequential":
+        head_in = args.hidden
+        lstm_in = args.cnn_filters
+    elif args.mode == "parallel":
+        head_in = args.cnn_filters + args.hidden
+        lstm_in = n_features
+    else:  # augmented
+        head_in = args.hidden + n_features
+        lstm_in = args.cnn_filters
     print(f"\nModel     : CNNLSTMForecaster  [{args.mode}]")
     print(f"  CNN     : filters={args.cnn_filters}  layers={args.cnn_layers}"
           f"  kernel={args.cnn_kernel_size}")
     if args.mode == "sequential":
         print(f"  LSTM    : in={lstm_in}  hidden={args.hidden}  layers={args.layers}")
         print(f"  Head    : {args.hidden} → {T_out}")
-    else:
+    elif args.mode == "parallel":
         print(f"  LSTM    : in={lstm_in} (raw)  hidden={args.hidden}  layers={args.layers}")
         print(f"  Head    : cnn_pool({args.cnn_filters}) ‖ h_T({args.hidden})"
+              f" = {head_in} → {T_out}")
+    else:  # augmented
+        print(f"  LSTM    : in={lstm_in} (CNN feats)  hidden={args.hidden}  layers={args.layers}")
+        print(f"  Skip    : raw X global avg pool → ({n_features},)")
+        print(f"  Head    : h_T({args.hidden}) ‖ skip({n_features})"
               f" = {head_in} → {T_out}")
     print(f"  In      : (batch, {T_in}, {n_features})")
     print(f"  Out     : (batch, {T_out})")
@@ -661,63 +736,48 @@ def main():
     print(f"  RMSE%     : {overall['RMSE_pct']:.2f}%   (raw RMSE = {overall['RMSE']:.0f} riders)")
     print(f"  R²        : {overall['R2']:.4f}")
 
-    # ── 4-way comparison ──────────────────────────────────────────────────────
-    lstm_data = load_model_results(
-        args.lstm_results, "src/outputs/lstm", "LSTM"
-    )
-    bi_data = load_model_results(
-        args.bilstm_results, "src/outputs/bilstm", "BiLSTM"
-    )
-    tpa_data = load_model_results(
-        args.tpalstm_results, "src/outputs/tpa_lstm", "TPA-LSTM"
-    )
-
-    lstm_m,  lstm_ps  = None, None
-    bi_m,    bi_ps    = None, None
-    tpa_m,   tpa_ps   = None, None
-
-    if lstm_data:
-        lstm_m  = lstm_data["test_metrics"]["overall"]
-        lstm_ps = lstm_data["test_metrics"]["per_step"]
-    if bi_data:
-        bi_m  = bi_data["test_metrics"]["overall"]
-        bi_ps = bi_data["test_metrics"]["per_step"]
-    if tpa_data:
-        tpa_m  = tpa_data["test_metrics"]["overall"]
-        tpa_ps = tpa_data["test_metrics"]["per_step"]
+    # ── Multi-way comparison ──────────────────────────────────────────────────
+    PRIOR_MODELS = [
+        ("LSTM",       args.lstm_results,       "src/outputs/lstm",       "#2563eb"),
+        ("BiLSTM",     args.bilstm_results,     "src/outputs/bilstm",     "#7c3aed"),
+        ("TPA-LSTM",   args.tpalstm_results,    "src/outputs/tpa_lstm",   "#0891b2"),
+        ("CNN-BiLSTM", args.cnnbilstm_results,  "src/outputs/cnn_bilstm", "#d97706"),
+        ("ST-LSTM",    args.stlstm_results,     "src/outputs/st_lstm",    "#dc2626"),
+        ("STGCN",      args.stgcn_results,      "src/outputs/stgcn",      "#10b981"),
+        ("MTGNN",      args.mtgnn_results,      "src/outputs/mtgnn",      "#f472b6"),
+        ("STSGCN",     args.stsgcn_results,     "src/outputs/stsgcn",     "#0ea5e9"),
+        ("STFGNN",     args.stfgnn_results,     "src/outputs/stfgnn",     "#a855f7"),
+        ("MD-STGCN",   args.mdstgcn_results,    "src/outputs/md_stgcn",   "#f97316"),
+        ("ASTGCN",     args.astgcn_results,     "src/outputs/astgcn",     "#e11d48"),
+        ("TFT",        args.tft_results,        "src/outputs/tft",        "#ca8a04"),
+        ("Autoformer", args.autoformer_results, "src/outputs/autoformer", "#047857"),
+        ("Informer",   args.informer_results,   "src/outputs/informer",   "#9333ea"),
+    ]
 
     models_data = []
-    if lstm_m  is not None: models_data.append(("LSTM",     lstm_m,  lstm_ps,  "#2563eb"))
-    if bi_m    is not None: models_data.append(("BiLSTM",   bi_m,    bi_ps,    "#7c3aed"))
-    if tpa_m   is not None: models_data.append(("TPA-LSTM", tpa_m,   tpa_ps,   "#0891b2"))
+    comparison  = {}
+    for name, path, model_dir, color in PRIOR_MODELS:
+        key  = name.lower().replace("-", "_").replace(" ", "_")
+        data = load_model_results(path, model_dir, name)
+        if data:
+            m_overall = data["test_metrics"]["overall"]
+            m_ps      = data["test_metrics"]["per_step"]
+            models_data.append((name, m_overall, m_ps, color))
+            comparison[key] = {"run_id": data.get("run_id"), "overall": m_overall}
+        else:
+            comparison[key] = {"run_id": None, "overall": None}
+
     models_data.append(("CNN-LSTM", overall, per_step, "#16a34a"))
+
     if len(models_data) > 1:
         print_comparison_table(models_data[:-1], overall, "CNN-LSTM")
         plot_comparison(models_data, out_path=f"{out_dir}/comparison_{len(models_data)}_way.png")
 
-    # Embed comparison in results.json
-    results["comparison"] = {
-        "lstm":    {"run_id": lstm_data.get("run_id") if lstm_data else None,
-                    "overall": lstm_m},
-        "bilstm":  {"run_id": bi_data.get("run_id")  if bi_data   else None,
-                    "overall": bi_m},
-        "tpa_lstm":{"run_id": tpa_data.get("run_id") if tpa_data  else None,
-                    "overall": tpa_m},
-        "cnn_lstm":{"run_id": run_id,
-                    "overall": {k: round(v, 4) for k, v in overall.items()}},
-        "delta_vs_lstm": (
-            {k: round(overall.get(k, 0) - lstm_m.get(k, 0), 4) for k in overall}
-            if lstm_m else None
-        ),
-        "delta_vs_bilstm": (
-            {k: round(overall.get(k, 0) - bi_m.get(k, 0), 4) for k in overall}
-            if bi_m else None
-        ),
-        "delta_vs_tpalstm": (
-            {k: round(overall.get(k, 0) - tpa_m.get(k, 0), 4) for k in overall}
-            if tpa_m else None
-        ),
-    }
+    comparison["cnn_lstm"] = {"run_id": run_id, "overall": {k: round(v, 4) for k, v in overall.items()}}
+    for name, m_overall, _, __ in models_data[:-1]:
+        key = name.lower().replace("-", "_").replace(" ", "_")
+        comparison[f"delta_vs_{key}"] = {k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall}
+    results["comparison"] = comparison
     with open(f"{out_dir}/results.json", "w") as f:
         json.dump(results, f, indent=2)
 

@@ -69,7 +69,21 @@ def parse_args():
     p.add_argument("--lr",         type=float, default=1e-3)
     p.add_argument("--patience",   type=int,   default=10,  help="Early-stopping patience")
     p.add_argument("--device",     default="auto",          help="cpu | cuda | mps | auto")
-    p.add_argument("--seed",       type=int,   default=42)
+    p.add_argument("--seed",              type=int,   default=42)
+    p.add_argument("--bilstm-results",    default=None)
+    p.add_argument("--tpalstm-results",   default=None)
+    p.add_argument("--cnnlstm-results",   default=None)
+    p.add_argument("--cnnbilstm-results", default=None)
+    p.add_argument("--stlstm-results",    default=None)
+    p.add_argument("--stgcn-results",     default=None)
+    p.add_argument("--mtgnn-results",     default=None)
+    p.add_argument("--stsgcn-results",    default=None)
+    p.add_argument("--stfgnn-results",    default=None)
+    p.add_argument("--mdstgcn-results",   default=None)
+    p.add_argument("--astgcn-results",    default=None)
+    p.add_argument("--tft-results",       default=None)
+    p.add_argument("--autoformer-results",default=None)
+    p.add_argument("--informer-results",  default=None)
     return p.parse_args()
 
 
@@ -543,6 +557,52 @@ def main():
     print(f"  MAE%      : {overall['MAE_pct']:.2f}%    (raw MAE  = {overall['MAE']:.0f} riders)")
     print(f"  RMSE%     : {overall['RMSE_pct']:.2f}%   (raw RMSE = {overall['RMSE']:.0f} riders)")
     print(f"  R²        : {overall['R2']:.4f}")
+
+    # ── Multi-way comparison ──────────────────────────────────────────────────
+    PRIOR_MODELS = [
+        ("BiLSTM",     args.bilstm_results,     "src/outputs/bilstm",     "#7c3aed"),
+        ("TPA-LSTM",   args.tpalstm_results,    "src/outputs/tpa_lstm",   "#0891b2"),
+        ("CNN-LSTM",   args.cnnlstm_results,    "src/outputs/cnn_lstm",   "#16a34a"),
+        ("CNN-BiLSTM", args.cnnbilstm_results,  "src/outputs/cnn_bilstm", "#d97706"),
+        ("ST-LSTM",    args.stlstm_results,     "src/outputs/st_lstm",    "#dc2626"),
+        ("STGCN",      args.stgcn_results,      "src/outputs/stgcn",      "#10b981"),
+        ("MTGNN",      args.mtgnn_results,      "src/outputs/mtgnn",      "#f472b6"),
+        ("STSGCN",     args.stsgcn_results,     "src/outputs/stsgcn",     "#0ea5e9"),
+        ("STFGNN",     args.stfgnn_results,     "src/outputs/stfgnn",     "#a855f7"),
+        ("MD-STGCN",   args.mdstgcn_results,    "src/outputs/md_stgcn",   "#f97316"),
+        ("ASTGCN",     args.astgcn_results,     "src/outputs/astgcn",     "#e11d48"),
+        ("TFT",        args.tft_results,        "src/outputs/tft",        "#ca8a04"),
+        ("Autoformer", args.autoformer_results, "src/outputs/autoformer", "#047857"),
+        ("Informer",   args.informer_results,   "src/outputs/informer",   "#9333ea"),
+    ]
+
+    models_data_cmp = []
+    comparison      = {}
+    for name, path, model_dir, color in PRIOR_MODELS:
+        key  = name.lower().replace("-", "_").replace(" ", "_")
+        data = load_model_results(path, model_dir, name)
+        if data:
+            m_overall = data["test_metrics"]["overall"]
+            m_ps      = data["test_metrics"]["per_step"]
+            models_data_cmp.append((name, m_overall, m_ps, color))
+            comparison[key] = {"run_id": data.get("run_id"), "overall": m_overall}
+        else:
+            comparison[key] = {"run_id": None, "overall": None}
+
+    models_data_cmp.insert(0, ("LSTM", overall, per_step, "#2563eb"))
+
+    if len(models_data_cmp) > 1:
+        print_comparison_table(models_data_cmp[1:], overall, "LSTM")
+        plot_comparison(models_data_cmp,
+                        out_path=f"{out_dir}/comparison_{len(models_data_cmp)}_way.png")
+
+    comparison["lstm"] = {"run_id": run_id, "overall": {k: round(v, 4) for k, v in overall.items()}}
+    for name, m_overall, _, __ in models_data_cmp[1:]:
+        key = name.lower().replace("-", "_").replace(" ", "_")
+        comparison[f"delta_vs_{key}"] = {k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall}
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
     # ── Naive persistence baseline comparison ─────────────────────────────────
     # "Predict tomorrow = last observed value" — the LSTM must beat this
