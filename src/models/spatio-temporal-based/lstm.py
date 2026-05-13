@@ -40,6 +40,19 @@ matplotlib.use("Agg")   # headless — no display required
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
+import sys as _sys
+import os as _os
+_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..', '..', '..'))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+from src.utils.metrics import compute_metrics
+from src.utils.comparison_table import (
+    load_model_results,
+    print_comparison_table,
+    plot_comparison,
+)
+
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CLI
@@ -98,60 +111,6 @@ class LSTMForecaster(nn.Module):
         _, (h_n, _) = self.lstm(x)
         return self.head(h_n[-1])   # top layer's final hidden → (batch, T_out)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Metrics  (definitions from METRICS.md)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    """
-    All inputs must be in original ridership scale (after inverse-transform).
-
-    Returns
-    -------
-    Combined  = max(0, 100 − MAPE − MAE% − RMSE%)   higher is better, [0, 100]
-    MAPE      = mean(|ŷ − y| / |y|) × 100            lower is better, %
-    MAE_pct   = (MAE / ȳ) × 100                      lower is better, %
-    RMSE_pct  = (RMSE / ȳ) × 100                     lower is better, %
-    R2        = 1 − SSR/SST                           higher is better, (−∞, 1]
-    MAE       = mean(|ŷ − y|)                         raw riders, diagnostic
-    RMSE      = sqrt(mean((ŷ − y)²))                  raw riders, diagnostic
-    """
-    y_true = y_true.astype(np.float64)
-    y_pred = y_pred.astype(np.float64)
-
-    y_mean   = np.mean(y_true)
-    abs_err  = np.abs(y_true - y_pred)
-    sq_err   = (y_true - y_pred) ** 2
-
-    mae_raw  = float(np.mean(abs_err))
-    rmse_raw = float(np.sqrt(np.mean(sq_err)))
-
-    # MAPE — eps=1 rider prevents div-by-zero on zero-ridership days
-    mape     = float(np.mean(abs_err / (np.abs(y_true) + 1.0)) * 100)
-
-    # MAE% and RMSE% — normalised by mean demand
-    denom    = y_mean if y_mean > 0 else 1.0
-    mae_pct  = float(mae_raw  / denom * 100)
-    rmse_pct = float(rmse_raw / denom * 100)
-
-    # Combined accuracy score
-    combined = float(max(0.0, 100.0 - mape - mae_pct - rmse_pct))
-
-    # R²
-    ss_res = float(np.sum(sq_err))
-    ss_tot = float(np.sum((y_true - y_mean) ** 2))
-    r2     = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
-
-    return {
-        "Combined":  combined,
-        "MAPE":      mape,
-        "MAE_pct":   mae_pct,
-        "RMSE_pct":  rmse_pct,
-        "R2":        r2,
-        "MAE":       mae_raw,
-        "RMSE":      rmse_raw,
-    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

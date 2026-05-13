@@ -34,7 +34,6 @@ Usage:
 import os
 import json
 import argparse
-import glob
 from datetime import datetime
 
 import numpy as np
@@ -46,6 +45,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+
+import sys as _sys
+import os as _os
+_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..', '..', '..'))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+from src.utils.metrics import compute_metrics
+from src.utils.comparison_table import (
+    load_model_results,
+    print_comparison_table,
+    plot_comparison,
+)
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -136,49 +148,6 @@ class BiLSTMForecaster(nn.Module):
         h_cat = torch.cat([h_fwd, h_bwd], dim=-1)   # (batch, hidden_size*2)
         return self.head(h_cat)                # (batch, T_out)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Metrics  (identical to lstm_baseline.py — definitions from METRICS.md)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    """
-    Combined  = max(0, 100 − MAPE − MAE% − RMSE%)   higher is better, [0, 100]
-    MAPE      = mean(|ŷ − y| / |y|) × 100
-    MAE_pct   = (MAE / ȳ) × 100
-    RMSE_pct  = (RMSE / ȳ) × 100
-    R2        = 1 − SSR / SST
-    MAE, RMSE : raw ridership counts (diagnostic)
-    """
-    y_true = y_true.astype(np.float64)
-    y_pred = y_pred.astype(np.float64)
-
-    y_mean   = np.mean(y_true)
-    abs_err  = np.abs(y_true - y_pred)
-    sq_err   = (y_true - y_pred) ** 2
-
-    mae_raw  = float(np.mean(abs_err))
-    rmse_raw = float(np.sqrt(np.mean(sq_err)))
-    mape     = float(np.mean(abs_err / (np.abs(y_true) + 1.0)) * 100)
-
-    denom    = y_mean if y_mean > 0 else 1.0
-    mae_pct  = float(mae_raw  / denom * 100)
-    rmse_pct = float(rmse_raw / denom * 100)
-    combined = float(max(0.0, 100.0 - mape - mae_pct - rmse_pct))
-
-    ss_res = float(np.sum(sq_err))
-    ss_tot = float(np.sum((y_true - y_mean) ** 2))
-    r2     = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
-
-    return {
-        "Combined":  combined,
-        "MAPE":      mape,
-        "MAE_pct":   mae_pct,
-        "RMSE_pct":  rmse_pct,
-        "R2":        r2,
-        "MAE":       mae_raw,
-        "RMSE":      rmse_raw,
-    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -375,190 +344,6 @@ def plot_per_step_metrics(per_step: list, out_path: str) -> None:
     print(f"  Saved: {out_path}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Comparison helpers
-# ══════════════════════════════════════════════════════════════════════════════
-
-def load_lstm_results(lstm_results_path: str | None) -> dict | None:
-    """
-    Load LSTM results.json.  If path is None, auto-detect the most recent run
-    under src/outputs/lstm/**/results.json.
-    """
-    if lstm_results_path:
-        if not os.path.exists(lstm_results_path):
-            print(f"[WARN] --lstm-results path not found: {lstm_results_path}")
-            return None
-        with open(lstm_results_path) as f:
-            return json.load(f)
-
-    # Auto-detect
-    candidates = sorted(glob.glob("src/outputs/lstm/**/results.json", recursive=True))
-    if not candidates:
-        print("[INFO] No LSTM results.json found — skipping comparison.")
-        return None
-
-    path = candidates[-1]   # most recent alphabetically (run_id is a timestamp)
-    print(f"[INFO] Auto-detected LSTM results: {path}")
-    with open(path) as f:
-        return json.load(f)
-
-
-def print_comparison_table(lstm_m: dict, bi_m: dict) -> None:
-    """
-    Print a side-by-side table of overall test metrics for LSTM vs BiLSTM,
-    with a Δ column (BiLSTM − LSTM, sign-adjusted so positive always = better).
-    """
-    METRICS_CFG = [
-        # (key,        label,       higher_is_better)
-        ("Combined",   "Combined%", True),
-        ("MAPE",       "MAPE%",     False),
-        ("MAE_pct",    "MAE%",      False),
-        ("RMSE_pct",   "RMSE%",     False),
-        ("R2",         "R²",        True),
-        ("MAE",        "MAE",       False),
-        ("RMSE",       "RMSE",      False),
-    ]
-
-    W = 12
-    sep = "─" * (6 + W * 3 + 14)
-
-    print(f"\n{'='*len(sep)}")
-    print("LSTM  vs  BiLSTM — Overall Test Metrics Comparison")
-    print(f"{'='*len(sep)}")
-    print(f"{'Metric':<14} {'LSTM':>{W}} {'BiLSTM':>{W}} {'Δ (BiLSTM−LSTM)':>{W}}  Better")
-    print(sep)
-
-    for key, label, higher_better in METRICS_CFG:
-        lstm_v  = lstm_m.get(key, float("nan"))
-        bi_v    = bi_m.get(key, float("nan"))
-        delta   = bi_v - lstm_v
-
-        # For lower-is-better metrics, positive delta means BiLSTM is worse
-        if higher_better:
-            improved = delta > 0
-        else:
-            improved = delta < 0
-
-        winner = "BiLSTM ✓" if improved else ("LSTM ✓" if delta != 0 else "Tie")
-
-        # Format: Combined/MAPE/MAE%/RMSE% → 2 dp; R2 → 4 dp; MAE/RMSE → 0 dp
-        if key in ("MAE", "RMSE"):
-            fmt = ".0f"
-        elif key == "R2":
-            fmt = ".4f"
-        else:
-            fmt = ".2f"
-
-        delta_sign = "+" if delta >= 0 else ""
-        print(
-            f"{label:<14} "
-            f"{lstm_v:{W}{fmt}} "
-            f"{bi_v:{W}{fmt}} "
-            f"{delta_sign}{delta:{W}{fmt}}  "
-            f"{winner}"
-        )
-
-    print(sep)
-
-
-def plot_comparison(
-    lstm_m:    dict,
-    bi_m:      dict,
-    lstm_ps:   list,   # per-step metrics for LSTM
-    bi_ps:     list,   # per-step metrics for BiLSTM
-    out_path:  str,
-) -> None:
-    """
-    Four-panel comparison figure:
-      [0] Overall percentage metrics — grouped bars (LSTM vs BiLSTM)
-      [1] Overall R² — side-by-side bars
-      [2] Combined% per horizon step — two lines
-      [3] R² per horizon step — two lines
-    """
-    PCT_KEYS   = ["Combined", "MAPE", "MAE_pct", "RMSE_pct"]
-    PCT_LABELS = ["Combined%", "MAPE%", "MAE%", "RMSE%"]
-    C_LSTM  = "#2563eb"
-    C_BI    = "#7c3aed"
-
-    n_steps = len(bi_ps)
-    steps   = [f"t+{i+1}" for i in range(n_steps)]
-
-    fig = plt.figure(figsize=(14, 10))
-    gs  = gridspec.GridSpec(2, 2, hspace=0.48, wspace=0.35)
-
-    # ── [0] Overall percentage metrics ───────────────────────────────────────
-    ax0 = fig.add_subplot(gs[0, 0])
-    x   = np.arange(len(PCT_KEYS))
-    w   = 0.35
-    lstm_vals = [lstm_m[k] for k in PCT_KEYS]
-    bi_vals   = [bi_m[k]   for k in PCT_KEYS]
-
-    bars_l = ax0.bar(x - w/2, lstm_vals, w, label="LSTM",   color=C_LSTM,  alpha=0.82)
-    bars_b = ax0.bar(x + w/2, bi_vals,   w, label="BiLSTM", color=C_BI,    alpha=0.82)
-
-    # Label each bar with its value
-    for bar in list(bars_l) + list(bars_b):
-        h = bar.get_height()
-        ax0.text(bar.get_x() + bar.get_width() / 2, h + 0.3,
-                 f"{h:.1f}", ha="center", va="bottom", fontsize=7)
-
-    ax0.set_xticks(x); ax0.set_xticklabels(PCT_LABELS, fontsize=9)
-    ax0.set_ylabel("% of mean demand  /  score")
-    ax0.set_title("Overall — Percentage Metrics", fontweight="bold")
-    ax0.legend(fontsize=8); ax0.grid(axis="y", alpha=0.3)
-
-    # ── [1] Overall R² ───────────────────────────────────────────────────────
-    ax1 = fig.add_subplot(gs[0, 1])
-    r2_vals  = [lstm_m["R2"], bi_m["R2"]]
-    r2_bars  = ax1.bar(["LSTM", "BiLSTM"], r2_vals,
-                        color=[C_LSTM, C_BI], alpha=0.82, width=0.4)
-    for bar in r2_bars:
-        h = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width() / 2, h + 0.005,
-                 f"{h:.4f}", ha="center", va="bottom", fontsize=9)
-    ax1.set_ylim(0, min(1.12, max(r2_vals) * 1.15 + 0.05))
-    ax1.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":", label="R²=1")
-    ax1.set_ylabel("R²")
-    ax1.set_title("Overall — R²", fontweight="bold")
-    ax1.legend(fontsize=8); ax1.grid(axis="y", alpha=0.3)
-
-    # ── [2] Combined% per horizon step ───────────────────────────────────────
-    ax2 = fig.add_subplot(gs[1, 0])
-    lstm_comb = [m["Combined"] for m in lstm_ps]
-    bi_comb   = [m["Combined"] for m in bi_ps]
-    ax2.plot(steps, lstm_comb, marker="o", color=C_LSTM,  linewidth=1.8,
-             markersize=5, label="LSTM")
-    ax2.plot(steps, bi_comb,  marker="s", color=C_BI,    linewidth=1.8,
-             markersize=5, label="BiLSTM", linestyle="--")
-    ax2.fill_between(steps, lstm_comb, bi_comb,
-                     alpha=0.12, color="#a78bfa",
-                     label="BiLSTM − LSTM gap")
-    ax2.set_ylabel("Combined%")
-    ax2.set_title("Combined% per Horizon Step", fontweight="bold")
-    ax2.legend(fontsize=8); ax2.grid(alpha=0.3)
-
-    # ── [3] R² per horizon step ───────────────────────────────────────────────
-    ax3 = fig.add_subplot(gs[1, 1])
-    lstm_r2 = [m["R2"] for m in lstm_ps]
-    bi_r2   = [m["R2"] for m in bi_ps]
-    ax3.plot(steps, lstm_r2, marker="o", color=C_LSTM, linewidth=1.8,
-             markersize=5, label="LSTM")
-    ax3.plot(steps, bi_r2,  marker="s", color=C_BI,   linewidth=1.8,
-             markersize=5, label="BiLSTM", linestyle="--")
-    ax3.fill_between(steps, lstm_r2, bi_r2,
-                     alpha=0.12, color="#a78bfa")
-    ax3.axhline(0, color="#9ca3af", linewidth=0.8, linestyle="--")
-    ax3.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":")
-    ax3.set_ylabel("R²")
-    ax3.set_title("R² per Horizon Step", fontweight="bold")
-    ax3.legend(fontsize=8); ax3.grid(alpha=0.3)
-
-    fig.suptitle("LSTM vs BiLSTM — Test Set Comparison", fontsize=13,
-                 fontweight="bold", y=1.01)
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Saved: {out_path}")
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Main
@@ -752,44 +537,32 @@ def main():
     print(f"  R²        : {overall['R2']:.4f}")
 
     # ── LSTM comparison ───────────────────────────────────────────────────────
-    lstm_data = load_lstm_results(args.lstm_results)
-
-    if lstm_data:
-        lstm_overall  = lstm_data["test_metrics"]["overall"]
-        lstm_per_step = lstm_data["test_metrics"]["per_step"]
-
-        # Ensure per-step lists are the same length (trim to shorter if needed)
-        min_steps  = min(len(lstm_per_step), len(per_step))
-        lstm_ps_tr = lstm_per_step[:min_steps]
-        bi_ps_tr   = per_step[:min_steps]
-
-        print_comparison_table(lstm_overall, overall)
-
-        plot_comparison(
-            lstm_m   = lstm_overall,
-            bi_m     = overall,
-            lstm_ps  = lstm_ps_tr,
-            bi_ps    = bi_ps_tr,
-            out_path = f"{out_dir}/comparison_lstm_vs_bilstm.png",
-        )
-
-        # Embed comparison in results.json for reference
-        results["comparison_vs_lstm"] = {
-            "lstm_run_id":    lstm_data.get("run_id", "unknown"),
-            "lstm_overall":   lstm_overall,
-            "bilstm_overall": {k: round(v, 4) for k, v in overall.items()},
-            "delta": {
-                k: round(overall.get(k, 0) - lstm_overall.get(k, 0), 4)
-                for k in overall
-            },
-        }
-        with open(f"{out_dir}/results.json", "w") as f:
-            json.dump(results, f, indent=2)
-    else:
-        print(
-            "\n[INFO] No LSTM results loaded — skipping comparison.\n"
-            "       Re-run with: --lstm-results src/outputs/lstm/<run_id>/results.json"
-        )
+    PRIOR_MODELS = [
+        ("LSTM", args.lstm_results, "src/outputs/lstm", "#2563eb"),
+    ]
+    models_data = []
+    comparison  = {}
+    for name, path, model_dir, color in PRIOR_MODELS:
+        key  = name.lower().replace("-", "_")
+        data = load_model_results(path, model_dir, name)
+        if data:
+            m_overall = data["test_metrics"]["overall"]
+            m_ps      = data["test_metrics"]["per_step"]
+            models_data.append((name, m_overall, m_ps, color))
+            comparison[key] = {"run_id": data.get("run_id"), "overall": m_overall}
+        else:
+            comparison[key] = {"run_id": None, "overall": None}
+    models_data.append(("BiLSTM", overall, per_step, "#7c3aed"))
+    if len(models_data) > 1:
+        print_comparison_table(models_data[:-1], overall, "BiLSTM")
+        plot_comparison(models_data, out_path=f"{out_dir}/comparison_{len(models_data)}_way.png")
+    comparison["bilstm"] = {"run_id": run_id, "overall": {k: round(v, 4) for k, v in overall.items()}}
+    for name, m_overall, _, __ in models_data[:-1]:
+        key = name.lower().replace("-", "_")
+        comparison[f"delta_vs_{key}"] = {k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall}
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
     # ── Naive persistence baseline ────────────────────────────────────────────
     target_idx   = split_meta.get("target_col_idx", 0)

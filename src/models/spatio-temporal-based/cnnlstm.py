@@ -73,7 +73,6 @@ Usage:
 import os
 import json
 import argparse
-import glob
 from datetime import datetime
 
 import numpy as np
@@ -85,6 +84,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+
+import sys as _sys
+import os as _os
+_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..', '..', '..'))
+if _ROOT not in _sys.path:
+    _sys.path.insert(0, _ROOT)
+from src.utils.metrics import compute_metrics
+from src.utils.comparison_table import (
+    load_model_results,
+    print_comparison_table,
+    plot_comparison,
+)
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -235,49 +247,6 @@ class CNNLSTMForecaster(nn.Module):
             return self.head(h_cat)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Metrics  (identical to lstm.py / bilstm.py / tpalstm.py)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
-    """
-    Combined  = max(0, 100 − MAPE − MAE% − RMSE%)   higher is better, [0, 100]
-    MAPE      = mean(|ŷ − y| / |y|) × 100
-    MAE_pct   = (MAE / ȳ) × 100
-    RMSE_pct  = (RMSE / ȳ) × 100
-    R2        = 1 − SSR / SST
-    MAE, RMSE : raw ridership counts (diagnostic)
-    """
-    y_true = y_true.astype(np.float64)
-    y_pred = y_pred.astype(np.float64)
-
-    y_mean   = np.mean(y_true)
-    abs_err  = np.abs(y_true - y_pred)
-    sq_err   = (y_true - y_pred) ** 2
-
-    mae_raw  = float(np.mean(abs_err))
-    rmse_raw = float(np.sqrt(np.mean(sq_err)))
-    mape     = float(np.mean(abs_err / (np.abs(y_true) + 1.0)) * 100)
-
-    denom    = y_mean if y_mean > 0 else 1.0
-    mae_pct  = float(mae_raw  / denom * 100)
-    rmse_pct = float(rmse_raw / denom * 100)
-    combined = float(max(0.0, 100.0 - mape - mae_pct - rmse_pct))
-
-    ss_res = float(np.sum(sq_err))
-    ss_tot = float(np.sum((y_true - y_mean) ** 2))
-    r2     = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
-
-    return {
-        "Combined":  combined,
-        "MAPE":      mape,
-        "MAE_pct":   mae_pct,
-        "RMSE_pct":  rmse_pct,
-        "R2":        r2,
-        "MAE":       mae_raw,
-        "RMSE":      rmse_raw,
-    }
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Data loading
@@ -326,32 +295,6 @@ def evaluate(model, loader, criterion) -> float:
         total += criterion(model(X_b), y_b).item() * X_b.size(0)
     return total / len(loader.dataset)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Comparison loader helpers
-# ══════════════════════════════════════════════════════════════════════════════
-
-def load_model_results(path: str | None, model_dir: str, label: str) -> dict | None:
-    """
-    Load a results.json from `path`.
-    If path is None, auto-detect the most recent run under `model_dir`.
-    """
-    if path:
-        if not os.path.exists(path):
-            print(f"[WARN] {label} results not found at: {path}")
-            return None
-        with open(path) as f:
-            return json.load(f)
-
-    candidates = sorted(glob.glob(f"{model_dir}/**/results.json", recursive=True))
-    if not candidates:
-        print(f"[INFO] No {label} results.json found under {model_dir} — skipping.")
-        return None
-
-    detected = candidates[-1]
-    print(f"[INFO] Auto-detected {label} results: {detected}")
-    with open(detected) as f:
-        return json.load(f)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -498,234 +441,6 @@ def plot_per_step_metrics(per_step: list, out_path: str) -> None:
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {out_path}")
-
-
-def plot_four_way_comparison(
-    lstm_m:    dict | None,
-    bi_m:      dict | None,
-    tpa_m:     dict | None,
-    cnn_m:     dict,
-    lstm_ps:   list | None,
-    bi_ps:     list | None,
-    tpa_ps:    list | None,
-    cnn_ps:    list,
-    out_path:  str,
-) -> None:
-    """
-    Six-panel 4-way comparison: LSTM / BiLSTM / TPA-LSTM / CNN-LSTM.
-
-    [0,0] Overall percentage metrics — grouped bars (up to 4 models)
-    [0,1] Overall R²                 — side-by-side bars
-    [1,0] Combined% per horizon step — lines per model
-    [1,1] R² per horizon step        — lines per model
-    [2,0] Raw MAE per step           — lines per model
-    [2,1] Raw RMSE per step          — lines per model
-    """
-    C_LSTM = "#2563eb"   # blue
-    C_BI   = "#7c3aed"   # purple
-    C_TPA  = "#0891b2"   # teal
-    C_CNN  = "#16a34a"   # green
-
-    # Build model list dynamically (skip None prior models)
-    models = []
-    if lstm_m  is not None: models.append(("LSTM",     lstm_m,  lstm_ps,  C_LSTM))
-    if bi_m    is not None: models.append(("BiLSTM",   bi_m,    bi_ps,    C_BI))
-    if tpa_m   is not None: models.append(("TPA-LSTM", tpa_m,   tpa_ps,   C_TPA))
-    models.append(                        ("CNN-LSTM", cnn_m,   cnn_ps,   C_CNN))
-
-    PCT_KEYS   = ["Combined", "MAPE", "MAE_pct", "RMSE_pct"]
-    PCT_LABELS = ["Combined%", "MAPE%", "MAE%", "RMSE%"]
-
-    n_steps  = len(cnn_ps)
-    steps    = [f"t+{i+1}" for i in range(n_steps)]
-
-    n_models = len(models)
-    w_bar    = 0.18
-    offsets  = np.linspace(-(n_models - 1) / 2, (n_models - 1) / 2, n_models) * w_bar
-
-    fig = plt.figure(figsize=(15, 13))
-    gs  = gridspec.GridSpec(3, 2, hspace=0.52, wspace=0.32)
-
-    # ── [0,0] Overall % metrics ───────────────────────────────────────────────
-    ax00 = fig.add_subplot(gs[0, 0])
-    x    = np.arange(len(PCT_KEYS))
-    for (name, m, _, col), off in zip(models, offsets):
-        vals = [m[k] for k in PCT_KEYS]
-        bars = ax00.bar(x + off, vals, w_bar, label=name, color=col, alpha=0.82)
-        for bar in bars:
-            h = bar.get_height()
-            ax00.text(bar.get_x() + bar.get_width() / 2, h + 0.25,
-                      f"{h:.1f}", ha="center", va="bottom", fontsize=6)
-    ax00.set_xticks(x); ax00.set_xticklabels(PCT_LABELS, fontsize=9)
-    ax00.set_ylabel("% of mean demand  /  score")
-    ax00.set_title("Overall — Percentage Metrics", fontweight="bold")
-    ax00.legend(fontsize=8); ax00.grid(axis="y", alpha=0.3)
-
-    # ── [0,1] Overall R² ──────────────────────────────────────────────────────
-    ax01  = fig.add_subplot(gs[0, 1])
-    names = [m[0] for m in models]
-    r2s   = [m[1]["R2"] for m in models]
-    cols  = [m[3] for m in models]
-    bars  = ax01.bar(names, r2s, color=cols, alpha=0.82, width=0.4)
-    for bar in bars:
-        h = bar.get_height()
-        ax01.text(bar.get_x() + bar.get_width() / 2, h + 0.004,
-                  f"{h:.4f}", ha="center", va="bottom", fontsize=9)
-    ax01.set_ylim(0, min(1.12, max(r2s) * 1.15 + 0.05))
-    ax01.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":", label="R²=1")
-    ax01.set_ylabel("R²")
-    ax01.set_title("Overall — R²", fontweight="bold")
-    ax01.legend(fontsize=8); ax01.grid(axis="y", alpha=0.3)
-
-    # ── [1,0] Combined% per step ──────────────────────────────────────────────
-    ax10    = fig.add_subplot(gs[1, 0])
-    markers = ["o", "s", "^", "D"]
-    styles  = ["-", "--", "-.", ":"]
-    for (name, _, ps, col), mk, ls in zip(models, markers, styles):
-        if ps is None:
-            continue
-        vals = [m["Combined"] for m in ps[:n_steps]]
-        ax10.plot(steps, vals, marker=mk, color=col, linewidth=1.8,
-                  markersize=5, label=name, linestyle=ls)
-    ax10.set_ylabel("Combined%")
-    ax10.set_title("Combined% per Horizon Step", fontweight="bold")
-    ax10.legend(fontsize=8); ax10.grid(alpha=0.3)
-
-    # ── [1,1] R² per step ─────────────────────────────────────────────────────
-    ax11 = fig.add_subplot(gs[1, 1])
-    for (name, _, ps, col), mk, ls in zip(models, markers, styles):
-        if ps is None:
-            continue
-        vals = [m["R2"] for m in ps[:n_steps]]
-        ax11.plot(steps, vals, marker=mk, color=col, linewidth=1.8,
-                  markersize=5, label=name, linestyle=ls)
-    ax11.axhline(0, color="#9ca3af", linewidth=0.8, linestyle="--")
-    ax11.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":")
-    ax11.set_ylabel("R²")
-    ax11.set_title("R² per Horizon Step", fontweight="bold")
-    ax11.legend(fontsize=8); ax11.grid(alpha=0.3)
-
-    # ── [2,0] Raw MAE per step ────────────────────────────────────────────────
-    ax20 = fig.add_subplot(gs[2, 0])
-    for (name, _, ps, col), mk, ls in zip(models, markers, styles):
-        if ps is None:
-            continue
-        vals = [m["MAE"] for m in ps[:n_steps]]
-        ax20.plot(steps, vals, marker=mk, color=col, linewidth=1.8,
-                  markersize=5, label=name, linestyle=ls)
-    ax20.set_ylabel("MAE (riders)")
-    ax20.set_title("Raw MAE per Horizon Step", fontweight="bold")
-    ax20.legend(fontsize=8); ax20.grid(alpha=0.3)
-
-    # ── [2,1] Raw RMSE per step ───────────────────────────────────────────────
-    ax21 = fig.add_subplot(gs[2, 1])
-    for (name, _, ps, col), mk, ls in zip(models, markers, styles):
-        if ps is None:
-            continue
-        vals = [m["RMSE"] for m in ps[:n_steps]]
-        ax21.plot(steps, vals, marker=mk, color=col, linewidth=1.8,
-                  markersize=5, label=name, linestyle=ls)
-    ax21.set_ylabel("RMSE (riders)")
-    ax21.set_title("Raw RMSE per Horizon Step", fontweight="bold")
-    ax21.legend(fontsize=8); ax21.grid(alpha=0.3)
-
-    model_names = " vs ".join(m[0] for m in models)
-    fig.suptitle(f"{model_names} — Test Set Comparison",
-                 fontsize=13, fontweight="bold", y=1.01)
-
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Saved: {out_path}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Comparison table
-# ══════════════════════════════════════════════════════════════════════════════
-
-def print_four_way_table(
-    lstm_m: dict | None,
-    bi_m:   dict | None,
-    tpa_m:  dict | None,
-    cnn_m:  dict,
-) -> None:
-    """
-    Side-by-side overall metric table for all available models.
-    Δ columns show CNN-LSTM minus each baseline.
-    Winner column names the best model for each metric.
-    """
-    METRICS_CFG = [
-        ("Combined",  "Combined%", True),
-        ("MAPE",      "MAPE%",     False),
-        ("MAE_pct",   "MAE%",      False),
-        ("RMSE_pct",  "RMSE%",     False),
-        ("R2",        "R²",        True),
-        ("MAE",       "MAE",       False),
-        ("RMSE",      "RMSE",      False),
-    ]
-
-    has_lstm = lstm_m is not None
-    has_bi   = bi_m   is not None
-    has_tpa  = tpa_m  is not None
-
-    W       = 10
-    n_prior = has_lstm + has_bi + has_tpa
-    sep_len = 16 + W * (1 + n_prior) + 18 * n_prior + 12
-    sep     = "─" * sep_len
-
-    print(f"\n{'='*sep_len}")
-    print("4-Way Comparison — Overall Test Metrics")
-    print(f"{'='*sep_len}")
-
-    header = f"{'Metric':<14}"
-    if has_lstm: header += f" {'LSTM':>{W}}"
-    if has_bi:   header += f" {'BiLSTM':>{W}}"
-    if has_tpa:  header += f" {'TPA-LSTM':>{W}}"
-    header += f" {'CNN-LSTM':>{W}}"
-    if has_lstm: header += f"  {'Δ vs LSTM':>{W}}"
-    if has_bi:   header += f"  {'Δ vs BiLSTM':>{W}}"
-    if has_tpa:  header += f"  {'Δ vs TPA':>{W}}"
-    header += "  Best"
-    print(header)
-    print(sep)
-
-    for key, label, higher_better in METRICS_CFG:
-        cnn_v = cnn_m.get(key, float("nan"))
-        fmt   = ".0f" if key in ("MAE", "RMSE") else (".4f" if key == "R2" else ".2f")
-
-        row        = f"{label:<14}"
-        candidates = {"CNN-LSTM": cnn_v}
-
-        if has_lstm:
-            lv = lstm_m.get(key, float("nan"))
-            candidates["LSTM"] = lv
-            row += f" {lv:{W}{fmt}}"
-        if has_bi:
-            bv = bi_m.get(key, float("nan"))
-            candidates["BiLSTM"] = bv
-            row += f" {bv:{W}{fmt}}"
-        if has_tpa:
-            tv = tpa_m.get(key, float("nan"))
-            candidates["TPA-LSTM"] = tv
-            row += f" {tv:{W}{fmt}}"
-
-        row += f" {cnn_v:{W}{fmt}}"
-
-        if has_lstm:
-            d = cnn_v - lstm_m.get(key, 0)
-            row += f"  {'+' if d>=0 else ''}{d:{W}{fmt}}"
-        if has_bi:
-            d = cnn_v - bi_m.get(key, 0)
-            row += f"  {'+' if d>=0 else ''}{d:{W}{fmt}}"
-        if has_tpa:
-            d = cnn_v - tpa_m.get(key, 0)
-            row += f"  {'+' if d>=0 else ''}{d:{W}{fmt}}"
-
-        best = max(candidates, key=lambda k: candidates[k] if higher_better
-                   else -candidates[k])
-        row += f"  {best}"
-        print(row)
-
-    print(sep)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -971,25 +686,14 @@ def main():
         tpa_m  = tpa_data["test_metrics"]["overall"]
         tpa_ps = tpa_data["test_metrics"]["per_step"]
 
-    print_four_way_table(lstm_m, bi_m, tpa_m, overall)
-
-    # Align per-step lengths across available models
-    min_steps = len(per_step)
-    if lstm_ps: min_steps = min(min_steps, len(lstm_ps))
-    if bi_ps:   min_steps = min(min_steps, len(bi_ps))
-    if tpa_ps:  min_steps = min(min_steps, len(tpa_ps))
-
-    plot_four_way_comparison(
-        lstm_m   = lstm_m,
-        bi_m     = bi_m,
-        tpa_m    = tpa_m,
-        cnn_m    = overall,
-        lstm_ps  = lstm_ps[:min_steps] if lstm_ps else None,
-        bi_ps    = bi_ps[:min_steps]   if bi_ps   else None,
-        tpa_ps   = tpa_ps[:min_steps]  if tpa_ps  else None,
-        cnn_ps   = per_step[:min_steps],
-        out_path = f"{out_dir}/comparison_four_way.png",
-    )
+    models_data = []
+    if lstm_m  is not None: models_data.append(("LSTM",     lstm_m,  lstm_ps,  "#2563eb"))
+    if bi_m    is not None: models_data.append(("BiLSTM",   bi_m,    bi_ps,    "#7c3aed"))
+    if tpa_m   is not None: models_data.append(("TPA-LSTM", tpa_m,   tpa_ps,   "#0891b2"))
+    models_data.append(("CNN-LSTM", overall, per_step, "#16a34a"))
+    if len(models_data) > 1:
+        print_comparison_table(models_data[:-1], overall, "CNN-LSTM")
+        plot_comparison(models_data, out_path=f"{out_dir}/comparison_{len(models_data)}_way.png")
 
     # Embed comparison in results.json
     results["comparison"] = {
