@@ -6,7 +6,7 @@ the flat feature matrix consumed by sequence_builder.py and used by all
 15 models in the stack:
 
   LSTM-family      : LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
-  Graph-based      : STGCN, MTGNN, STSGCN, STFGNN, MD-STGCN
+  Graph-based      : STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN
   Attention-based  : TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
 
 All 8 spatio-temporal feature sources are incorporated:

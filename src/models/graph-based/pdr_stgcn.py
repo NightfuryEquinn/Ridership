@@ -1,38 +1,55 @@
 """
-stgcn.py  — Spatio-Temporal Graph Convolutional Network (STGCN)
+pdr_stgcn.py  — Periodicity-Aware Dynamic Relational STGCN (PDR-STGCN)
 
-Implements the ST-Conv block from:
-  Yu, B., Yin, H., & Zhu, Z. (2018). "Spatio-Temporal Graph Convolutional
-  Networks: A Deep Learning Framework for Traffic Forecasting."
-  IJCAI 2018.  arXiv:1709.04875
+Novel architecture combining three ideas into the STGCN backbone:
 
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes. The temporal
-  dimension (T_in=14) provides the scalar signal for each node. The adjacency
-  matrix is derived from absolute Pearson correlation between features on
-  training data, symmetrically normalised into a scaled Laplacian L_tilde
-  stored as a model buffer (so it travels with .to(device)).
+1. Periodicity Encoding
+   A second input channel is created by computing the periodic lag-difference:
+     x_diff[t] = x[t] - x[t - period]   (zero-padded for t < period)
+   For ridership data with T_in=14 and weekly period=7, this captures how each
+   feature deviates from the same day last week, making seasonal patterns
+   explicit without any extra parameters.
+
+2. Dynamic Relational Graph Convolution
+   Each ST block replaces the fixed Chebyshev convolution with a two-path
+   convolution that mixes a static base graph with an input-adaptive dynamic
+   graph:
+     • Static path : A_sym @ h @ W_static
+                     A_sym = D^{-1/2} A D^{-1/2}, built from absolute Pearson
+                     correlation of training features (same as STGCN/STFGNN).
+     • Dynamic path: softmax(Q @ K^T / sqrt(d_k)) @ V
+                     Q, K, V are linear projections of the current node
+                     features h, so the adjacency adapts per sample and per
+                     time step.
+     • Mixing      : out = σ(λ) · static + (1-σ(λ)) · dynamic
+                     λ is a learned scalar initialised to 0 (equal mix).
+
+3. ST Block Structure (unchanged from STGCN)
+   TemporalGatedConv → DynamicRelationalGraphConv → TemporalGatedConv → BN
 
 Architecture:
-  X (B, T_in, N)  →  reshape  →  (B, N, 1, T_in)
+  X (B, T_in, N)
+    → periodic diff encoder  → (B, N, 2, T_in)   [2 channels: orig + diff]
 
-  ST-Conv Block k:
+  PDR-ST Block k:
     TemporalGatedConv   (B, N, C_in,  T)    →  (B, N, C_mid, T-Kt+1)
-    ChebGraphConv       (B*T', N, C_mid)    →  (B*T', N, C_mid)
+    DynamicRelGraph     (B*T', N, C_mid)    →  (B*T', N, C_mid)
     TemporalGatedConv   (B, N, C_mid, T')   →  (B, N, C_out, T'-Kt+1)
     BatchNorm2d
 
   Output Layer:
-    TemporalGatedConv → pool over N (mean) → flatten → MLP head → (B, T_out)
+    TemporalGatedConv → mean over N → flatten → MLP head → (B, T_out)
 
 Comparison:
   --lstm-results, --bilstm-results, --tpalstm-results,
-  --cnnlstm-results, --cnnbilstm-results, --stlstm-results
+  --cnnlstm-results, --cnnbilstm-results, --stlstm-results,
+  --stgcn-results, --mtgnn-results, --stsgcn-results, --stfgnn-results,
+  --astgcn-results, --tft-results, --autoformer-results, --informer-results
   All optional; each auto-detects the most recent run if omitted.
 
 Usage:
-  python stgcn.py
-  python stgcn.py --hidden 64 --cheb-k 2 --n-blocks 2 --kt 3
+  python src/models/graph-based/pdr_stgcn.py
+  python src/models/graph-based/pdr_stgcn.py --hidden 64 --period 7 --dk 32
 """
 
 import os
@@ -64,49 +81,50 @@ from src.utils.comparison_table import (
 )
 
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # CLI
 # ══════════════════════════════════════════════════════════════════════════════
 
 def parse_args():
-    p = argparse.ArgumentParser(description="STGCN forecaster with 7-way comparison")
-    p.add_argument("--seq-dir",           default="data/sequences/lstm",
+    p = argparse.ArgumentParser(description="PDR-STGCN forecaster with 12-way comparison")
+    p.add_argument("--seq-dir",            default="data/sequences/lstm",
                    help="Directory with X/y .npy splits")
-    p.add_argument("--hidden",            type=int,   default=128,
+    p.add_argument("--hidden",             type=int,   default=128,
                    help="Graph conv channel width (C_mid = C_out = hidden)")
-    p.add_argument("--cheb-k",            type=int,   default=3,
-                   help="Chebyshev polynomial order K")
-    p.add_argument("--kt",                type=int,   default=3,
+    p.add_argument("--kt",                 type=int,   default=3,
                    help="Temporal conv kernel size")
-    p.add_argument("--n-blocks",          type=int,   default=2,
-                   help="Number of ST-Conv blocks")
-    p.add_argument("--adj-threshold",     type=float, default=0.1,
+    p.add_argument("--n-blocks",           type=int,   default=2,
+                   help="Number of PDR-ST-Conv blocks")
+    p.add_argument("--period",             type=int,   default=7,
+                   help="Periodic lag for difference encoding (default=7 for weekly)")
+    p.add_argument("--dk",                 type=int,   default=32,
+                   help="Key/Query dimension for dynamic attention graph")
+    p.add_argument("--adj-threshold",      type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge")
-    p.add_argument("--dropout",           type=float, default=0.15,
+    p.add_argument("--dropout",            type=float, default=0.15,
                    help="Dropout on graph conv output")
-    p.add_argument("--weight-decay",      type=float, default=1e-4,
+    p.add_argument("--weight-decay",       type=float, default=1e-4,
                    help="Adam weight decay")
-    p.add_argument("--batch-size",        type=int,   default=32)
-    p.add_argument("--epochs",            type=int,   default=200)
-    p.add_argument("--lr",                type=float, default=3e-4)
-    p.add_argument("--patience",          type=int,   default=20)
-    p.add_argument("--device",            default="auto", help="cpu | cuda | mps | auto")
-    p.add_argument("--seed",              type=int,   default=42)
-    p.add_argument("--lstm-results",      default=None)
-    p.add_argument("--bilstm-results",    default=None)
-    p.add_argument("--tpalstm-results",   default=None)
-    p.add_argument("--cnnlstm-results",   default=None)
-    p.add_argument("--cnnbilstm-results", default=None)
-    p.add_argument("--stlstm-results",    default=None)
-    p.add_argument("--mtgnn-results",     default=None)
-    p.add_argument("--stsgcn-results",    default=None)
-    p.add_argument("--stfgnn-results",    default=None)
-    p.add_argument("--pdrstgcn-results",  default=None)
-    p.add_argument("--astgcn-results",    default=None)
-    p.add_argument("--tft-results",       default=None)
-    p.add_argument("--autoformer-results",default=None)
-    p.add_argument("--informer-results",  default=None)
+    p.add_argument("--batch-size",         type=int,   default=32)
+    p.add_argument("--epochs",             type=int,   default=200)
+    p.add_argument("--lr",                 type=float, default=3e-4)
+    p.add_argument("--patience",           type=int,   default=20)
+    p.add_argument("--device",             default="auto", help="cpu | cuda | mps | auto")
+    p.add_argument("--seed",               type=int,   default=42)
+    p.add_argument("--lstm-results",       default=None)
+    p.add_argument("--bilstm-results",     default=None)
+    p.add_argument("--tpalstm-results",    default=None)
+    p.add_argument("--cnnlstm-results",    default=None)
+    p.add_argument("--cnnbilstm-results",  default=None)
+    p.add_argument("--stlstm-results",     default=None)
+    p.add_argument("--stgcn-results",      default=None)
+    p.add_argument("--mtgnn-results",      default=None)
+    p.add_argument("--stsgcn-results",     default=None)
+    p.add_argument("--stfgnn-results",     default=None)
+    p.add_argument("--astgcn-results",     default=None)
+    p.add_argument("--tft-results",        default=None)
+    p.add_argument("--autoformer-results", default=None)
+    p.add_argument("--informer-results",   default=None)
     return p.parse_args()
 
 
@@ -121,72 +139,28 @@ def build_feature_adj(X_train: torch.Tensor, threshold: float = 0.1) -> torch.Te
     Returns  : A_raw (N, N) float32, diagonal = 0, values >= threshold.
     """
     X_np   = X_train.cpu().numpy()
-    X_flat = X_np.reshape(-1, X_np.shape[-1])   # (N*T, F)
-    corr   = np.corrcoef(X_flat.T).astype(np.float32)   # (F, F)
+    X_flat = X_np.reshape(-1, X_np.shape[-1])
+    corr   = np.corrcoef(X_flat.T).astype(np.float32)
     A      = np.abs(corr)
-    np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0, copy=False)  # guard: zero-variance cols
+    np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0, copy=False)
     A[A < threshold] = 0.0
     np.fill_diagonal(A, 0.0)
     return torch.from_numpy(A)
 
 
-def compute_scaled_laplacian(A: torch.Tensor) -> torch.Tensor:
+def sym_normalize(A: torch.Tensor) -> torch.Tensor:
     """
-    Scaled Laplacian L_tilde = 2*L_sym/lambda_max - I.
-    Approximates lambda_max = 2 → L_tilde = L_sym - I = -D^{-1/2} A D^{-1/2}.
-
-    A : (N, N) raw adjacency (no self-loops, non-negative).
-    Returns L_tilde : (N, N), eigenvalues in [-1, 1].
+    Symmetric normalisation: A_sym = D^{-1/2} A D^{-1/2}.
+    Used directly in the static convolution path (no scaled Laplacian needed).
     """
-    N           = A.shape[0]
-    D           = A.sum(dim=1).clamp(min=1e-9)   # (N,)
-    D_inv_sqrt  = D.pow(-0.5)                    # (N,)
-    A_sym       = D_inv_sqrt.unsqueeze(1) * A * D_inv_sqrt.unsqueeze(0)
-    L_tilde     = -A_sym                         # = L_sym - I (lambda_max ≈ 2 approx)
-    return L_tilde
+    D          = A.sum(dim=1).clamp(min=1e-9)
+    D_inv_sqrt = D.pow(-0.5)
+    return D_inv_sqrt.unsqueeze(1) * A * D_inv_sqrt.unsqueeze(0)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Model components
 # ══════════════════════════════════════════════════════════════════════════════
-
-class ChebConv(nn.Module):
-    """
-    K-order Chebyshev spectral graph convolution.
-
-    Input  : x (B, N, C_in),  L_tilde (N, N) scaled Laplacian
-    Output : (B, N, C_out)
-
-    Chebyshev recursion:
-      T_0 = x
-      T_1 = L_tilde @ x
-      T_k = 2 * L_tilde @ T_{k-1} - T_{k-2}
-      out = sum_k T_k @ theta_k
-    """
-
-    def __init__(self, in_channels: int, out_channels: int, K: int = 2):
-        super().__init__()
-        self.K     = K
-        self.theta = nn.ParameterList([
-            nn.Parameter(torch.empty(in_channels, out_channels).uniform_(-0.05, 0.05))
-            for _ in range(K)
-        ])
-
-    def forward(self, x: torch.Tensor, L_tilde: torch.Tensor) -> torch.Tensor:
-        T0  = x
-        out = T0 @ self.theta[0]
-
-        if self.K >= 2:
-            T1  = torch.einsum("nm,bmc->bnc", L_tilde, x)
-            out = out + T1 @ self.theta[1]
-
-        for k in range(2, self.K):
-            T2  = 2.0 * torch.einsum("nm,bmc->bnc", L_tilde, T1) - T0
-            out = out + T2 @ self.theta[k]
-            T0, T1 = T1, T2
-
-        return out   # (B, N, C_out)
-
 
 class TemporalGatedConv(nn.Module):
     """
@@ -200,14 +174,57 @@ class TemporalGatedConv(nn.Module):
         self.conv = nn.Conv1d(in_channels, out_channels * 2, kernel_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h       = self.conv(x)
-        h1, h2  = h.chunk(2, dim=1)
+        h      = self.conv(x)
+        h1, h2 = h.chunk(2, dim=1)
         return torch.tanh(h1) * torch.sigmoid(h2)
 
 
-class STConvBlock(nn.Module):
+class DynamicRelationalGraphConv(nn.Module):
     """
-    One ST-Conv block: TemporalGated → ChebGraph → TemporalGated → BN.
+    Two-path graph convolution mixing a static and a dynamic adjacency.
+
+    Static path : A_sym @ h @ W_static
+    Dynamic path: softmax(Q @ K^T / sqrt(d_k)) @ V
+    Output      : σ(λ) * static_out + (1 - σ(λ)) * dynamic_out
+
+    λ is a learned scalar initialised to 0 (equal mixture at the start).
+    """
+
+    def __init__(self, in_channels: int, out_channels: int, d_k: int = 32):
+        super().__init__()
+        self.d_k = d_k
+        self.W_s = nn.Linear(in_channels, out_channels, bias=False)
+        self.W_Q = nn.Linear(in_channels, d_k, bias=False)
+        self.W_K = nn.Linear(in_channels, d_k, bias=False)
+        self.W_V = nn.Linear(in_channels, out_channels, bias=False)
+        self.lam = nn.Parameter(torch.zeros(1))   # sigmoid(0) = 0.5
+
+    def forward(self, h: torch.Tensor, A_sym: torch.Tensor) -> torch.Tensor:
+        """
+        h     : (B_T, N, C_in)
+        A_sym : (N, N)   symmetric normalised adjacency (buffer)
+        Returns (B_T, N, C_out)
+        """
+        # Static path: one-hop message passing with sym-normalised adjacency
+        h_agg = torch.einsum("nm,bmc->bnc", A_sym, h)   # (B_T, N, C_in)
+        h_sta = self.W_s(h_agg)                          # (B_T, N, C_out)
+
+        # Dynamic path: self-attention adjacency
+        Q     = self.W_Q(h)                              # (B_T, N, d_k)
+        K     = self.W_K(h)                              # (B_T, N, d_k)
+        V     = self.W_V(h)                              # (B_T, N, C_out)
+        score = torch.bmm(Q, K.transpose(1, 2)) / (self.d_k ** 0.5)
+        A_dyn = torch.softmax(score, dim=-1)             # (B_T, N, N)
+        h_dyn = torch.bmm(A_dyn, V)                     # (B_T, N, C_out)
+
+        lam = torch.sigmoid(self.lam)
+        return lam * h_sta + (1.0 - lam) * h_dyn
+
+
+class PDRSTConvBlock(nn.Module):
+    """
+    One PDR-ST-Conv block:
+      TemporalGated → DynamicRelationalGraph → TemporalGated → BN
 
     Each block reduces T by 2*(Kt - 1).
     Input/Output shape: (B, N, C_in, T) / (B, N, C_out, T - 2*(Kt-1))
@@ -218,56 +235,58 @@ class STConvBlock(nn.Module):
         in_channels:  int,
         mid_channels: int,
         out_channels: int,
-        K:            int = 2,
         Kt:           int = 3,
+        d_k:          int = 32,
         dropout:      float = 0.1,
     ):
         super().__init__()
         self.temp1   = TemporalGatedConv(in_channels,  mid_channels, Kt)
-        self.graph   = ChebConv(mid_channels, mid_channels, K)
+        self.graph   = DynamicRelationalGraphConv(mid_channels, mid_channels, d_k)
         self.temp2   = TemporalGatedConv(mid_channels, out_channels, Kt)
         self.bn      = nn.BatchNorm2d(out_channels)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor, L_tilde: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, A_sym: torch.Tensor) -> torch.Tensor:
         """
-        x       : (B, N, C_in, T)
-        L_tilde : (N, N)
-        Returns : (B, N, C_out, T - 2*(Kt-1))
+        x     : (B, N, C_in, T)
+        A_sym : (N, N)
+        Returns (B, N, C_out, T - 2*(Kt-1))
         """
         B, N, C, T = x.shape
 
         # ── Temporal conv 1 ───────────────────────────────────────────────────
         xt = x.reshape(B * N, C, T)
-        xt = self.temp1(xt)                          # (B*N, C_mid, T1)
+        xt = self.temp1(xt)                                # (B*N, C_mid, T1)
         T1, C1 = xt.shape[-1], xt.shape[1]
         xt = xt.reshape(B, N, C1, T1)
 
-        # ── Graph conv (applied to every timestep at once) ────────────────────
+        # ── Dynamic relational graph conv (per time step) ─────────────────────
         xg = xt.permute(0, 3, 1, 2).reshape(B * T1, N, C1)   # (B*T1, N, C_mid)
-        xg = self.graph(xg, L_tilde)
+        xg = self.graph(xg, A_sym)
         xg = F.relu(xg)
         xg = self.dropout(xg)
         xg = xg.reshape(B, T1, N, C1).permute(0, 2, 3, 1)    # (B, N, C_mid, T1)
 
         # ── Temporal conv 2 ───────────────────────────────────────────────────
         xt2 = xg.reshape(B * N, C1, T1)
-        xt2 = self.temp2(xt2)                        # (B*N, C_out, T2)
+        xt2 = self.temp2(xt2)                              # (B*N, C_out, T2)
         T2, C2 = xt2.shape[-1], xt2.shape[1]
         xt2 = xt2.reshape(B, N, C2, T2)
 
-        # ── BatchNorm (treat N as H, T2 as W) ────────────────────────────────
+        # ── BatchNorm (treat N as H, T2 as W) ─────────────────────────────────
         xt2 = self.bn(xt2.permute(0, 2, 1, 3)).permute(0, 2, 1, 3)
 
         return xt2
 
 
-class STGCNForecaster(nn.Module):
+class PDRSTGCNForecaster(nn.Module):
     """
-    Spatio-Temporal Graph Convolutional Network forecaster.
+    Periodicity-Aware Dynamic Relational STGCN forecaster.
 
-    The scaled Laplacian L_tilde is precomputed from training-data feature
-    correlation and registered as a buffer, so forward(x) only takes x.
+    The symmetric-normalised adjacency A_sym is precomputed from training-data
+    feature correlation and stored as a buffer (travels with .to(device)).
+    Periodicity encoding is applied inline in forward() — zero-overhead at
+    inference since it uses only tensor ops.
 
     Input  : (B, T_in, n_features)
     Output : (B, T_out)
@@ -278,8 +297,9 @@ class STGCNForecaster(nn.Module):
         n_features: int,
         hidden:     int,
         n_blocks:   int,
-        K:          int,
         Kt:         int,
+        period:     int,
+        d_k:        int,
         T_in:       int,
         T_out:      int,
         A_raw:      torch.Tensor,
@@ -287,21 +307,22 @@ class STGCNForecaster(nn.Module):
     ):
         super().__init__()
         self.n_features = n_features
+        self.period     = period
 
-        # ── Scaled Laplacian (buffer) ─────────────────────────────────────────
-        L_tilde = compute_scaled_laplacian(A_raw)
-        self.register_buffer("L_tilde", L_tilde)
+        # ── Static adjacency buffer ───────────────────────────────────────────
+        A_sym = sym_normalize(A_raw)
+        self.register_buffer("A_sym", A_sym)
 
-        # ── ST-Conv blocks ────────────────────────────────────────────────────
+        # ── PDR-ST-Conv blocks ────────────────────────────────────────────────
         self.blocks = nn.ModuleList()
         for i in range(n_blocks):
-            c_in = 1 if i == 0 else hidden
-            self.blocks.append(STConvBlock(c_in, hidden, hidden, K, Kt, dropout))
+            c_in = 2 if i == 0 else hidden   # 2 channels: original + periodic diff
+            self.blocks.append(PDRSTConvBlock(c_in, hidden, hidden, Kt, d_k, dropout))
 
         # ── Output temporal conv ──────────────────────────────────────────────
         self.out_temp = TemporalGatedConv(hidden, hidden, Kt)
 
-        # ── Compute flattened head input size ─────────────────────────────────
+        # ── Compute head input size ───────────────────────────────────────────
         # Each ST block: T → T - 2*(Kt-1).  Output conv: T → T - (Kt-1).
         T_after = T_in - (Kt - 1) * (2 * n_blocks + 1)
         assert T_after > 0, (
@@ -317,29 +338,34 @@ class STGCNForecaster(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x : (B, T_in, N)   N = n_features
-        """
+        """x : (B, T_in, N)   N = n_features"""
         B, T, N = x.shape
-        # (B, N, 1, T)
-        x = x.permute(0, 2, 1).unsqueeze(2)
+        p = self.period
 
-        # ST blocks
+        # ── Periodicity encoding ──────────────────────────────────────────────
+        # x_diff[t] = x[t] - x[t-p]   for t >= p, else 0
+        x_diff = torch.zeros_like(x)
+        if p < T:
+            x_diff[:, p:, :] = x[:, p:, :] - x[:, :T - p, :]
+
+        # Stack to 2 channels: (B, T, N, 2) → (B, N, 2, T)
+        enc = torch.stack([x, x_diff], dim=-1).permute(0, 2, 3, 1)
+
+        # ── PDR-ST blocks ─────────────────────────────────────────────────────
         for block in self.blocks:
-            x = block(x, self.L_tilde)       # (B, N, C_out, T')
+            enc = block(enc, self.A_sym)    # (B, N, C_out, T')
 
-        # Output temporal conv
-        B2, N2, C2, T2 = x.shape
-        x = x.reshape(B2 * N2, C2, T2)
-        x = self.out_temp(x)                 # (B*N, C_out, T'')
-        T3 = x.shape[-1]
-        x = x.reshape(B2, N2, C2, T3)
+        # ── Output temporal conv ──────────────────────────────────────────────
+        B2, N2, C2, T2 = enc.shape
+        enc = enc.reshape(B2 * N2, C2, T2)
+        enc = self.out_temp(enc)            # (B*N, hidden, T'')
+        T3  = enc.shape[-1]
+        enc = enc.reshape(B2, N2, -1, T3)
 
-        # Pool over nodes (mean), flatten, MLP
-        x = x.mean(dim=1)                    # (B, C_out, T'')
-        x = x.reshape(B2, -1)               # (B, C_out * T'')
-        return self.head(x)
-
+        # ── Pool over nodes, flatten, MLP ─────────────────────────────────────
+        enc = enc.mean(dim=1)               # (B, hidden, T'')
+        enc = enc.reshape(B2, -1)
+        return self.head(enc)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -367,7 +393,7 @@ def load_splits(seq_dir: str, device: torch.device):
 
 def train_one_epoch(model, loader, optimiser, criterion, device) -> float:
     model.train()
-    total = 0.0
+    total     = 0.0
     n_skipped = 0
     for X_b, y_b in loader:
         optimiser.zero_grad()
@@ -393,7 +419,6 @@ def evaluate(model, loader, criterion) -> float:
     return total / len(loader.dataset)
 
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Plotting helpers
 # ══════════════════════════════════════════════════════════════════════════════
@@ -404,7 +429,7 @@ def plot_loss_curves(train_losses, val_losses, out_path: str) -> None:
     ax.plot(val_losses,   label="Val MSE",   linewidth=1.5, color="#f97316",
             linestyle="--")
     ax.set_xlabel("Epoch"); ax.set_ylabel("MSE loss (scaled)")
-    ax.set_title("STGCN — Training curves")
+    ax.set_title("PDR-STGCN — Training curves")
     ax.legend(); ax.grid(alpha=0.3)
     fig.tight_layout(); fig.savefig(out_path, dpi=150); plt.close(fig)
     print(f"  Saved: {out_path}")
@@ -421,7 +446,7 @@ def plot_predictions(y_true, y_pred, metrics, out_path: str) -> None:
     pred_min     = y_pred.min(axis=1)
     pred_max     = y_pred.max(axis=1)
 
-    C_ACT  = "#1d4ed8"; C_PRED = "#10b981"; C_BAND = "#a7f3d0"
+    C_ACT  = "#1d4ed8"; C_PRED = "#f97316"; C_BAND = "#fed7aa"
     C_MID  = "#0891b2"; C_LAST = "#7c3aed"
 
     fig = plt.figure(figsize=(14, 8))
@@ -432,7 +457,7 @@ def plot_predictions(y_true, y_pred, metrics, out_path: str) -> None:
                      label=f"Forecast spread (step 1–{T_out})")
     ax1.plot(idx_full, actual_s1,    color=C_ACT,  linewidth=1.5, label="Actual", zorder=4)
     ax1.plot(idx_full, predicted_s1, color=C_PRED, linewidth=1.2, linestyle="--",
-             alpha=0.88, label="STGCN predicted (step 1)", zorder=5)
+             alpha=0.88, label="PDR-STGCN predicted (step 1)", zorder=5)
     ann = (
         f"Combined = {metrics['Combined']:.2f}%\n"
         f"MAPE     = {metrics['MAPE']:.2f}%\n"
@@ -446,7 +471,7 @@ def plot_predictions(y_true, y_pred, metrics, out_path: str) -> None:
              verticalalignment="top", fontfamily="monospace",
              bbox=dict(boxstyle="round,pad=0.45", facecolor="white",
                        edgecolor="#d1d5db", alpha=0.92))
-    ax1.set_title("STGCN — Test set: Actual vs Predicted (full period)",
+    ax1.set_title("PDR-STGCN — Test set: Actual vs Predicted (full period)",
                   fontsize=11, fontweight="bold")
     ax1.set_xlabel("Test sample index"); ax1.set_ylabel("Ridership (riders)")
     ax1.legend(loc="upper right", fontsize=8); ax1.grid(alpha=0.25)
@@ -487,23 +512,19 @@ def plot_per_step_metrics(per_step: list, out_path: str) -> None:
     ax1.bar(x+1.5*w, rmse_pct, w, label="RMSE%",     color="#f97316", alpha=0.85)
     ax1.set_xticks(x); ax1.set_xticklabels(steps)
     ax1.set_ylabel("% of mean demand / score")
-    ax1.set_title("STGCN — Per-horizon metrics", fontweight="bold")
+    ax1.set_title("PDR-STGCN — Per-horizon metrics", fontweight="bold")
     ax1.legend(fontsize=8); ax1.grid(axis="y", alpha=0.3)
 
-    ax2.plot(steps, r2, marker="o", color="#dc2626", linewidth=1.8, markersize=5)
+    ax2.plot(steps, r2, marker="o", color="#f97316", linewidth=1.8, markersize=5)
     ax2.axhline(0, color="#9ca3af", linewidth=0.8, linestyle="--")
     ax2.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":")
     ax2.set_ylim(min(min(r2)-0.05, -0.1), 1.08)
-    ax2.set_ylabel("R²"); ax2.set_title("STGCN — R² per horizon step", fontweight="bold")
+    ax2.set_ylabel("R²"); ax2.set_title("PDR-STGCN — R² per horizon step", fontweight="bold")
     ax2.grid(alpha=0.3)
 
     fig.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
     print(f"  Saved: {out_path}")
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Comparison table
-# ══════════════════════════════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Main
@@ -539,18 +560,19 @@ def main():
 
     # ── Build adjacency ───────────────────────────────────────────────────────
     print(f"\nBuilding feature correlation adjacency (threshold={args.adj_threshold})...")
-    A_raw = build_feature_adj(X_tr, threshold=args.adj_threshold)
+    A_raw   = build_feature_adj(X_tr, threshold=args.adj_threshold)
     n_edges = int((A_raw > 0).sum().item() // 2)
     density = float((A_raw > 0).float().mean().item())
     print(f"  Nodes: {n_features}  Edges: {n_edges}  Density: {density:.4f}")
 
     # ── Model ─────────────────────────────────────────────────────────────────
-    model = STGCNForecaster(
+    model = PDRSTGCNForecaster(
         n_features = n_features,
         hidden     = args.hidden,
         n_blocks   = args.n_blocks,
-        K          = args.cheb_k,
         Kt         = args.kt,
+        period     = args.period,
+        d_k        = args.dk,
         T_in       = T_in,
         T_out      = T_out,
         A_raw      = A_raw,
@@ -559,13 +581,13 @@ def main():
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     T_after  = T_in - (args.kt - 1) * (2 * args.n_blocks + 1)
-    print(f"\nModel         : STGCNForecaster")
-    print(f"  Nodes (N)   : {n_features}   Cheb-K={args.cheb_k}   Kt={args.kt}")
-    print(f"  ST blocks   : {args.n_blocks}   hidden={args.hidden}")
-    print(f"  T_in→T_after: {T_in}→{T_after}")
-    print(f"  In          : (batch, {T_in}, {n_features})")
-    print(f"  Out         : (batch, {T_out})")
-    print(f"  Params      : {n_params:,}")
+    print(f"\nModel           : PDRSTGCNForecaster")
+    print(f"  Nodes (N)     : {n_features}   Period={args.period}   d_k={args.dk}")
+    print(f"  ST blocks     : {args.n_blocks}   hidden={args.hidden}   Kt={args.kt}")
+    print(f"  T_in→T_after  : {T_in}→{T_after}")
+    print(f"  In            : (batch, {T_in}, {n_features})")
+    print(f"  Out           : (batch, {T_out})")
+    print(f"  Params        : {n_params:,}")
 
     # ── Optimiser / loss ──────────────────────────────────────────────────────
     criterion = nn.MSELoss()
@@ -631,7 +653,7 @@ def main():
     # ── Per-horizon metrics ───────────────────────────────────────────────────
     W = 10
     print(f"\n{'='*85}")
-    print("STGCN — TEST SET METRICS")
+    print("PDR-STGCN — TEST SET METRICS")
     print(f"{'='*85}")
     header = (f"{'Step':>5}  {'Combined%':>{W}}  {'MAPE%':>{W}}  {'MAE%':>{W}}  "
               f"{'RMSE%':>{W}}  {'R²':>{W}}  {'MAE':>{W}}  {'RMSE':>{W}}")
@@ -655,18 +677,19 @@ def main():
 
     # ── Save artefacts ────────────────────────────────────────────────────────
     run_id  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = f"src/outputs/stgcn/{run_id}"
+    out_dir = f"src/outputs/pdr_stgcn/{run_id}"
     os.makedirs(out_dir, exist_ok=True)
     torch.save(model.state_dict(), f"{out_dir}/model.pt")
 
     results = {
         "run_id": run_id,
-        "model":  "STGCNForecaster",
+        "model":  "PDRSTGCNForecaster",
         "hparams": {
             "hidden":         args.hidden,
-            "cheb_k":         args.cheb_k,
             "kt":             args.kt,
             "n_blocks":       args.n_blocks,
+            "period":         args.period,
+            "dk":             args.dk,
             "adj_threshold":  args.adj_threshold,
             "dropout":        args.dropout,
             "weight_decay":   args.weight_decay,
@@ -700,7 +723,7 @@ def main():
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print(f"\n{'='*85}")
-    print(f"STGCN run complete  →  {out_dir}/")
+    print(f"PDR-STGCN run complete  →  {out_dir}/")
     print(f"{'='*85}")
     print(f"  Combined  : {overall['Combined']:.2f}%")
     print(f"  MAPE      : {overall['MAPE']:.2f}%")
@@ -710,20 +733,20 @@ def main():
 
     # ── Multi-way comparison ──────────────────────────────────────────────────
     PRIOR_MODELS = [
-        ("LSTM",       args.lstm_results,      "src/outputs/lstm",       "#2563eb"),
-        ("BiLSTM",     args.bilstm_results,    "src/outputs/bilstm",     "#7c3aed"),
-        ("TPA-LSTM",   args.tpalstm_results,   "src/outputs/tpa_lstm",   "#0891b2"),
-        ("CNN-LSTM",   args.cnnlstm_results,   "src/outputs/cnn_lstm",   "#16a34a"),
-        ("CNN-BiLSTM", args.cnnbilstm_results, "src/outputs/cnn_bilstm", "#d97706"),
-        ("ST-LSTM",    args.stlstm_results,    "src/outputs/st_lstm",    "#dc2626"),
-        ("MTGNN",      args.mtgnn_results,     "src/outputs/mtgnn",      "#f472b6"),
-        ("STSGCN",     args.stsgcn_results,    "src/outputs/stsgcn",     "#0ea5e9"),
-        ("STFGNN",     args.stfgnn_results,    "src/outputs/stfgnn",     "#a855f7"),
-        ("PDR-STGCN",   args.pdrstgcn_results,   "src/outputs/pdr_stgcn",   "#f97316"),
-        ("ASTGCN",     args.astgcn_results,    "src/outputs/astgcn",     "#e11d48"),
-        ("TFT",        args.tft_results,       "src/outputs/tft",        "#ca8a04"),
-        ("Autoformer", args.autoformer_results,"src/outputs/autoformer", "#047857"),
-        ("Informer",   args.informer_results,  "src/outputs/informer",   "#9333ea"),
+        ("LSTM",       args.lstm_results,       "src/outputs/lstm",       "#2563eb"),
+        ("BiLSTM",     args.bilstm_results,     "src/outputs/bilstm",     "#7c3aed"),
+        ("TPA-LSTM",   args.tpalstm_results,    "src/outputs/tpa_lstm",   "#0891b2"),
+        ("CNN-LSTM",   args.cnnlstm_results,    "src/outputs/cnn_lstm",   "#16a34a"),
+        ("CNN-BiLSTM", args.cnnbilstm_results,  "src/outputs/cnn_bilstm", "#d97706"),
+        ("ST-LSTM",    args.stlstm_results,     "src/outputs/st_lstm",    "#dc2626"),
+        ("STGCN",      args.stgcn_results,      "src/outputs/stgcn",      "#10b981"),
+        ("MTGNN",      args.mtgnn_results,      "src/outputs/mtgnn",      "#f472b6"),
+        ("STSGCN",     args.stsgcn_results,     "src/outputs/stsgcn",     "#0ea5e9"),
+        ("STFGNN",     args.stfgnn_results,     "src/outputs/stfgnn",     "#a855f7"),
+        ("ASTGCN",     args.astgcn_results,     "src/outputs/astgcn",     "#e11d48"),
+        ("TFT",        args.tft_results,        "src/outputs/tft",        "#ca8a04"),
+        ("Autoformer", args.autoformer_results, "src/outputs/autoformer", "#047857"),
+        ("Informer",   args.informer_results,   "src/outputs/informer",   "#9333ea"),
     ]
 
     models_data = []
@@ -739,15 +762,15 @@ def main():
         else:
             comparison[key] = {"run_id": None, "overall": None}
 
-    models_data.append(("STGCN", overall, per_step, "#10b981"))
+    models_data.append(("PDR-STGCN", overall, per_step, "#f97316"))
 
     if len(models_data) > 1:
-        print_comparison_table(models_data[:-1], overall, "STGCN")
+        print_comparison_table(models_data[:-1], overall, "PDR-STGCN")
         plot_comparison(models_data,
                         out_path=f"{out_dir}/comparison_{len(models_data)}_way.png")
 
-    comparison["stgcn"] = {"run_id": run_id,
-                            "overall": {k: round(v, 4) for k, v in overall.items()}}
+    comparison["pdr_stgcn"] = {"run_id": run_id,
+                                "overall": {k: round(v, 4) for k, v in overall.items()}}
     for name, m_overall, _, __ in models_data[:-1]:
         key = name.lower().replace("-", "_")
         comparison[f"delta_vs_{key}"] = {
@@ -774,7 +797,7 @@ def main():
     print(f"\n  Naive persistence  "
           f"Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  "
           f"R²={naive['R2']:.4f}")
-    print(f"  STGCN vs naive     "
+    print(f"  PDR-STGCN vs naive "
           f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
 
 

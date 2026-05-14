@@ -118,7 +118,7 @@ def parse_args():
     p.add_argument("--mtgnn-results",        default=None)
     p.add_argument("--stsgcn-results",       default=None)
     p.add_argument("--stfgnn-results",       default=None)
-    p.add_argument("--mdstgcn-results",      default=None)
+    p.add_argument("--pdrstgcn-results",     default=None)
     p.add_argument("--astgcn-results",       default=None)
     p.add_argument("--tft-results",          default=None)
     p.add_argument("--informer-results",     default=None)
@@ -738,7 +738,7 @@ def main():
         ("MTGNN",         args.mtgnn_results,         "src/outputs/mtgnn",          "#f472b6"),
         ("STSGCN",        args.stsgcn_results,        "src/outputs/stsgcn",         "#0ea5e9"),
         ("STFGNN",        args.stfgnn_results,        "src/outputs/stfgnn",         "#a855f7"),
-        ("MD-STGCN",      args.mdstgcn_results,       "src/outputs/md_stgcn",       "#f97316"),
+        ("PDR-STGCN",      args.pdrstgcn_results,       "src/outputs/pdr_stgcn",       "#f97316"),
         ("ASTGCN",        args.astgcn_results,        "src/outputs/astgcn",         "#e11d48"),
         ("TFT",           args.tft_results,           "src/outputs/tft",            "#ca8a04"),
         ("Informer",      args.informer_results,      "src/outputs/informer",       "#9333ea"),
