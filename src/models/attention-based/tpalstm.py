@@ -99,7 +99,7 @@ def parse_args():
     p.add_argument("--kernel-size",    type=int,   default=3,
                    help="1-D CNN kernel size in the TPA attention module")
     p.add_argument("--batch-size",     type=int,   default=64)
-    p.add_argument("--epochs",         type=int,   default=50)
+    p.add_argument("--epochs",         type=int,   default=150)
     p.add_argument("--lr",             type=float, default=1e-3)
     p.add_argument("--patience",       type=int,   default=10)
     p.add_argument("--device",         default="auto", help="cpu | cuda | mps | auto")
