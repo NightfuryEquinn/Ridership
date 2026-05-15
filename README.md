@@ -6,7 +6,7 @@ Masters Final Year Project comparing 15 deep-learning models for Malaysian publi
 
 This repository contains the implementation and evaluation of 15 deep learning models for forecasting Malaysian public transit ridership. The models are organized into three series:
 - **Spatio-temporal (LSTM-family)**: LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
-- **Graph-based**: STGCN, MTGNN, STSGCN, STFGNN, MD-STGCN
+- **Graph-based**: STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN
 - **Attention-based**: TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
 
 All models are trained and evaluated on the same dataset comprising 8 spatio-temporal feature sources:
@@ -91,8 +91,9 @@ python src/features/feature_align.py
 
 ### 4. Sequence Building
 ```bash
-python src/features/sequence_builder.py
-# Produces: data/sequences/lstm/ with X/y train/val/test splits and scalers
+python src/features/sequence_builder.py               # lookback=14 → data/sequences/lstm/
+python src/features/sequence_builder.py --T-in 28     # lookback=28 → data/sequences/lookback_28/
+python src/features/sequence_builder.py --T-in 56     # lookback=56 → data/sequences/lookback_56/
 ```
 
 Full step-by-step instructions are available in `src/features/PIPELINE.md`.
@@ -115,7 +116,7 @@ python src/models/graph-based/stgcn.py
 python src/models/graph-based/mtgnn.py
 python src/models/graph-based/stsgcn.py
 python src/models/graph-based/stfgnn.py
-python src/models/graph-based/md_stgcn.py
+python src/models/graph-based/pdr_stgcn.py
 
 # Attention-based models
 python src/models/attention-based/tft.py
@@ -126,7 +127,10 @@ python src/models/attention-based/informer.py
 
 ### Common Arguments
 All models accept these arguments:
-- `--seq-dir`: Directory containing sequences (default: `data/sequences/lstm/`)
+- `--seq-dir`: Override sequence directory (if not set, resolved from `--lookback`)
+- `--lookback {14,28,56}`: Look-back window; auto-selects the matching `data/sequences/` directory (default: `14`)
+- `--loss {mse,huber,mae}`: Training loss function (default: `huber`)
+- `--warmup-epochs N`: Linear LR warm-up epochs before ReduceLROnPlateau (default: `5`)
 - `--epochs`: Number of training epochs
 - `--batch-size`: Training batch size
 - `--lr`: Learning rate
@@ -160,7 +164,7 @@ Models are compared in a historical chain where each new model evaluates against
 ```
 LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
-→ MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → MD-STGCN (12-way)
+→ MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
 → ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
 ```
 
@@ -171,8 +175,13 @@ The comparison system automatically:
 
 ## Technical Details
 
+### Training Optimizations (all 15 models)
+- **Optimiser**: AdamW (decoupled weight decay) — same hyperparameter values as before
+- **Loss**: HuberLoss (delta=1.0, default) — robust to ridership outliers; selectable via `--loss`
+- **LR schedule**: 5-epoch linear warm-up → ReduceLROnPlateau; configurable via `--warmup-epochs`
+
 ### Data Configuration
-- **Look-back window (T_in)**: 14 days
+- **Look-back window (T_in)**: 14 / 28 / 56 days (controlled via `--lookback` or `--T-in`)
 - **Forecast horizon (T_out)**: 7 days
 - **Data split**: 70% train / 15% validation / 15% test (chronological)
 - **MCO exclusion**: Movement Control Order period (2020-03-18 to 2021-12-31) excluded by default

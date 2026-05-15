@@ -49,7 +49,7 @@ import pandas as pd
 import joblib
 from sklearn.preprocessing import MinMaxScaler
 
-os.makedirs("data/sequences/lstm", exist_ok=True)
+os.makedirs("data/sequences", exist_ok=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -216,7 +216,10 @@ def build_sequences(cfg: dict) -> None:
     print(f"  X_val  : {X_va.shape}   y_val  : {y_va.shape}")
     print(f"  X_test : {X_te.shape}   y_test : {y_te.shape}")
 
-    out = "data/sequences/lstm"
+    T_in_val = cfg["T_in"]
+    out = ("data/sequences/lstm" if T_in_val == 14
+           else f"data/sequences/lookback_{T_in_val}")
+    os.makedirs(out, exist_ok=True)
     ext = ".npz" if compress else ".npy"
     _save(f"{out}/X_train", X_tr, compress, dtype)
     _save(f"{out}/y_train", y_tr, compress, dtype)
@@ -241,8 +244,8 @@ def build_sequences(cfg: dict) -> None:
     with open(f"{out}/split_dates.json", "w") as f:
         json.dump(split_dates, f, indent=2)
 
-    print(f"\nExported to data/sequences/lstm/  (dtype={dtype}, compress={compress})")
-    print(f"  Load: X_train = np.load('data/sequences/lstm/X_train{ext}')"
+    print(f"\nExported to {out}/  (dtype={dtype}, compress={compress})")
+    print(f"  Load: X_train = np.load('{out}/X_train{ext}')"
           + (" ['arr']" if compress else ""))
     print("  Inverse-transform predictions: scaler_y.inverse_transform(y_pred)")
 
@@ -258,7 +261,10 @@ def parse_args():
     p.add_argument("--features-path", default=DEFAULTS["features_path"],
                    help="Path to features_aligned.csv from feature_align.py "
                         "(all 8 spatio-temporal sources)")
-    p.add_argument("--T-in",    type=int,   default=DEFAULTS["T_in"])
+    p.add_argument("--T-in",    type=int,   default=DEFAULTS["T_in"],
+                   choices=[14, 28, 56],
+                   help="Look-back window in days (14 → data/sequences/lstm/, "
+                        "28 or 56 → data/sequences/lookback_{N}/)")
     p.add_argument("--T-out",   type=int,   default=DEFAULTS["T_out"])
     p.add_argument("--target",  default=DEFAULTS["target_col"])
     p.add_argument("--train-frac", type=float, default=DEFAULTS["train_frac"])

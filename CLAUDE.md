@@ -45,8 +45,10 @@ python src/features/osm.py
 # 3. Merge all sources → daily matrix
 python src/features/feature_align.py
 
-# 4. Sliding-window tensors → data/sequences/lstm/
-python src/features/sequence_builder.py
+# 4. Sliding-window tensors → data/sequences/{lstm | lookback_28 | lookback_56}/
+python src/features/sequence_builder.py               # default: --T-in 14
+python src/features/sequence_builder.py --T-in 28     # → data/sequences/lookback_28/
+python src/features/sequence_builder.py --T-in 56     # → data/sequences/lookback_56/
 ```
 
 ## Running a Model
@@ -64,20 +66,32 @@ python src/models/attention-based/tft.py
 
 Each model script accepts `--seq-dir`, `--epochs`, `--batch-size`, `--lr`, `--patience`, `--device`, `--seed`, and model-specific hyperparameter flags. See the docstring at the top of each file. `--device auto` selects CUDA → MPS → CPU automatically.
 
+New shared flags added to all 15 models:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--lookback {14,28,56}` | `14` | Look-back window; auto-resolves `--seq-dir` when not set explicitly |
+| `--loss {mse,huber,mae}` | `huber` | Training loss function |
+| `--warmup-epochs N` | `5` | Linear LR warm-up epochs before ReduceLROnPlateau takes over |
+
+Sequence directory auto-resolution: `--lookback 14` → `data/sequences/lstm/`, `--lookback 28` → `data/sequences/lookback_28/`, `--lookback 56` → `data/sequences/lookback_56/`.
+
 ## Architecture
 
 ### Data Flow
 
 ```
-data/raw/                   8 raw sources
-    └── src/features/       cleaning scripts (one per source)
-data/cleaned/               cleaned CSVs, GeoJSONs, .npy adjacency matrices
-    └── feature_align.py    merges onto daily index → features_aligned.csv
-data/features/              features_aligned.csv + feature_metadata.json
-    └── sequence_builder.py sliding windows, MinMaxScaler, chronological split
-data/sequences/lstm/        X_train/val/test.npy, y_*.npy, scaler_X/y.pkl, split_dates.json
-    └── src/models/**/*.py  model training
-src/outputs/{model}/        timestamped run dirs with results.json, plots, model.pt
+data/raw/                      8 raw sources
+    └── src/features/          cleaning scripts (one per source)
+data/cleaned/                  cleaned CSVs, GeoJSONs, .npy adjacency matrices
+    └── feature_align.py       merges onto daily index → features_aligned.csv
+data/features/                 features_aligned.csv + feature_metadata.json
+    └── sequence_builder.py    sliding windows, MinMaxScaler, chronological split
+data/sequences/lstm/           lookback=14 (default): X_train/val/test.npy, y_*.npy, scaler_X/y.pkl, split_dates.json
+data/sequences/lookback_28/    lookback=28: same layout
+data/sequences/lookback_56/    lookback=56: same layout
+    └── src/models/**/*.py     model training (--lookback selects the right dir)
+src/outputs/{model}/           timestamped run dirs with results.json, plots, model.pt
 ```
 
 ### The Three Model Series
@@ -126,11 +140,21 @@ Each model run writes to `src/outputs/{model_name}/{YYYYMMDD_HHMMSS}/`:
 
 ### Key Hyperparameters / Defaults
 
-- `T_in=14` (look-back window), `T_out=7` (forecast horizon)
+- `T_in=14` (look-back window, choices: 14/28/56), `T_out=7` (forecast horizon)
 - Chronological split: 70% train / 15% val / 15% test
 - MCO period (2020-03-18 – 2021-12-31) excluded from sequences by default
 - Sequences stored as `float16` by default; load and cast to `float32` before feeding to models
 - All scalers fitted on training split only (`scaler_X.pkl`, `scaler_y.pkl`)
+
+### Training Optimizations (all 15 models)
+
+All models use the following improved training setup (structural changes only — no hyperparameter value changes):
+
+| Component | Before | After | Rationale |
+|-----------|--------|-------|-----------|
+| Optimiser | `Adam` | `AdamW` | Decoupled weight decay (Loshchilov & Hutter 2019) |
+| Loss | `MSELoss` | `HuberLoss(delta=1.0)` (default) | Robust to ridership outliers; selectable via `--loss` |
+| LR schedule | `ReduceLROnPlateau` only | Linear warmup (5 epochs) → `ReduceLROnPlateau` | Avoids unstable early updates; warmup via `--warmup-epochs` |
 
 ### Standardised Initial-Run (No Fine-Tuning) Hyperparameters
 

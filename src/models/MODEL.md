@@ -1,6 +1,8 @@
 # Model Descriptions
 
-This document describes all 15 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three series: **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based**. All models share the same input/output dimensions (T_in=14 look-back, T_out=7 forecast horizon), the same dataset (59 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE).
+This document describes all 15 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three series: **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based**. All models share the same input/output dimensions (T_in=14/28/56 look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (59 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE).
+
+**Shared training optimizations (all 15 models):** AdamW optimiser (decoupled weight decay), HuberLoss (default, selectable via `--loss {mse,huber,mae}`), and a 5-epoch linear LR warm-up before ReduceLROnPlateau (configurable via `--warmup-epochs`). Architecture and hyperparameter values are unchanged.
 
 ---
 
@@ -23,7 +25,7 @@ X (B, T_in, F) → LSTM → h_T (B, hidden) → MLP → (B, T_out)
 
 **Key design choices:**
 - Single causal recurrent pass — no bidirectionality, no attention, no graph convolution.
-- Standard MSE loss, Adam optimiser, ReduceLROnPlateau scheduler.
+- Huber loss (default), AdamW optimiser, linear LR warm-up then ReduceLROnPlateau.
 - Dropout applied between stacked LSTM layers when `--layers > 1`.
 - Default: `hidden=64`, `layers=1`, `dropout=0.1`, `epochs=150`, `batch_size=32`, `lr=1e-3`, `patience=15`.
 

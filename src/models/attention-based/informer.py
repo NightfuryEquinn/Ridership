@@ -85,7 +85,7 @@ from src.utils.comparison_table import (
 
 def parse_args():
     p = argparse.ArgumentParser(description="Informer forecaster — 15-way comparison")
-    p.add_argument("--seq-dir",              default="data/sequences/lstm")
+    p.add_argument("--seq-dir",              default=None)
     p.add_argument("--d-model",              type=int,   default=64,
                    help="Transformer model dimension")
     p.add_argument("--n-heads",              type=int,   default=4,
@@ -120,6 +120,12 @@ def parse_args():
     p.add_argument("--astgcn-results",       default=None)
     p.add_argument("--tft-results",          default=None)
     p.add_argument("--autoformer-results",   default=None)
+    p.add_argument("--lookback",      type=int,   default=14, choices=[14, 28, 56],
+                   help="Look-back window; auto-selects seq-dir when --seq-dir is not set")
+    p.add_argument("--loss",          default="huber", choices=["mse", "huber", "mae"],
+                   help="Training loss: mse | huber (default) | mae")
+    p.add_argument("--warmup-epochs", type=int,   default=5,
+                   help="Linear LR warm-up epochs before ReduceLROnPlateau kicks in")
     return p.parse_args()
 
 
@@ -474,9 +480,9 @@ def evaluate(model, loader, criterion, use_amp) -> float:
 
 def plot_loss_curves(train_losses, val_losses, out_path):
     fig, ax = plt.subplots(figsize=(9, 4))
-    ax.plot(train_losses, label="Train MSE", linewidth=1.5, color="#9333ea")
-    ax.plot(val_losses,   label="Val MSE",   linewidth=1.5, color="#f97316", linestyle="--")
-    ax.set_xlabel("Epoch"); ax.set_ylabel("MSE loss (scaled)")
+    ax.plot(train_losses, label="Train Loss", linewidth=1.5, color="#9333ea")
+    ax.plot(val_losses,   label="Val Loss",   linewidth=1.5, color="#f97316", linestyle="--")
+    ax.set_xlabel("Epoch"); ax.set_ylabel("Loss (scaled)")
     ax.set_title("Informer — Training curves")
     ax.legend(); ax.grid(alpha=0.3); fig.tight_layout()
     fig.savefig(out_path, dpi=150); plt.close(fig); print(f"  Saved: {out_path}")
@@ -549,6 +555,11 @@ def plot_per_step_metrics(per_step, out_path):
 
 def main():
     args = parse_args()
+
+    if args.seq_dir is None:
+        args.seq_dir = ("data/sequences/lstm" if args.lookback == 14
+                        else f"data/sequences/lookback_{args.lookback}")
+
     torch.manual_seed(args.seed); np.random.seed(args.seed)
 
     if args.device == "auto":
@@ -595,22 +606,33 @@ def main():
     print(f"  Dec input : (batch, {T_label + T_out}, {n_features})   Out: (batch, {T_out})")
     print(f"  Params    : {n_params:,}")
 
-    criterion = nn.MSELoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    if args.loss == "huber":
+        criterion = nn.HuberLoss(delta=1.0)
+    elif args.loss == "mae":
+        criterion = nn.L1Loss()
+    else:
+        criterion = nn.MSELoss()
+    optimiser = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5
     )
 
     best_val_loss = float("inf"); best_epoch = 0; patience_count = 0
     train_losses, val_losses = [], []; best_state = None
-    print(f"\nTraining  (max {args.epochs} epochs, patience={args.patience})")
-    print(f"{'Epoch':>6}  {'Train MSE':>10}  {'Val MSE':>10}  {'LR':>10}"); print("─" * 45)
+    print(f"\nTraining  (max {args.epochs} epochs, patience={args.patience}, warmup={args.warmup_epochs})")
+    print(f"{'Epoch':>6}  {'Train Loss':>10}  {'Val Loss':>10}  {'LR':>10}"); print("─" * 45)
 
     for epoch in range(1, args.epochs + 1):
+        if epoch <= args.warmup_epochs:
+            warmup_lr = args.lr * epoch / args.warmup_epochs
+            for pg in optimiser.param_groups:
+                pg["lr"] = warmup_lr
         tr_loss = train_one_epoch(model, train_loader, optimiser, criterion, scaler, use_amp)
         va_loss = evaluate(model, val_loader, criterion, use_amp)
         train_losses.append(tr_loss); val_losses.append(va_loss)
-        scheduler.step(va_loss); lr_now = optimiser.param_groups[0]["lr"]
+        if epoch > args.warmup_epochs:
+            scheduler.step(va_loss)
+        lr_now = optimiser.param_groups[0]["lr"]
         print(f"{epoch:6d}  {tr_loss:10.6f}  {va_loss:10.6f}  {lr_now:10.2e}")
         if va_loss < best_val_loss:
             best_val_loss, best_epoch, patience_count = va_loss, epoch, 0
@@ -661,7 +683,8 @@ def main():
             "e_layers": args.e_layers, "d_layers": args.d_layers, "factor": args.factor,
             "T_label": T_label, "dropout": args.dropout, "T_in": T_in, "T_out": T_out,
             "n_features": n_features, "batch_size": args.batch_size, "lr": args.lr,
-            "weight_decay": args.weight_decay,
+            "weight_decay": args.weight_decay, "loss": args.loss,
+            "warmup_epochs": args.warmup_epochs,
         },
         "training": {
             "best_epoch": best_epoch, "best_val_loss": round(best_val_loss, 8),
