@@ -1,12 +1,6 @@
 """
 tft.py  — Temporal Fusion Transformer for Transit Ridership Forecasting
 
-Implements the architecture from:
-  Lim, B., Arık, S. Ö., Loeff, N., & Pfister, T. (2021).
-  "Temporal Fusion Transformers for Interpretable Multi-horizon Time Series
-  Forecasting."  International Journal of Forecasting, 37(4), 1748-1764.
-  arXiv:1912.09363
-
 Adaptation:
   The original TFT uses static metadata, known future inputs, and
   observed past inputs. Since all 59 features are observed past inputs
@@ -88,9 +82,10 @@ def parse_args():
                    help="Transformer self-attention layers")
     p.add_argument("--dropout",              type=float, default=0.1)
     p.add_argument("--batch-size",           type=int,   default=32)
-    p.add_argument("--epochs",               type=int,   default=50)
+    p.add_argument("--epochs",               type=int,   default=150)
     p.add_argument("--lr",                   type=float, default=1e-3)
-    p.add_argument("--patience",             type=int,   default=10)
+    p.add_argument("--weight-decay",         type=float, default=1e-4)
+    p.add_argument("--patience",             type=int,   default=15)
     p.add_argument("--device",               default="auto")
     p.add_argument("--seed",                 type=int,   default=42)
     p.add_argument("--lstm-results",         default=None)
@@ -447,6 +442,9 @@ def main():
     use_amp = (device.type == "cuda")
     scaler  = GradScaler(enabled=use_amp)
     print(f"Device: {device}   AMP: {'enabled (fp16)' if use_amp else 'disabled'}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
     T_in = X_tr.shape[1]; n_features = X_tr.shape[2]; T_out = y_tr.shape[1]
@@ -476,7 +474,7 @@ def main():
     print(f"  Params       : {n_params:,}")
 
     criterion = nn.MSELoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5
     )
@@ -541,6 +539,7 @@ def main():
             "n_lstm_layers": args.n_lstm_layers, "n_attn_layers": args.n_attn_layers,
             "dropout": args.dropout, "T_in": T_in, "T_out": T_out,
             "n_features": n_features, "batch_size": args.batch_size, "lr": args.lr,
+            "weight_decay": args.weight_decay,
         },
         "training": {
             "best_epoch": best_epoch, "best_val_loss": round(best_val_loss, 8),

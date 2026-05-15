@@ -1,11 +1,6 @@
 """
 mtgnn.py  — Multi-Scale Temporal Graph Neural Network (MTGNN)
 
-Implements the architecture from:
-  Wu, Z., Pan, S., Long, G., Jiang, J., Chang, X., & Zhang, C. (2020).
-  "Connecting the Dots: Multivariate Time Series Forecasting with Graph
-  Neural Networks."  KDD 2020.  arXiv:2005.11650
-
 Adaptation for multivariate feature-node graph:
   The n_features input features are treated as N graph nodes with scalar
   signals.  MTGNN learns an asymmetric directed adjacency via two trainable
@@ -88,8 +83,8 @@ def parse_args():
     p.add_argument("--weight-decay",       type=float, default=1e-4)
     p.add_argument("--batch-size",         type=int,   default=32)
     p.add_argument("--epochs",             type=int,   default=150)
-    p.add_argument("--lr",                 type=float, default=5e-4)
-    p.add_argument("--patience",           type=int,   default=20)
+    p.add_argument("--lr",                 type=float, default=1e-3)
+    p.add_argument("--patience",           type=int,   default=15)
     p.add_argument("--device",             default="auto")
     p.add_argument("--seed",               type=int,   default=42)
     p.add_argument("--lstm-results",       default=None)
@@ -412,6 +407,9 @@ def main():
     else:
         device = torch.device(args.device)
     print(f"Device: {device}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
     T_in       = X_tr.shape[1]

@@ -1,12 +1,6 @@
 """
 stsgcn.py  — Spatial-Temporal Synchronous Graph Convolutional Network (STSGCN)
 
-Implements the architecture from:
-  Song, C., Lin, Y., Guo, S., & Wan, H. (2020).
-  "Spatial-Temporal Synchronous Graph Convolutional Networks: A New Framework
-  for Spatial-Temporal Network Data Forecasting."  AAAI 2020.
-  arXiv:1903.02495
-
 Adaptation for multivariate feature-node graph:
   The n_features input features are treated as N graph nodes. STSGCN builds a
   Spatial-Temporal Synchronous Graph (STSG) that captures both spatial and
@@ -94,9 +88,9 @@ def parse_args():
     p.add_argument("--dropout",           type=float, default=0.1)
     p.add_argument("--weight-decay",      type=float, default=1e-4)
     p.add_argument("--batch-size",        type=int,   default=32)
-    p.add_argument("--epochs",            type=int,   default=200)
-    p.add_argument("--lr",                type=float, default=3e-4)
-    p.add_argument("--patience",          type=int,   default=20)
+    p.add_argument("--epochs",            type=int,   default=150)
+    p.add_argument("--lr",                type=float, default=1e-3)
+    p.add_argument("--patience",          type=int,   default=15)
     p.add_argument("--device",            default="auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -441,6 +435,9 @@ def main():
     else:
         device = torch.device(args.device)
     print(f"Device: {device}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
     T_in       = X_tr.shape[1]

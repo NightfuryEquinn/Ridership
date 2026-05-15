@@ -1,11 +1,6 @@
 """
 stfgnn.py  — Spatial-Temporal Fusion Graph Neural Network (STFGNN)
 
-Implements the architecture from:
-  Li, M., Shi, H., & Huang, C. (2021).
-  "Spatial-Temporal Fusion Graph Neural Networks for Traffic Flow Forecasting."
-  AAAI 2021.  arXiv:2012.09641
-
 Adaptation for multivariate feature-node graph:
   The n_features input features are treated as N graph nodes.  STFGNN fuses
   two complementary static graphs:
@@ -90,8 +85,8 @@ def parse_args():
     p.add_argument("--weight-decay",      type=float, default=1e-4)
     p.add_argument("--batch-size",        type=int,   default=32)
     p.add_argument("--epochs",            type=int,   default=150)
-    p.add_argument("--lr",                type=float, default=5e-4)
-    p.add_argument("--patience",          type=int,   default=20)
+    p.add_argument("--lr",                type=float, default=1e-3)
+    p.add_argument("--patience",          type=int,   default=15)
     p.add_argument("--device",            default="auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -427,6 +422,9 @@ def main():
     else:
         device = torch.device(args.device)
     print(f"Device: {device}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
     T_in       = X_tr.shape[1]

@@ -1,11 +1,6 @@
 """
 autoformer.py  — Autoformer for Transit Ridership Forecasting
 
-Implements the architecture from:
-  Wu, H., Xu, J., Wang, J., & Long, M. (2021).
-  "Autoformer: Decomposition Transformers with Auto-Correlation for
-  Long-Term Series Forecasting."  NeurIPS 2021.  arXiv:2106.13008
-
 Key ideas:
   1. Series Decomposition: X = MovingAvg(X) [trend] + (X − MovingAvg(X)) [seasonal]
      Applied as a learnable building block throughout encoder and decoder.
@@ -103,9 +98,10 @@ def parse_args():
                    help="Auto-correlation top-k factor (k = factor * log(L))")
     p.add_argument("--dropout",              type=float, default=0.1)
     p.add_argument("--batch-size",           type=int,   default=32)
-    p.add_argument("--epochs",               type=int,   default=50)
+    p.add_argument("--epochs",               type=int,   default=150)
     p.add_argument("--lr",                   type=float, default=1e-3)
-    p.add_argument("--patience",             type=int,   default=10)
+    p.add_argument("--weight-decay",         type=float, default=1e-4)
+    p.add_argument("--patience",             type=int,   default=15)
     p.add_argument("--device",               default="auto")
     p.add_argument("--seed",                 type=int,   default=42)
     p.add_argument("--lstm-results",         default=None)
@@ -233,28 +229,40 @@ class AutoCorrelation(nn.Module):
         K: torch.Tensor,
         V: torch.Tensor,
     ) -> torch.Tensor:
-        # Q, K, V: (B, L, d_model)
-        B, L, _ = Q.shape
+        # Q: (B, L_q, d_model)   K, V: (B, L_kv, d_model)
+        # L_q == L_kv for self-attention; may differ for cross-attention.
+        B, L_q,  _ = Q.shape
+        _, L_kv, _ = K.shape
 
-        Q = self.q_proj(Q).reshape(B, L, self.n_heads, self.d_head).permute(0, 2, 1, 3)
-        K = self.k_proj(K).reshape(B, L, self.n_heads, self.d_head).permute(0, 2, 1, 3)
-        V = self.v_proj(V).reshape(B, L, self.n_heads, self.d_head).permute(0, 2, 1, 3)
-        # (B, H, L, D)
+        Q = self.q_proj(Q).reshape(B, L_q,  self.n_heads, self.d_head).permute(0, 2, 1, 3)
+        K = self.k_proj(K).reshape(B, L_kv, self.n_heads, self.d_head).permute(0, 2, 1, 3)
+        V = self.v_proj(V).reshape(B, L_kv, self.n_heads, self.d_head).permute(0, 2, 1, 3)
+        # Q: (B, H, L_q, D)   K, V: (B, H, L_kv, D)
 
-        # FFT-based autocorrelation
-        # Cast to float32 for FFT stability under AMP
-        Q_f  = Q.float(); K_f = K.float(); V_f = V.float()
-        Q_fft = torch.fft.rfft(Q_f, dim=2, norm="ortho")     # (B, H, L//2+1, D)
-        K_fft = torch.fft.rfft(K_f, dim=2, norm="ortho")
+        # FFT-based cross-correlation
+        # Cast to float32 for FFT stability under AMP.
+        # Use nfft = max(L_q, L_kv) so both sequences fit, then trim to L_q.
+        Q_f = Q.float(); K_f = K.float(); V_f = V.float()
+        nfft  = max(L_q, L_kv)
+        Q_fft = torch.fft.rfft(Q_f, n=nfft, dim=2, norm="ortho")   # (B, H, nfft//2+1, D)
+        K_fft = torch.fft.rfft(K_f, n=nfft, dim=2, norm="ortho")
         corr_fft = Q_fft * torch.conj(K_fft)
-        corr = torch.fft.irfft(corr_fft, n=L, dim=2, norm="ortho")  # (B, H, L, D)
+        corr = torch.fft.irfft(corr_fft, n=nfft, dim=2, norm="ortho")  # (B, H, nfft, D)
+        corr = corr[:, :, :L_q, :]                                  # (B, H, L_q, D)
+
+        # Resample V to L_q when lengths differ (cross-attention case)
+        if L_kv != L_q:
+            V_f = F.adaptive_avg_pool1d(
+                V_f.reshape(B * self.n_heads, L_kv, self.d_head).permute(0, 2, 1),
+                L_q,
+            ).permute(0, 2, 1).reshape(B, self.n_heads, L_q, self.d_head)
 
         # Time-delay aggregation
-        out = self._time_delay_agg(V_f, corr)              # (B, H, L, D)
+        out = self._time_delay_agg(V_f, corr)              # (B, H, L_q, D)
         out = out.to(Q.dtype)                               # back to original dtype
 
         # Reshape
-        out = out.permute(0, 2, 1, 3).reshape(B, L, -1)    # (B, L, d_model)
+        out = out.permute(0, 2, 1, 3).reshape(B, L_q, -1)  # (B, L_q, d_model)
         return self.dropout(self.out_proj(out))
 
 
@@ -399,8 +407,9 @@ class AutoformerForecaster(nn.Module):
         ])
         self.dec_norm = nn.LayerNorm(d_model)
 
-        # Output projection: (B, T_out, d_model) → (B, T_out)
-        self.out_proj = nn.Linear(d_model, 1)
+        # Output projections: seasonal (d_model → 1) and trend (n_features → 1)
+        self.out_proj       = nn.Linear(d_model, 1)
+        self.trend_proj_out = nn.Linear(n_features, 1)
 
     @staticmethod
     def _sinusoidal_pe(length: int, d_model: int) -> torch.Tensor:
@@ -439,21 +448,19 @@ class AutoformerForecaster(nn.Module):
             trend_accum = trend_accum + trend_delta            # (B, 2*T_out, F)
         dec = self.dec_norm(dec)
 
-        # Project seasonal back to feature space and add trend
-        dec_feat = F * (dec / (dec.norm(dim=-1, keepdim=True) + 1e-6))   # rough scale
-        # Simpler: use a linear projection from d_model → F
-        # We use out_proj later, so here keep as (B, T_out, d_model)
-        # Take last T_out steps
-        dec_out     = dec[:, -T_out:, :]                      # (B, T_out, d_model)
-        trend_out   = trend_accum[:, -T_out:, :]              # (B, T_out, F)
+        # Take last T_out steps from seasonal and trend
+        dec_out   = dec[:, -T_out:, :]             # (B, T_out, d_model)
+        trend_out = trend_accum[:, -T_out:, :]     # (B, T_out, F)
 
-        # Final output: project decoder seasonal + add trend projection
-        # Seasonal part: d_model → 1 per step
-        # Trend part: F → 1 per step
+        # Seasonal part: d_model → 1 per step (learned)
         seasonal_pred = self.out_proj(
             dec_out.reshape(B * T_out, -1)
-        ).reshape(B, T_out)                                    # (B, T_out)
-        trend_pred = trend_out.mean(dim=-1)                    # (B, T_out) — mean over features
+        ).reshape(B, T_out)                        # (B, T_out)
+
+        # Trend part: F → 1 per step (learned, not a raw mean)
+        trend_pred = self.trend_proj_out(
+            trend_out.reshape(B * T_out, -1)
+        ).reshape(B, T_out)                        # (B, T_out)
 
         return seasonal_pred + trend_pred
 
@@ -600,6 +607,9 @@ def main():
     use_amp = (device.type == "cuda")
     scaler  = GradScaler(enabled=use_amp)
     print(f"Device: {device}   AMP: {'enabled (fp16)' if use_amp else 'disabled'}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
     T_in = X_tr.shape[1]; n_features = X_tr.shape[2]; T_out = y_tr.shape[1]
@@ -636,7 +646,7 @@ def main():
     print(f"  Params    : {n_params:,}")
 
     criterion = nn.MSELoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5
     )
@@ -702,6 +712,7 @@ def main():
             "moving_avg": moving_avg, "factor": args.factor,
             "dropout": args.dropout, "T_in": T_in, "T_out": T_out,
             "n_features": n_features, "batch_size": args.batch_size, "lr": args.lr,
+            "weight_decay": args.weight_decay,
         },
         "training": {
             "best_epoch": best_epoch, "best_val_loss": round(best_val_loss, 8),

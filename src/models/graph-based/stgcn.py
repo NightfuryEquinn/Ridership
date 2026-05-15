@@ -1,11 +1,6 @@
 """
 stgcn.py  — Spatio-Temporal Graph Convolutional Network (STGCN)
 
-Implements the ST-Conv block from:
-  Yu, B., Yin, H., & Zhu, Z. (2018). "Spatio-Temporal Graph Convolutional
-  Networks: A Deep Learning Framework for Traffic Forecasting."
-  IJCAI 2018.  arXiv:1709.04875
-
 Adaptation for multivariate feature-node graph:
   The n_features input features are treated as N graph nodes. The temporal
   dimension (T_in=14) provides the scalar signal for each node. The adjacency
@@ -83,14 +78,14 @@ def parse_args():
                    help="Number of ST-Conv blocks")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge")
-    p.add_argument("--dropout",           type=float, default=0.15,
+    p.add_argument("--dropout",           type=float, default=0.1,
                    help="Dropout on graph conv output")
     p.add_argument("--weight-decay",      type=float, default=1e-4,
                    help="Adam weight decay")
     p.add_argument("--batch-size",        type=int,   default=32)
-    p.add_argument("--epochs",            type=int,   default=200)
-    p.add_argument("--lr",                type=float, default=3e-4)
-    p.add_argument("--patience",          type=int,   default=20)
+    p.add_argument("--epochs",            type=int,   default=150)
+    p.add_argument("--lr",                type=float, default=1e-3)
+    p.add_argument("--patience",          type=int,   default=15)
     p.add_argument("--device",            default="auto", help="cpu | cuda | mps | auto")
     p.add_argument("--seed",              type=int,   default=42)
     p.add_argument("--lstm-results",      default=None)
@@ -522,6 +517,9 @@ def main():
     else:
         device = torch.device(args.device)
     print(f"Device: {device}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     # ── Data ──────────────────────────────────────────────────────────────────
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)

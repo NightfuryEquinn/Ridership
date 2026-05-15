@@ -1,11 +1,6 @@
 """
 astgcn.py  — Attention-Based Spatial-Temporal Graph Convolutional Network
 
-Implements the architecture from:
-  Guo, S., Lin, Y., Feng, N., Song, C., & Wan, H. (2019).
-  "Attention Based Spatial-Temporal Graph Convolutional Networks for Traffic
-  Flow Forecasting."  AAAI 2019.  arXiv:1811.05320
-
 Adaptation for multivariate feature-node graph:
   The n_features input features are treated as N graph nodes. Each node
   carries a scalar signal at each timestep. The graph adjacency is built
@@ -85,9 +80,10 @@ def parse_args():
                    help="Min abs Pearson correlation to keep graph edge")
     p.add_argument("--dropout",              type=float, default=0.1)
     p.add_argument("--batch-size",           type=int,   default=32)
-    p.add_argument("--epochs",               type=int,   default=50)
+    p.add_argument("--epochs",               type=int,   default=150)
     p.add_argument("--lr",                   type=float, default=1e-3)
-    p.add_argument("--patience",             type=int,   default=10)
+    p.add_argument("--weight-decay",         type=float, default=1e-4)
+    p.add_argument("--patience",             type=int,   default=15)
     p.add_argument("--device",               default="auto")
     p.add_argument("--seed",                 type=int,   default=42)
     p.add_argument("--lstm-results",         default=None)
@@ -462,6 +458,9 @@ def main():
     use_amp = (device.type == "cuda")
     scaler  = GradScaler(enabled=use_amp)
     print(f"Device: {device}   AMP: {'enabled (fp16)' if use_amp else 'disabled'}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     # Data
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
@@ -500,7 +499,7 @@ def main():
     print(f"  Params  : {n_params:,}")
 
     criterion = nn.MSELoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5
     )
@@ -566,6 +565,7 @@ def main():
             "n_heads": args.n_heads, "adj_threshold": args.adj_threshold,
             "dropout": args.dropout, "T_in": T_in, "T_out": T_out,
             "n_features": n_features, "batch_size": args.batch_size, "lr": args.lr,
+            "weight_decay": args.weight_decay,
         },
         "training": {
             "best_epoch": best_epoch, "best_val_loss": round(best_val_loss, 8),

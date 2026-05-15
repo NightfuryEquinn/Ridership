@@ -91,22 +91,23 @@ def parse_args():
     )
     p.add_argument("--seq-dir",          default="data/sequences/lstm",
                    help="Directory with X/y .npy splits")
-    p.add_argument("--hidden",           type=int,   default=512,
+    p.add_argument("--hidden",           type=int,   default=64,
                    help="BiLSTM hidden size (per direction)")
     p.add_argument("--layers",           type=int,   default=1,
                    help="Stacked BiLSTM layers")
-    p.add_argument("--dropout",          type=float, default=0.2,
+    p.add_argument("--dropout",          type=float, default=0.1,
                    help="Inter-layer BiLSTM dropout (active only when --layers > 1)")
-    p.add_argument("--cnn-filters",      type=int,   default=128,
+    p.add_argument("--cnn-filters",      type=int,   default=32,
                    help="Number of CNN filters per convolutional layer")
-    p.add_argument("--cnn-layers",       type=int,   default=3,
+    p.add_argument("--cnn-layers",       type=int,   default=2,
                    help="Number of stacked 1-D CNN blocks")
     p.add_argument("--cnn-kernel-size",  type=int,   default=3,
                    help="1-D CNN kernel size (same-padding applied)")
     p.add_argument("--batch-size",       type=int,   default=32)
-    p.add_argument("--epochs",           type=int,   default=50)
+    p.add_argument("--epochs",           type=int,   default=150)
     p.add_argument("--lr",               type=float, default=1e-3)
-    p.add_argument("--patience",         type=int,   default=10)
+    p.add_argument("--weight-decay",     type=float, default=1e-4)
+    p.add_argument("--patience",         type=int,   default=15)
     p.add_argument("--device",           default="auto", help="cpu | cuda | mps | auto")
     p.add_argument("--seed",             type=int,   default=42)
     p.add_argument("--lstm-results",     default=None,
@@ -433,6 +434,9 @@ def main():
     else:
         device = torch.device(args.device)
     print(f"Device: {device}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     # ── Data ──────────────────────────────────────────────────────────────────
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
@@ -474,7 +478,7 @@ def main():
 
     # ── Optimiser / loss ──────────────────────────────────────────────────────
     criterion = nn.MSELoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5
     )
@@ -590,6 +594,7 @@ def main():
             "n_features":      n_features,
             "batch_size":      args.batch_size,
             "lr":              args.lr,
+            "weight_decay":    args.weight_decay,
         },
         "training": {
             "best_epoch":    best_epoch,

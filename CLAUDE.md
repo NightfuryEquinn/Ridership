@@ -131,3 +131,26 @@ Each model run writes to `src/outputs/{model_name}/{YYYYMMDD_HHMMSS}/`:
 - MCO period (2020-03-18 – 2021-12-31) excluded from sequences by default
 - Sequences stored as `float16` by default; load and cast to `float32` before feeding to models
 - All scalers fitted on training split only (`scaler_X.pkl`, `scaler_y.pkl`)
+
+### Standardised Initial-Run (No Fine-Tuning) Hyperparameters
+
+All 15 models share the same training schedule for the initial baseline comparison run. These values are baked in as argparse defaults and must not be changed per-model without explicit justification.
+
+| Parameter | Value | Applies to |
+|-----------|-------|------------|
+| `epochs` | 150 | all models |
+| `batch_size` | 32 | all models |
+| `lr` | 1e-3 | all models |
+| `patience` | 15 | all models |
+| `dropout` | 0.1 | all models |
+| `weight_decay` | 1e-4 | all models |
+
+Architecture defaults (per-model, aligned with MODEL.md):
+- LSTM / BiLSTM / TPA-LSTM: `hidden=64`, `layers=1`
+- CNN-LSTM / CNN-BiLSTM: `hidden=64`, `cnn_filters=32`, `cnn_layers=2`
+- ST-LSTM: `hidden=64`, `spatial_hidden=32`
+- STGCN / PDR-STGCN: `hidden=128`, `kt=3`, `n_blocks=2`
+- MTGNN: `hidden=32`, `skip_ch=64`, `n_layers=3`, `d_emb=10`, `d_hop=2`
+- STSGCN: `hidden=64`, `n_layers=2`, `cheb_k=2`
+- STFGNN: `hidden=64`, `n_layers=3`
+- ASTGCN / TFT / Autoformer / Informer: `d_model=64`, `n_heads=4`

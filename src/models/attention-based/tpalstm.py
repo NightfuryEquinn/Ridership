@@ -2,10 +2,7 @@
 tpa_lstm.py  — Temporal Pattern Attention LSTM for Transit Ridership Forecasting
 
 Mirrors lstm_baseline.py and bilstm.py in training loop, metrics, and plot
-style. Adds the TPA (Temporal Pattern Attention) mechanism described in:
-
-  Shih et al. (2019) "Temporal Pattern Attention for Multivariate Time Series
-  Forecasting." ECML-PKDD 2019. https://arxiv.org/abs/1809.04206
+style. Adds the TPA (Temporal Pattern Attention) mechanism.
 
 Why TPA-LSTM over LSTM / BiLSTM for this task?
   Standard LSTM reads the sequence left-to-right and compresses everything
@@ -92,16 +89,17 @@ def parse_args():
                    help="LSTM hidden size")
     p.add_argument("--layers",         type=int,   default=1,
                    help="LSTM stacked layers")
-    p.add_argument("--dropout",        type=float, default=0.2,
+    p.add_argument("--dropout",        type=float, default=0.1,
                    help="Inter-layer dropout (active only when --layers > 1)")
     p.add_argument("--filters",        type=int,   default=32,
                    help="Number of CNN filters in the TPA attention module")
     p.add_argument("--kernel-size",    type=int,   default=3,
                    help="1-D CNN kernel size in the TPA attention module")
-    p.add_argument("--batch-size",     type=int,   default=64)
+    p.add_argument("--batch-size",     type=int,   default=32)
     p.add_argument("--epochs",         type=int,   default=150)
     p.add_argument("--lr",             type=float, default=1e-3)
-    p.add_argument("--patience",       type=int,   default=10)
+    p.add_argument("--weight-decay",   type=float, default=1e-4)
+    p.add_argument("--patience",       type=int,   default=15)
     p.add_argument("--device",         default="auto", help="cpu | cuda | mps | auto")
     p.add_argument("--seed",           type=int,   default=42)
     p.add_argument("--lstm-results",   default=None,
@@ -129,7 +127,7 @@ def parse_args():
 
 class TemporalPatternAttention(nn.Module):
     """
-    TPA attention module (Shih et al. 2019).
+    TPA attention module.
 
     Takes the full LSTM hidden-state sequence H and the final hidden state h_T
     and returns a context vector of size `hidden_size`.
@@ -575,6 +573,9 @@ def main():
     else:
         device = torch.device(args.device)
     print(f"Device: {device}")
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
 
     # ── Data ──────────────────────────────────────────────────────────────────
     (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
@@ -613,7 +614,7 @@ def main():
 
     # ── Optimiser / loss ──────────────────────────────────────────────────────
     criterion = nn.MSELoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimiser, mode="min", factor=0.5, patience=5
     )
@@ -722,6 +723,7 @@ def main():
             "n_features":  n_features,
             "batch_size":  args.batch_size,
             "lr":          args.lr,
+            "weight_decay": args.weight_decay,
         },
         "training": {
             "best_epoch":    best_epoch,
