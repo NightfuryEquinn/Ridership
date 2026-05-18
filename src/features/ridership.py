@@ -29,7 +29,7 @@ def main():
     print(df.head())
 
     # ── 1. Parse date ─────────────────────────────────────────────────────────────
-    df["date"] = pd.to_datetime(df["date"], dayfirst=True)
+    df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
     df = df.sort_values("date").reset_index(drop=True)
 
     # ── 2. Flag MCO period — do NOT remove ───────────────────────────────────────
@@ -55,7 +55,7 @@ def main():
     # Zero-fill ONLY for dates on or after the launch date.
     launch_dates = {
         "bus_rkl":            "2022-01-01",
-        "bus_rpn":            "2022-01-01",
+"bus_rpn":            "2022-01-01",
         "rail_ets":           "2020-10-15",
         "rail_intercity":     "2020-10-15",
         "rail_komuter_utara": "2020-10-15",
