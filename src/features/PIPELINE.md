@@ -16,7 +16,7 @@ Raw data (data/raw/)
         │
         ▼
  feature_align.py    ─── merges all sources onto a daily date index
-        │
+        │                 also computes lag features + year/day_of_year
         ▼
  sequence_builder.py ─── sliding-window tensors (X, y) for all 15 models
         │
@@ -190,9 +190,19 @@ Outputs:
 
 ## Step 2 — Feature Alignment
 
-Merges all 8 cleaned sources onto a single daily date index, producing the
-flat feature matrix consumed by every model. Static sources (population,
-GTFS, OSM POI, GADM) are broadcast to all dates.
+Merges all 8 cleaned sources onto a single daily date index. Also computes
+two derived feature sets inline:
+
+- **Autoregressive lag features** (`ridership_lag_{7,14,28}`) — computed from
+  the full historical ridership series so the first rows of the 2022 window
+  have valid values even for the 28-day lag.
+- **Secular trend features** (`year`, `day_of_year`) — capture the post-MCO
+  ridership recovery trajectory and intra-year seasonality not captured by
+  monthly cyclical encoding.
+
+Static sources (population, GTFS, OSM POI, GADM) are broadcast to all dates.
+Any source whose cleaned file is absent prints `[SKIP]` and is omitted from
+the matrix — the pipeline still produces a valid (but partial) output.
 
 ```bash
 python src/features/feature_align.py
@@ -219,8 +229,18 @@ Outputs:
 - `data/features/feature_metadata.json` — column groups, source list, null counts
 
 The terminal output reports the total feature count and a breakdown by group
-(targets, temporal, external, static). Feature sources included are listed
+(targets, temporal, external, lag, static). Feature sources included are listed
 explicitly; any `[SKIP]` messages indicate a cleaning script has not been run.
+
+**Expected feature count** (all 8 sources present): ~69 columns
+
+| Group | Count | Source |
+|---|---|---|
+| Targets | 13 | ridership (12 lines + total) |
+| Temporal | 16 | holiday flags/lead-lag/cyclical + year + day_of_year |
+| External | 30 | fuel (15) + rainfall (15) |
+| Lag | 3 | ridership_lag_7/14/28 |
+| Static | 17 | population + GTFS + OSM POI + GADM |
 
 ---
 
@@ -266,28 +286,32 @@ Tensor shapes:
 ## Full Run (copy-paste)
 
 ```bash
-# 1. Independent cleaning scripts
+# 1a–1d. Core independent cleaning scripts
 python src/features/ridership.py
 python src/features/fuelprice.py
 python src/features/holiday.py
 python src/features/rainfall.py
+
+# 1e. GADM boundaries
 python src/features/gadm.py
 
-# GTFS — one call per operator
+# 1f. GTFS — one call per operator
 python src/features/gtfs.py --input data/raw/gtfs_rapid_rail_kl  --output data/cleaned/gtfs_rapid_rail_kl  --operator rapid_rail_kl
 python src/features/gtfs.py --input data/raw/gtfs_rapidbus_kl    --output data/cleaned/gtfs_rapidbus_kl    --operator rapidbus_kl
 python src/features/gtfs.py --input data/raw/gtfs_rapidbus_penang --output data/cleaned/gtfs_rapidbus_penang --operator rapidbus_penang
 python src/features/gtfs.py --input data/raw/gtfs_ktmb           --output data/cleaned/gtfs_ktmb           --operator ktmb
 
-# 2. Scripts that depend on GADM + GTFS outputs
+# 1g–1h. Scripts that depend on GADM + GTFS outputs
 python src/features/population.py
 python src/features/osm.py
 
-# 3. Feature alignment (all 8 sources → one daily matrix)
+# 2. Feature alignment (all 8 sources + lag + trend → one daily matrix)
 python src/features/feature_align.py
 
-# 4. Sequence builder (daily matrix → model-ready tensors)
-python src/features/sequence_builder.py
+# 3. Sequence builder (daily matrix → model-ready tensors, repeat for each lookback)
+python src/features/sequence_builder.py               # --T-in 14  → data/sequences/lstm/
+python src/features/sequence_builder.py --T-in 28     # → data/sequences/lookback_28/
+python src/features/sequence_builder.py --T-in 56     # → data/sequences/lookback_56/
 ```
 
 ---
@@ -307,7 +331,12 @@ python src/features/sequence_builder.py
   cleaned file is not yet present. The matrix is still produced with whatever
   sources are available, but the missing features will not be in it.
 
-- **Graph adjacency** — Graph-based models (STGCN, Graph WaveNet, DCRNN, STGAT,
-  PatchTST+Graph, ASTGCN) build their feature-correlation adjacency matrix
+- **Lag features** — `ridership_lag_{7,14,28}` are computed from the full
+  historical ridership series (2019-present) so that rows at 2022-01-01 have
+  valid values. For lookback=14, `ridership_lag_28` provides 28-day look-back
+  that the sequence window alone cannot reach.
+
+- **Graph adjacency** — Graph-based models (STGCN, MTGNN, STSGCN, STFGNN,
+  PDR-STGCN, ASTGCN) build their feature-correlation adjacency matrix
   on-the-fly at training time from the N_features columns in `X_train.npy`.
   No separate graph file is needed.

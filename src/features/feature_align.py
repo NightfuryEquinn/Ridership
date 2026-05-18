@@ -9,7 +9,7 @@ the flat feature matrix consumed by sequence_builder.py and used by all
   Graph-based      : STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN
   Attention-based  : TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
 
-All 8 spatio-temporal feature sources are incorporated:
+All 8 feature sources are incorporated:
 
   Temporal / dynamic (vary by date):
     data/cleaned/ridership_headline_clean.csv       ← ridership service levels
@@ -17,6 +17,10 @@ All 8 spatio-temporal feature sources are incorporated:
     data/cleaned/fuelprice_change_daily.csv         ← daily fuel price changes
     data/cleaned/holiday_daily_features.csv         ← holiday flags + cyclical encoding
     data/cleaned/rainfall_wide_daily.csv            ← daily rainfall per state
+
+  Derived (computed from above):
+    ridership_lag_{7,14,28}                         ← autoregressive lag features
+    year, day_of_year                               ← secular trend + intra-year position
 
   Static (broadcast to all dates):
     data/cleaned/population_density_clean.csv       ← national population density
@@ -77,7 +81,9 @@ def main():
 
     aligned = pd.DataFrame(index=master_idx)
 
-    # ── 2. Ridership (target + service-level features) ───────────────────────────
+    # ── [1/8] Ridership (target + service-level features) ────────────────────────
+    # Load the FULL historical series (2019-present) so lag features can be
+    # computed without losing the first 28 days of the master date range.
     print("\n[1/8] Loading ridership...")
     ridership = load_indexed("data/cleaned/ridership_headline_clean.csv")
 
@@ -94,7 +100,29 @@ def main():
     print(f"  Ridership columns added: {list(service_cols)}")
     print(f"  Null rate: {aligned[list(service_cols)].isnull().mean().mean():.2%}")
 
-    # ── 3. Fuel price (daily forward-filled) ──────────────────────────────────────
+    # ── Autoregressive lag features ───────────────────────────────────────────────
+    # Computed from the FULL ridership series (extends before DATE_START) so that
+    # the first rows of the master window have valid lag values.
+    # For lookback=14: lag_28 falls outside the window — having it as an explicit
+    # feature lets the model see further back without extending the sequence length.
+    lag_cols = []
+    if "total_ridership" in ridership.columns:
+        total_full = ridership["total_ridership"].astype(float)
+        for lag in [7, 14, 28]:
+            lag_series          = total_full.shift(lag)
+            col_name            = f"ridership_lag_{lag}"
+            lag_series.name     = col_name
+            aligned[col_name]   = lag_series.reindex(master_idx).bfill()
+            lag_cols.append(col_name)
+        print(f"  Lag features added: {lag_cols}")
+
+    # ── Secular trend + intra-year position ──────────────────────────────────────
+    aligned["year"]        = aligned.index.year
+    aligned["day_of_year"] = aligned.index.dayofyear
+    trend_cols = ["year", "day_of_year"]
+    print(f"  Trend features added: {trend_cols}")
+
+    # ── [2/8] Fuel price (daily forward-filled) ───────────────────────────────────
     print("\n[2/8] Loading fuel prices...")
     fuel_level  = load_indexed("data/cleaned/fuelprice_level_daily.csv")
     fuel_change = load_indexed("data/cleaned/fuelprice_change_daily.csv")
@@ -110,7 +138,7 @@ def main():
     print(f"  Fuel price columns: {fp_cols}")
     print(f"  Null rate: {aligned[fp_cols].isnull().mean().mean():.2%}")
 
-    # ── 4. Holiday / cyclical features ────────────────────────────────────────────
+    # ── [3/8] Holiday / cyclical features ─────────────────────────────────────────
     print("\n[3/8] Loading holiday features...")
     holidays = load_indexed("data/cleaned/holiday_daily_features.csv")
     holidays  = holidays.reindex(master_idx).fillna(0)
@@ -119,7 +147,7 @@ def main():
     hol_cols = list(holidays.columns)
     print(f"  Holiday columns: {hol_cols[:8]}{'...' if len(hol_cols) > 8 else ''}")
 
-    # ── 5. Rainfall (state-level wide format) ─────────────────────────────────────
+    # ── [4/8] Rainfall (state-level wide format) ──────────────────────────────────
     print("\n[4/8] Loading rainfall...")
     rainfall = load_indexed("data/cleaned/rainfall_wide_daily.csv")
     rainfall  = rainfall.reindex(master_idx)
@@ -130,7 +158,7 @@ def main():
     print(f"  Rainfall state columns: {len(rf_mm_cols)}")
     print(f"  Null rate: {aligned[rf_mm_cols].isnull().mean().mean():.2%}")
 
-    # ── 6. Population density (static — broadcast to all dates) ──────────────────
+    # ── [5/8] Population density (static — broadcast to all dates) ───────────────
     print("\n[5/8] Loading population density summary...")
     try:
         pop = pd.read_csv("data/cleaned/population_density_clean.csv")
@@ -143,9 +171,7 @@ def main():
     except FileNotFoundError:
         print("  [SKIP] population_density_clean.csv not found")
 
-    # ── 7. GTFS static network features (static — broadcast to all dates) ─────────
-    # Aggregate stop counts, route counts, edge counts, and mean segment travel time
-    # across all transit operators to provide network topology context to every model.
+    # ── [6/8] GTFS static network features (static — broadcast to all dates) ───────
     print("\n[6/8] Loading GTFS static network features...")
     gtfs_cols = []
     node_frames = [pd.read_csv(p) for p in glob.glob("data/cleaned/gtfs_*/gtfs_stop_nodes_*.csv")]
@@ -174,9 +200,7 @@ def main():
     else:
         print("  [SKIP] No GTFS node tables found — run gtfs.py first")
 
-    # ── 8. OSM POI network features (static — broadcast to all dates) ─────────────
-    # Mean POI count per transit stop, by category, provides spatial amenity
-    # context that correlates with ridership demand at each timestep.
+    # ── [7/8] OSM POI network features (static — broadcast to all dates) ───────────
     print("\n[7/8] Loading OSM POI network features...")
     poi_cols = []
     try:
@@ -192,9 +216,7 @@ def main():
     except FileNotFoundError:
         print("  [SKIP] poi_counts_at_stops.csv not found — run osm.py first")
 
-    # ── 9. GADM boundary features (static — broadcast to all dates) ───────────────
-    # State count, number of shared-border pairs, and mean border length capture
-    # the spatial connectivity structure of the Malaysian transit region.
+    # ── [8/8] GADM boundary features (static — broadcast to all dates) ─────────────
     print("\n[8/8] Loading GADM boundary features...")
     gadm_cols = []
     try:
@@ -215,7 +237,7 @@ def main():
     except FileNotFoundError:
         print("  [SKIP] GADM files not found — run gadm.py first")
 
-    # ── Final null audit ─────────────────────────────────────────────────────────
+    # ── Final null audit ──────────────────────────────────────────────────────────
     print("\n=== Null Audit (aligned matrix) ===")
     null_pct = aligned.isnull().mean().mul(100).round(2)
     if null_pct.max() > 0:
@@ -227,9 +249,9 @@ def main():
     print(f"\nAligned feature matrix shape: {aligned.shape}")
     print(f"  {len(aligned)} rows (days)  ×  {aligned.shape[1]} feature columns")
 
-    # ── 10. Feature metadata ──────────────────────────────────────────────────────
+    # ── Feature metadata ───────────────────────────────────────────────────────────
     target_cols   = ["total_ridership"] + [c for c in service_cols if c != "total_ridership"]
-    temporal_cols = hol_cols
+    temporal_cols = hol_cols + trend_cols
     external_cols = fp_cols + rf_mm_cols
     static_cols   = (
         ["pop_density_median", "pop_density_log_median"]
@@ -238,19 +260,21 @@ def main():
         + gadm_cols
     )
 
+    sources_present = [
+        "ridership", "fuel_price", "holiday_cyclical", "rainfall",
+        "population_density", "gtfs_static", "osm_poi", "gadm_boundaries",
+    ]
+
     metadata = {
         "date_range":      {"start": DATE_START, "end": DATE_END},
         "total_features":  int(aligned.shape[1]),
         "total_days":      int(len(aligned)),
-        "feature_sources": [
-            "ridership", "fuel_price", "holiday_cyclical",
-            "rainfall", "population_density",
-            "gtfs_static", "osm_poi", "gadm_boundaries",
-        ],
+        "feature_sources": sources_present,
         "column_groups": {
             "targets":    [c for c in target_cols    if c in aligned.columns],
             "temporal":   [c for c in temporal_cols  if c in aligned.columns],
             "external":   [c for c in external_cols  if c in aligned.columns],
+            "lag":        [c for c in lag_cols        if c in aligned.columns],
             "static":     [c for c in static_cols    if c in aligned.columns],
         },
         "null_counts": {col: int(v) for col, v in aligned.isnull().sum().items() if v > 0},
@@ -259,16 +283,19 @@ def main():
     with open(f"{OUT_DIR}/feature_metadata.json", "w") as f:
         json.dump(metadata, f, indent=2)
 
-    # ── 11. Export ────────────────────────────────────────────────────────────────
+    # ── Export ─────────────────────────────────────────────────────────────────────
     aligned.to_csv(f"{OUT_DIR}/features_aligned.csv")
 
     print("\nExported:")
     print(f"  {OUT_DIR}/features_aligned.csv    ← feed into sequence_builder.py")
     print(f"  {OUT_DIR}/feature_metadata.json")
-    print(f"\nFeature sources included: {metadata['feature_sources']}")
-    print(f"Total features: {aligned.shape[1]}  (static={len(static_cols)}, "
-          f"temporal={len(temporal_cols)}, external={len(external_cols)}, "
-          f"targets={len([c for c in target_cols if c in aligned.columns])})")
+    print(f"\nFeature sources included: {sources_present}")
+    print(f"Total features: {aligned.shape[1]}")
+    print(f"  targets={len([c for c in target_cols if c in aligned.columns])}, "
+          f"temporal={len([c for c in temporal_cols if c in aligned.columns])}, "
+          f"external={len([c for c in external_cols if c in aligned.columns])}, "
+          f"lag={len([c for c in lag_cols if c in aligned.columns])}, "
+          f"static={len([c for c in static_cols if c in aligned.columns])}")
 
 
 if __name__ == "__main__":

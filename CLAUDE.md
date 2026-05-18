@@ -29,23 +29,27 @@ All scripts are run from the **repository root**. Each model file manually inser
 Full step-by-step instructions are in `src/features/PIPELINE.md`. The short version:
 
 ```bash
-# 1. Independent cleaning (any order)
+# 1a–1d. Core independent cleaning (any order)
 python src/features/ridership.py
 python src/features/fuelprice.py
 python src/features/holiday.py
 python src/features/rainfall.py
+
+# 1e. GADM
 python src/features/gadm.py
+
+# 1f. GTFS (one call per operator)
 python src/features/gtfs.py --input data/raw/gtfs_rapid_rail_kl --output data/cleaned/gtfs_rapid_rail_kl --operator rapid_rail_kl
 # (repeat gtfs.py for rapidbus_kl, rapidbus_penang, ktmb)
 
-# 2. Depends on gadm + gtfs outputs
+# 1g–1h. Depends on gadm + gtfs outputs
 python src/features/population.py
 python src/features/osm.py
 
-# 3. Merge all sources → daily matrix
+# 2. Merge all 8 sources → daily matrix (also computes lag + trend features)
 python src/features/feature_align.py
 
-# 4. Sliding-window tensors → data/sequences/{lstm | lookback_28 | lookback_56}/
+# 3. Sliding-window tensors → data/sequences/{lstm | lookback_28 | lookback_56}/
 python src/features/sequence_builder.py               # default: --T-in 14
 python src/features/sequence_builder.py --T-in 28     # → data/sequences/lookback_28/
 python src/features/sequence_builder.py --T-in 56     # → data/sequences/lookback_56/
@@ -85,7 +89,8 @@ data/raw/                      8 raw sources
     └── src/features/          cleaning scripts (one per source)
 data/cleaned/                  cleaned CSVs, GeoJSONs, .npy adjacency matrices
     └── feature_align.py       merges onto daily index → features_aligned.csv
-data/features/                 features_aligned.csv + feature_metadata.json
+                               also derives: ridership_lag_{7,14,28}, year, day_of_year
+data/features/                 features_aligned.csv (~69 cols) + feature_metadata.json
     └── sequence_builder.py    sliding windows, MinMaxScaler, chronological split
 data/sequences/lstm/           lookback=14 (default): X_train/val/test.npy, y_*.npy, scaler_X/y.pkl, split_dates.json
 data/sequences/lookback_28/    lookback=28: same layout
@@ -93,6 +98,16 @@ data/sequences/lookback_56/    lookback=56: same layout
     └── src/models/**/*.py     model training (--lookback selects the right dir)
 src/outputs/{model}/           timestamped run dirs with results.json, plots, model.pt
 ```
+
+**Feature count breakdown** (all 8 sources present, ~69 total):
+
+| Group | ~Count | Features |
+|---|---|---|
+| Targets | 13 | 12 service lines + total_ridership |
+| Temporal | 16 | holiday flags/lead-lag/cyclical + year + day_of_year |
+| External | 30 | fuel (15) + rainfall (15) |
+| Lag | 3 | ridership_lag_7, ridership_lag_14, ridership_lag_28 |
+| Static | 17 | population + GTFS + OSM POI + GADM |
 
 ### The Three Model Series
 

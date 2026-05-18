@@ -3,7 +3,7 @@
     "start": "2022-01-01",
     "end": "2025-12-31"
   },
-  "total_features": 74,
+  "total_features": 79,
   "total_days": 1461,
   "feature_sources": [
     "ridership",
@@ -45,7 +45,9 @@
       "dow_sin",
       "dow_cos",
       "month_sin",
-      "month_cos"
+      "month_cos",
+      "year",
+      "day_of_year"
     ],
     "external": [
       "fp_lv_ron95",
@@ -78,6 +80,11 @@
       "rainfall_mm__MY13",
       "rainfall_mm__MY15",
       "rainfall_mm__MY17"
+    ],
+    "lag": [
+      "ridership_lag_7",
+      "ridership_lag_14",
+      "ridership_lag_28"
     ],
     "static": [
       "pop_density_median",

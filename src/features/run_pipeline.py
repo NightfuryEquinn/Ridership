@@ -3,7 +3,7 @@ Master pipeline runner — Ridership feature engineering.
 
 Run from the repository root:
 
-    python run_pipeline.py [options]
+    python src/features/run_pipeline.py [options]
 
 Steps
 -----
@@ -15,7 +15,7 @@ Steps
   1f  GTFS x4 operators  (independent)
   1g  Population Density (depends on GADM + GTFS)
   1h  OSM POIs           (depends on GTFS)
-  2   Feature Alignment
+  2   Feature Alignment  (merges all 8 sources; derives lag + trend features)
   3   Sequence Builder   (once per look-back window: 14, 28, 56)
 
 Flags
@@ -102,16 +102,18 @@ def main() -> None:
     # ── Step 1: Cleaning ──────────────────────────────────────────────────
     if not args.skip_clean:
 
-        # 1a–1e: independent — no argument variants needed
+        # 1a–1d: independent static sources
         independent = [
-            ("1a  Ridership",       "src/features/ridership.py"),
-            ("1b  Fuel Price",      "src/features/fuelprice.py"),
-            ("1c  Holidays",        "src/features/holiday.py"),
-            ("1d  Rainfall",        "src/features/rainfall.py"),
-            ("1e  GADM Boundaries", "src/features/gadm.py"),
+            ("1a  Ridership",  "src/features/ridership.py"),
+            ("1b  Fuel Price", "src/features/fuelprice.py"),
+            ("1c  Holidays",   "src/features/holiday.py"),
+            ("1d  Rainfall",   "src/features/rainfall.py"),
         ]
         for label, script in independent:
             run([py, script], label)
+
+        # 1e: GADM boundaries
+        run([py, "src/features/gadm.py"], "1e  GADM Boundaries")
 
         # 1f: GTFS — one call per operator
         gtfs_operators = [
@@ -140,7 +142,7 @@ def main() -> None:
              "--date-start", args.date_start,
              "--date-end",   args.date_end,
              "--output-dir", args.output_dir],
-            "2   Feature Alignment",
+            "2   Feature Alignment  (8 sources + lag + trend → daily matrix)",
         )
 
     # ── Step 3: Sequence Builder (one run per look-back window) ───────────

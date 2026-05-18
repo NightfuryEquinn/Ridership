@@ -13,7 +13,7 @@
   },
   "T_in": 56,
   "T_out": 7,
-  "n_features": 74,
+  "n_features": 79,
   "target_col": "total_ridership",
   "target_col_idx": 12,
   "dtype": "float16",

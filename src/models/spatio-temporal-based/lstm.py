@@ -42,7 +42,7 @@ import matplotlib.gridspec as gridspec
 
 import sys as _sys
 import os as _os
-_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..', '..', '..', '..'))
+_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..', '..', '..'))
 if _ROOT not in _sys.path:
     _sys.path.insert(0, _ROOT)
 from src.utils.metrics import compute_metrics
