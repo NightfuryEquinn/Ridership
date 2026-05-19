@@ -61,15 +61,15 @@ from src.utils.comparison_table import (
 def parse_args():
     p = argparse.ArgumentParser(description="TFT (tuned) forecaster")
     p.add_argument("--seq-dir",              default=None)
-    p.add_argument("--d-model",              type=int,   default=128,
+    p.add_argument("--d-model",              type=int,   default=256,
                    help="Hidden dimension throughout TFT  [tuned: 128, base: 64]")
-    p.add_argument("--n-heads",              type=int,   default=8,
+    p.add_argument("--n-heads",              type=int,   default=16,
                    help="Number of attention heads  [tuned: 8, base: 4]")
     p.add_argument("--n-lstm-layers",        type=int,   default=2,
                    help="Stacked LSTM layers in encoder  [tuned: 2, base: 1]")
-    p.add_argument("--n-attn-layers",        type=int,   default=3,
+    p.add_argument("--n-attn-layers",        type=int,   default=4,
                    help="Transformer self-attention layers  [tuned: 3, base: 2]")
-    p.add_argument("--dropout",              type=float, default=0.25,
+    p.add_argument("--dropout",              type=float, default=0.15,
                    help="Dropout  [tuned: 0.25, base: 0.10]")
     p.add_argument("--batch-size",           type=int,   default=32)
     p.add_argument("--epochs",               type=int,   default=150)

@@ -60,13 +60,13 @@ def parse_args():
     )
     p.add_argument("--seq-dir",        default=None,
                    help="Directory with X/y .npy splits")
-    p.add_argument("--hidden",         type=int,   default=128,
+    p.add_argument("--hidden",         type=int,   default=256,
                    help="LSTM hidden size  [tuned: 128, base: 64]")
     p.add_argument("--layers",         type=int,   default=1,
                    help="LSTM stacked layers")
     p.add_argument("--dropout",        type=float, default=0.15,
                    help="Inter-layer dropout  [tuned: 0.15, base: 0.10]")
-    p.add_argument("--filters",        type=int,   default=64,
+    p.add_argument("--filters",        type=int,   default=128,
                    help="CNN filters in TPA module  [tuned: 64, base: 32]")
     p.add_argument("--kernel-size",    type=int,   default=3,
                    help="1-D CNN kernel size in TPA module")

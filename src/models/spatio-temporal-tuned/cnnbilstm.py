@@ -63,7 +63,7 @@ def parse_args():
                    help="Inter-layer BiLSTM dropout (active only when --layers > 1)")
     p.add_argument("--cnn-filters",      type=int,   default=64,
                    help="Number of CNN filters per convolutional layer")
-    p.add_argument("--cnn-layers",       type=int,   default=2,
+    p.add_argument("--cnn-layers",       type=int,   default=1,
                    help="Number of stacked 1-D CNN blocks")
     p.add_argument("--cnn-kernel-size",  type=int,   default=3,
                    help="1-D CNN kernel size (same-padding applied)")

@@ -59,9 +59,9 @@ def parse_args():
                    help="LSTM hidden size (temporal stream)")
     p.add_argument("--layers",            type=int,   default=1,
                    help="Stacked LSTM layers")
-    p.add_argument("--dropout",           type=float, default=0.20,
+    p.add_argument("--dropout",           type=float, default=0.3,
                    help="Inter-layer LSTM dropout (active only when --layers > 1)")
-    p.add_argument("--spatial-hidden",    type=int,   default=64,
+    p.add_argument("--spatial-hidden",    type=int,   default=128,
                    help="Spatial encoder hidden size (per-timestep MLP output dim)")
     p.add_argument("--batch-size",        type=int,   default=32)
     p.add_argument("--epochs",            type=int,   default=150)

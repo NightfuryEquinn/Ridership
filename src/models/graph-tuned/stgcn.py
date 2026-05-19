@@ -74,17 +74,17 @@ def parse_args():
     p = argparse.ArgumentParser(description="Tuned STGCN forecaster with 7-way comparison")
     p.add_argument("--seq-dir",           default=None,
                    help="Directory with X/y .npy splits")
-    p.add_argument("--hidden",            type=int,   default=256,
+    p.add_argument("--hidden",            type=int,   default=512,
                    help="Graph conv channel width (C_mid = C_out = hidden)")
     p.add_argument("--cheb-k",            type=int,   default=3,
                    help="Chebyshev polynomial order K")
     p.add_argument("--kt",                type=int,   default=2,
                    help="Temporal conv kernel size (reduced from 3 to satisfy T_after>0 with n_blocks=3)")
-    p.add_argument("--n-blocks",          type=int,   default=3,
+    p.add_argument("--n-blocks",          type=int,   default=4,
                    help="Number of ST-Conv blocks")
-    p.add_argument("--adj-threshold",     type=float, default=0.1,
+    p.add_argument("--adj-threshold",     type=float, default=0.05,
                    help="Min abs Pearson correlation to keep an edge")
-    p.add_argument("--dropout",           type=float, default=0.15,
+    p.add_argument("--dropout",           type=float, default=0.1,
                    help="Dropout on graph conv output")
     p.add_argument("--weight-decay",      type=float, default=1e-4,
                    help="Adam weight decay")

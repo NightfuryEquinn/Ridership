@@ -75,15 +75,15 @@ from src.utils.comparison_table import (
 def parse_args():
     p = argparse.ArgumentParser(description="Tuned STSGCN forecaster — 10-way comparison")
     p.add_argument("--seq-dir",           default=None)
-    p.add_argument("--hidden",            type=int,   default=128,
+    p.add_argument("--hidden",            type=int,   default=256,
                    help="Channel width in STSGCL layers")
-    p.add_argument("--n-layers",          type=int,   default=3,
+    p.add_argument("--n-layers",          type=int,   default=4,
                    help="Number of STSGCL layers (each shrinks T by 2)")
-    p.add_argument("--cheb-k",            type=int,   default=2,
+    p.add_argument("--cheb-k",            type=int,   default=3,
                    help="Chebyshev polynomial order K for STSG conv")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
                    help="Min abs Pearson correlation to keep a spatial edge")
-    p.add_argument("--dropout",           type=float, default=0.20)
+    p.add_argument("--dropout",           type=float, default=0.1)
     p.add_argument("--weight-decay",      type=float, default=1e-4)
     p.add_argument("--batch-size",        type=int,   default=32)
     p.add_argument("--epochs",            type=int,   default=150)

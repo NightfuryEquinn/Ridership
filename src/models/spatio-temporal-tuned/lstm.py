@@ -54,9 +54,9 @@ from src.utils.comparison_table import (
 def parse_args():
     p = argparse.ArgumentParser(description="Tuned LSTM for ridership forecasting")
     p.add_argument("--seq-dir",    default=None)
-    p.add_argument("--hidden",     type=int,   default=128,  help="LSTM hidden size")
+    p.add_argument("--hidden",     type=int,   default=512,  help="LSTM hidden size")
     p.add_argument("--layers",     type=int,   default=2,    help="LSTM stacked layers")
-    p.add_argument("--dropout",    type=float, default=0.15, help="Dropout (needs --layers > 1)")
+    p.add_argument("--dropout",    type=float, default=0.2, help="Dropout (needs --layers > 1)")
     p.add_argument("--batch-size", type=int,   default=32)
     p.add_argument("--epochs",     type=int,   default=150)
     p.add_argument("--lr",           type=float, default=1e-3)

@@ -70,13 +70,13 @@ from src.utils.comparison_table import (
 def parse_args():
     p = argparse.ArgumentParser(description="Tuned STFGNN forecaster — 11-way comparison")
     p.add_argument("--seq-dir",           default=None)
-    p.add_argument("--hidden",            type=int,   default=128,
+    p.add_argument("--hidden",            type=int,   default=256,
                    help="Channel width inside each fusion block")
-    p.add_argument("--n-layers",          type=int,   default=4,
+    p.add_argument("--n-layers",          type=int,   default=5,
                    help="Number of STFGNN fusion blocks")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge (both graphs)")
-    p.add_argument("--dropout",           type=float, default=0.30)
+    p.add_argument("--dropout",           type=float, default=0.2)
     p.add_argument("--weight-decay",      type=float, default=1e-4)
     p.add_argument("--batch-size",        type=int,   default=32)
     p.add_argument("--epochs",            type=int,   default=150)

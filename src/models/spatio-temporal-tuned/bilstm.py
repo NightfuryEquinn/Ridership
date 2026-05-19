@@ -55,9 +55,9 @@ def parse_args():
     p = argparse.ArgumentParser(description="Tuned BiLSTM forecaster")
     p.add_argument("--seq-dir",       default=None,
                    help="Directory containing X/y .npy splits")
-    p.add_argument("--hidden",        type=int,   default=128)
-    p.add_argument("--layers",        type=int,   default=2)
-    p.add_argument("--dropout",       type=float, default=0.15,
+    p.add_argument("--hidden",        type=int,   default=256)
+    p.add_argument("--layers",        type=int,   default=3)
+    p.add_argument("--dropout",       type=float, default=0.1,
                    help="Inter-layer dropout (only active when --layers > 1)")
     p.add_argument("--batch-size",    type=int,   default=32)
     p.add_argument("--epochs",        type=int,   default=150)

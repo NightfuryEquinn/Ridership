@@ -74,13 +74,13 @@ def parse_args():
                    help="Channel width inside each MTGNN block")
     p.add_argument("--skip-ch",            type=int,   default=128,
                    help="Skip-connection channels aggregated at output")
-    p.add_argument("--n-layers",           type=int,   default=4,
+    p.add_argument("--n-layers",           type=int,   default=3,
                    help="Number of MTGNN blocks")
     p.add_argument("--d-emb",              type=int,   default=10,
                    help="Node embedding dimension for M1/M2")
     p.add_argument("--d-hop",              type=int,   default=2,
                    help="Mix-hop propagation order")
-    p.add_argument("--dropout",            type=float, default=0.15)
+    p.add_argument("--dropout",            type=float, default=0.25)
     p.add_argument("--weight-decay",       type=float, default=1e-4)
     p.add_argument("--batch-size",         type=int,   default=32)
     p.add_argument("--epochs",             type=int,   default=150)

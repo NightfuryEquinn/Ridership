@@ -83,9 +83,9 @@ def parse_args():
                    help="Temporal conv kernel size (reduced from 3 to satisfy T_after>0 with n_blocks=3)")
     p.add_argument("--n-blocks",           type=int,   default=3,
                    help="Number of PDR-ST-Conv blocks")
-    p.add_argument("--period",             type=int,   default=7,
+    p.add_argument("--period",             type=int,   default=14,
                    help="Periodic lag for difference encoding (default=7 for weekly)")
-    p.add_argument("--dk",                 type=int,   default=64,
+    p.add_argument("--dk",                 type=int,   default=128,
                    help="Key/Query dimension for dynamic attention graph")
     p.add_argument("--adj-threshold",      type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge")

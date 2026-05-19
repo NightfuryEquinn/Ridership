@@ -5,25 +5,20 @@ Fine-tuned variant of the baseline CNN-LSTM. Architecture changes vs base:
   cnn_filters : 32  → 64    (wider feature maps; base Combined% was low)
   dropout     : 0.1 → 0.20  (default; sequential mode had MED-HIGH variance)
 
-Mode-specific best lookback (MCO excluded):
-  sequential  — lb14  (run with default --lookback 14)
-  parallel    — lb28  (run with --lookback 28)
-  augmented   — lb14  (run with default --lookback 14)
-
 All training hyperparameters (lr, batch_size, epochs, patience,
 weight_decay) are unchanged from the standardised baseline run.
 
 Output is written to src/outputs/cnn_lstm_tuned/.
 
 Recommended run commands:
-  # Sequential — best: exclude MCO, lb14
-  python src/models/spatio-temporal-tuned/cnnlstm.py --mode sequential --lookback 14
+  # Sequential — best: exclude MCO
+  --mode sequential --hidden 256 --layers 2 --dropout 0.3 --cnn-filters 128 --cnn-layers 1
 
-  # Parallel — best: exclude MCO, lb28
-  python src/models/spatio-temporal-tuned/cnnlstm.py --mode parallel --lookback 28
+  # Parallel — best: exclude MCO
+  --mode parallel --hidden 512 --layers 2 --dropout 0.2 --cnn-filters 256 --cnn-layers 1
 
-  # Augmented — best: exclude MCO, lb14
-  python src/models/spatio-temporal-tuned/cnnlstm.py --mode augmented --lookback 14
+  # Augmented — best: exclude MCO
+  --mode augmented --hidden 256 --layers 2 --dropout 0.3 --cnn-filters 128 --cnn-layers 1
 """
 
 import os
