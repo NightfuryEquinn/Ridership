@@ -70,6 +70,42 @@ python src/models/attention-based/tft.py
 
 Each model script accepts `--seq-dir`, `--epochs`, `--batch-size`, `--lr`, `--patience`, `--device`, `--seed`, and model-specific hyperparameter flags. See the docstring at the top of each file. `--device auto` selects CUDA → MPS → CPU automatically.
 
+## Running a Tuned Model
+
+Fine-tuned variants of all 15 models are in three mirrored folders. Run from the repo root:
+
+```bash
+# Spatio-temporal tuned
+python src/models/spatio-temporal-tuned/lstm.py
+python src/models/spatio-temporal-tuned/bilstm.py
+python src/models/spatio-temporal-tuned/cnnlstm.py    # --mode sequential|parallel|augmented
+python src/models/spatio-temporal-tuned/cnnbilstm.py
+python src/models/spatio-temporal-tuned/stlstm.py
+
+# Graph tuned
+python src/models/graph-tuned/stgcn.py
+python src/models/graph-tuned/mtgnn.py
+python src/models/graph-tuned/stsgcn.py
+python src/models/graph-tuned/stfgnn.py
+python src/models/graph-tuned/pdr_stgcn.py
+
+# Attention tuned
+python src/models/attention-tuned/tpalstm.py
+python src/models/attention-tuned/astgcn.py
+python src/models/attention-tuned/tft.py
+python src/models/attention-tuned/autoformer.py
+python src/models/attention-tuned/informer.py
+```
+
+CNN-LSTM tuned mode-specific run commands (each mode has an independently selected best lookback):
+```bash
+python src/models/spatio-temporal-tuned/cnnlstm.py --mode sequential --lookback 14
+python src/models/spatio-temporal-tuned/cnnlstm.py --mode parallel   --lookback 28
+python src/models/spatio-temporal-tuned/cnnlstm.py --mode augmented  --lookback 14
+```
+
+Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full rationale and per-model details are in `src/models/TUNED-MODEL.md`.
+
 New shared flags added to all 15 models:
 
 | Flag | Default | Description |
@@ -109,13 +145,21 @@ src/outputs/{model}/           timestamped run dirs with results.json, plots, mo
 | Lag | 3 | ridership_lag_7, ridership_lag_14, ridership_lag_28 |
 | Static | 17 | population + GTFS + OSM POI + GADM |
 
-### The Three Model Series
+### The Three Model Series (Base)
 
 | Series | Location | Models |
 |---|---|---|
 | Spatio-temporal (LSTM-family) | `src/models/spatio-temporal-based/` | LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
 | Graph-based | `src/models/graph-based/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
 | Attention-based | `src/models/attention-based/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
+
+### The Three Tuned Series
+
+| Series | Location | Models |
+|---|---|---|
+| Spatio-temporal tuned | `src/models/spatio-temporal-tuned/` | LSTM, BiLSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
+| Graph tuned | `src/models/graph-tuned/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
+| Attention tuned | `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
 
 **Canonical reference model:** `src/models/spatio-temporal-based/stlstm.py` — the training loop, output structure, and comparison pattern here should be followed when adding new models.
 
@@ -193,3 +237,27 @@ Architecture defaults (per-model, aligned with MODEL.md):
 - STSGCN: `hidden=64`, `n_layers=2`, `cheb_k=2`
 - STFGNN: `hidden=64`, `n_layers=3`
 - ASTGCN / TFT / Autoformer / Informer: `d_model=64`, `n_heads=4`
+
+### Tuned Architecture Defaults (Fine-Tuned Variants)
+
+Architecture hyperparameters changed in the tuned scripts (training params unchanged):
+
+| Model | Tuned Defaults |
+|-------|---------------|
+| LSTM (tuned) | `hidden=128`, `layers=2`, `dropout=0.15` |
+| BiLSTM (tuned) | `hidden=128`, `layers=2`, `dropout=0.15` |
+| CNN-LSTM (tuned) | `cnn_filters=64`, `dropout=0.20` (hidden/layers unchanged) |
+| CNN-BiLSTM (tuned) | `hidden=128`, `cnn_filters=64`, `dropout=0.25` |
+| ST-LSTM (tuned) | `hidden=128`, `spatial_hidden=64`, `dropout=0.20` |
+| STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=2`, `dropout=0.15` |
+| MTGNN (tuned) | `hidden=64`, `skip_ch=128`, `n_layers=4`, `dropout=0.15` |
+| STSGCN (tuned) | `hidden=128`, `n_layers=3`, `dropout=0.20` |
+| STFGNN (tuned) | `hidden=128`, `n_layers=4`, `dropout=0.30` |
+| PDR-STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=2`, `dk=64`, `dropout=0.20` |
+| TPA-LSTM (tuned) | `hidden=128`, `filters=64`, `dropout=0.15` |
+| ASTGCN (tuned) | `d_model=128`, `n_heads=8`, `n_blocks=3`, `dropout=0.20` |
+| TFT (tuned) | `d_model=128`, `n_heads=8`, `n_lstm_layers=2`, `n_attn_layers=3`, `dropout=0.25` |
+| Autoformer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.20` |
+| Informer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.15` |
+
+Full per-model rationale is in `src/models/TUNED-MODEL.md`.

@@ -32,6 +32,14 @@ Ridership/
 ├── src/                    # Source code
 │   ├── features/           # Feature engineering pipeline
 │   ├── models/             # Deep learning models (organized by series)
+│   │   ├── spatio-temporal-based/   # Base ST models (LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM)
+│   │   ├── graph-based/             # Base graph models (STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN)
+│   │   ├── attention-based/         # Base attention models (TPA-LSTM, ASTGCN, TFT, Autoformer, Informer)
+│   │   ├── spatio-temporal-tuned/   # Tuned ST variants
+│   │   ├── graph-tuned/             # Tuned graph variants
+│   │   ├── attention-tuned/         # Tuned attention variants
+│   │   ├── MODEL.md                 # Base model descriptions
+│   │   └── TUNED-MODEL.md           # Tuned model descriptions and rationale
 │   ├── outputs/            # Model outputs (organized by model and timestamp)
 │   └── utils/              # Shared utilities (metrics, comparison)
 ├── docs/                   # Documentation (PDFs, reports, presentations)
@@ -100,7 +108,9 @@ Full step-by-step instructions are available in `src/features/PIPELINE.md`.
 
 ## Running Models
 
-All 15 models are executed from the repository root with a consistent interface:
+### Baseline Models
+
+All 15 baseline models are executed from the repository root with a consistent interface:
 
 ```bash
 # Spatio-temporal models
@@ -125,6 +135,42 @@ python src/models/attention-based/autoformer.py
 python src/models/attention-based/informer.py
 ```
 
+### Fine-Tuned Models
+
+Fifteen fine-tuned variants with revised architecture hyperparameters (training params unchanged):
+
+```bash
+# Spatio-temporal tuned
+python src/models/spatio-temporal-tuned/lstm.py
+python src/models/spatio-temporal-tuned/bilstm.py
+python src/models/spatio-temporal-tuned/cnnlstm.py    # see CNN-LSTM modes below
+python src/models/spatio-temporal-tuned/cnnbilstm.py
+python src/models/spatio-temporal-tuned/stlstm.py
+
+# Graph tuned
+python src/models/graph-tuned/stgcn.py
+python src/models/graph-tuned/mtgnn.py
+python src/models/graph-tuned/stsgcn.py
+python src/models/graph-tuned/stfgnn.py
+python src/models/graph-tuned/pdr_stgcn.py
+
+# Attention tuned
+python src/models/attention-tuned/tpalstm.py
+python src/models/attention-tuned/astgcn.py
+python src/models/attention-tuned/tft.py
+python src/models/attention-tuned/autoformer.py
+python src/models/attention-tuned/informer.py
+```
+
+**CNN-LSTM tuned — three modes, each with its own best lookback:**
+```bash
+python src/models/spatio-temporal-tuned/cnnlstm.py --mode sequential --lookback 14
+python src/models/spatio-temporal-tuned/cnnlstm.py --mode parallel   --lookback 28
+python src/models/spatio-temporal-tuned/cnnlstm.py --mode augmented  --lookback 14
+```
+
+Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full architecture change rationale is in `src/models/TUNED-MODEL.md`.
+
 ### Common Arguments
 All models accept these arguments:
 - `--seq-dir`: Override sequence directory (if not set, resolved from `--lookback`)
@@ -143,7 +189,7 @@ The `--device auto` option automatically selects CUDA → MPS → CPU.
 
 ## Output Structure
 
-Each model run creates a timestamped directory in `src/outputs/{model_name}/`:
+Each baseline model run creates a timestamped directory in `src/outputs/{model_name}/`; each tuned run writes to `src/outputs/{model_name}_tuned/`:
 
 ```
 src/outputs/{model_name}/{YYYYMMDD_HHMMSS}/

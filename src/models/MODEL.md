@@ -476,6 +476,46 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
 ```
 
+---
+
+## Fine-Tuned Model Series
+
+Fifteen mirrored fine-tuned variants of the above models are located in three new folders:
+
+| Folder | Models |
+|--------|--------|
+| `src/models/spatio-temporal-tuned/` | LSTM, BiLSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
+| `src/models/graph-tuned/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
+| `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
+
+**Tuning strategy (Option C):** Best-configuration selection (MCO-exclusion setting + lookback window) combined with revised architecture hyperparameters. Training hyperparameters (`epochs`, `batch_size`, `lr`, `patience`, `weight_decay`) are unchanged.
+
+**Output directories** use the `_tuned` suffix: `src/outputs/{model_name}_tuned/`.
+
+**Comparison:** each tuned run compares against all 15 base model results (not the tuned runs). Fine-tuned=yes tagging is applied externally by `src/utils/aggregate_results.py`.
+
+### Architecture Changes at a Glance
+
+| Model | Key Changes |
+|-------|-------------|
+| LSTM | hidden 64→128, layers 1→2, dropout 0.10→0.15 |
+| BiLSTM | hidden 64→128, layers 1→2, dropout 0.10→0.15 |
+| CNN-LSTM | cnn_filters 32→64, dropout 0.10→0.20 |
+| CNN-BiLSTM | hidden 64→128, cnn_filters 32→64, dropout 0.10→0.25 |
+| ST-LSTM | hidden 64→128, spatial_hidden 32→64, dropout 0.10→0.20 |
+| STGCN | hidden 128→256, n_blocks 2→3, kt 3→2, dropout 0.10→0.15 |
+| MTGNN | hidden 32→64, skip_ch 64→128, n_layers 3→4, dropout 0.10→0.15 |
+| STSGCN | hidden 64→128, n_layers 2→3, dropout 0.10→0.20 |
+| STFGNN | hidden 64→128, n_layers 3→4, dropout 0.10→0.30 |
+| PDR-STGCN | hidden 128→256, n_blocks 2→3, kt 3→2, dk 32→64, dropout 0.10→0.20 |
+| TPA-LSTM | hidden 64→128, filters 32→64, dropout 0.10→0.15 |
+| ASTGCN | d_model 64→128, n_heads 4→8, n_blocks 2→3, dropout 0.10→0.20 |
+| TFT | d_model 64→128, n_heads 4→8, n_lstm_layers 1→2, n_attn_layers 2→3, dropout 0.10→0.25 |
+| Autoformer | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.20 |
+| Informer | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.15 |
+
+Full per-model rationale, run commands, and constraint notes are in `src/models/TUNED-MODEL.md`.
+
 ## Summary Table
 
 | # | Model | Series | Graph | Attention | AMP | Key Differentiator |
