@@ -1,31 +1,11 @@
 """
 pdr_stgcn.py  — Periodicity-Aware Dynamic Relational STGCN (PDR-STGCN)
 
-Novel architecture combining three ideas into the STGCN backbone:
-
-1. Periodicity Encoding
-   A second input channel is created by computing the periodic lag-difference:
-     x_diff[t] = x[t] - x[t - period]   (zero-padded for t < period)
-   For ridership data with T_in=14 and weekly period=7, this captures how each
-   feature deviates from the same day last week, making seasonal patterns
-   explicit without any extra parameters.
-
-2. Dynamic Relational Graph Convolution
-   Each ST block replaces the fixed Chebyshev convolution with a two-path
-   convolution that mixes a static base graph with an input-adaptive dynamic
-   graph:
-     • Static path : A_sym @ h @ W_static
-                     A_sym = D^{-1/2} A D^{-1/2}, built from absolute Pearson
-                     correlation of training features (same as STGCN/STFGNN).
-     • Dynamic path: softmax(Q @ K^T / sqrt(d_k)) @ V
-                     Q, K, V are linear projections of the current node
-                     features h, so the adjacency adapts per sample and per
-                     time step.
-     • Mixing      : out = σ(λ) · static + (1-σ(λ)) · dynamic
-                     λ is a learned scalar initialised to 0 (equal mix).
-
-3. ST Block Structure (unchanged from STGCN)
-   TemporalGatedConv → DynamicRelationalGraphConv → TemporalGatedConv → BN
+Key Features:
+  • Periodicity encoding: second input channel x_diff[t] = x[t] − x[t−period] makes weekly seasonality explicit
+  • Dynamic relational graph: per-sample attention adjacency mixed with static Pearson adjacency via learned scalar λ
+  • Static path uses sym-normalised correlation; dynamic path uses scaled dot-product attention (Q, K, V projections)
+  • ST block structure: TemporalGatedConv → DynamicRelationalGraphConv → TemporalGatedConv → BN
 
 Architecture:
   X (B, T_in, N)
@@ -37,19 +17,12 @@ Architecture:
     TemporalGatedConv   (B, N, C_mid, T')   →  (B, N, C_out, T'-Kt+1)
     BatchNorm2d
 
-  Output Layer:
-    TemporalGatedConv → mean over N → flatten → MLP head → (B, T_out)
+  Output: TemporalGatedConv → mean over N → flatten → MLP head → (B, T_out)
 
-Comparison:
-  --lstm-results, --bilstm-results, --tpalstm-results,
-  --cnnlstm-results, --cnnbilstm-results, --stlstm-results,
-  --stgcn-results, --mtgnn-results, --stsgcn-results, --stfgnn-results,
-  --astgcn-results, --tft-results, --autoformer-results, --informer-results
-  All optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python src/models/graph-based/pdr_stgcn.py
-  python src/models/graph-based/pdr_stgcn.py --hidden 64 --period 7 --dk 32
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

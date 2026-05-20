@@ -326,7 +326,7 @@ Output: TemporalGatedConv → mean(N) → flatten → MLP → (B, T_out)
 
 ## Series 3 — Attention-Based
 
-Located in `src/models/attention-based/`. These models use attention mechanisms as the primary modelling tool. They use AMP (fp16 + GradScaler) to fit within 6 GB VRAM. Note: TPA-LSTM is listed in Series 1 (LSTM-family) because its primary encoder is still a recurrent LSTM; attention is used only as a decoder module.
+Located in `src/models/attention-based/`. These models use attention mechanisms as the primary modelling tool. They use AMP (fp16 + GradScaler) for mixed-precision training on the A100. Note: TPA-LSTM is listed in Series 1 (LSTM-family) because its primary encoder is still a recurrent LSTM; attention is used only as a decoder module.
 
 ---
 

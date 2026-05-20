@@ -1,50 +1,24 @@
 """
-informer.py  — Informer for Transit Ridership Forecasting
+informer.py  — Informer
 
-Key ideas:
-  1. ProbSparse Self-Attention  O(L log L):
-     Instead of computing all L×L query-key scores, select the top-u queries
-     (by a sparsity measure based on KL divergence from uniform attention)
-     and compute full attention only for those. Remaining queries use the
-     mean of all values. u = c · ⌈ln(L_K)⌉ where c is a constant factor.
-
-  2. Self-Attention Distilling:
-     After each encoder layer, a Conv1d + ELU + MaxPool1d(2) halves the
-     sequence length. This allows deeper encoders without the O(L²) cost of
-     each layer processing the full sequence.
-
-  3. Generative Decoder:
-     The decoder is initialised with a "start token" (the last T_label steps
-     from the encoder input) concatenated with zero-padding for the T_out
-     future steps. This allows the decoder to generate all future steps in
-     one forward pass (no autoregression). T_label = T_in // 2.
+Key Features:
+  • ProbSparse self-attention in O(L log L): selects top-u queries by KL-divergence sparsity measure
+  • Self-attention distilling: Conv1d + ELU + MaxPool1d(2) halves sequence length after each encoder layer
+  • Generative decoder: initialised with start token + zero-padding; generates all T_out steps in one forward pass
+  • With T_in=14, ProbSparse degenerates gracefully to standard attention without approximation error
 
 Architecture:
   Encoder:  [ProbSparseAttn + ConvLayer(distil)] × (e_layers-1)
             + [ProbSparseAttn] (last layer, no distil)
   Decoder:  [FullAttn(self) + FullAttn(cross)] × d_layers
-  Output:   last T_out rows of decoder output → Linear(d_model, 1) → (B, T_out)
+  Output:   last T_out rows → Linear(d_model, 1) → (B, T_out)
 
-Adaptation for T_in=14, T_out=7 (short sequences):
-  With T_in=14, ProbSparse selects u = c·ln(14) ≈ c·2.6 top queries, so for
-  c=5 we get u=13 ≈ full attention — ProbSparse gracefully degenerates to
-  standard attention on short sequences without any approximation error.
-  Distilling with e_layers=2: 14 → 7 after first layer → final encoder
-  memory is (B, 7, d_model).
-  Decoder input: [X[:, -7:, :], zeros(B, 7, F)] → length=14.
+  Decoder input: [X[:, -T_label:, :], zeros(B, T_out, F)]  where T_label = T_in // 2
 
-Hardware optimisations (RTX 4050 6 GB, 32 GB RAM, i5):
-  • AMP (fp16) throughout encoder and decoder.
-  • GradScaler for stable fp16 training.
-  • Conservative defaults: d_model=64, e_layers=2, d_layers=1, batch=32.
-  • ProbSparse attention reduces memory vs full attention for longer sequences.
-
-Comparison (15-way):
-  All 11 prior + ASTGCN + TFT + Autoformer, auto-detected from output dirs.
-
-Usage:
-  python informer.py
-  python informer.py --d-model 128 --n-heads 8 --e-layers 2 --d-layers 1
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled)
 """
 
 import os

@@ -1,10 +1,11 @@
 """
-astgcn.py  — Attention-Based Spatial-Temporal Graph Convolutional Network
+astgcn.py  — Attention-Based Spatial-Temporal Graph Convolutional Network (ASTGCN)
 
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes. Each node
-  carries a scalar signal at each timestep. The graph adjacency is built
-  from absolute Pearson correlation between features on training data.
+Key Features:
+  • Treats N input features as graph nodes; adjacency from absolute Pearson correlation (threshold=0.1)
+  • Spatial attention over nodes and temporal attention over timesteps at each block
+  • Chebyshev GCN (K-hop diffusion) applied after spatial attention for graph-aware propagation
+  • Position-wise FFN following temporal attention; n_blocks stacked for deep ST interaction
 
 Architecture (one ASTGCN block):
   X (B, T, N, d)
@@ -12,21 +13,14 @@ Architecture (one ASTGCN block):
   ──► ChebGCN             (K-hop diffusion on A)
   ──► Temporal Attention  (over T steps for each N) → multi-head TA
   ──► Position-wise FFN
-  Stack n_blocks of the above, then:
+  Stack n_blocks, then:
   ──► Mean pool over N  → (B, T, d)
   ──► Flatten + MLP     → (B, T_out)
 
-Hardware optimisations (RTX 4050 6 GB, 32 GB RAM, i5):
-  • AMP (torch.cuda.amp) halves VRAM for activations and gradients.
-  • GradScaler prevents fp16 underflow.
-  • Conservative defaults (d_model=64, n_blocks=2, K=3, batch=32).
-
-Comparison (12-way):
-  All 11 prior models auto-detected from their output directories.
-
-Usage:
-  python astgcn.py
-  python astgcn.py --d-model 128 --n-blocks 3 --K 3 --n-heads 4
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled)
 """
 
 import os

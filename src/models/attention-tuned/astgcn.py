@@ -1,25 +1,27 @@
 """
-astgcn.py  — ASTGCN (Fine-Tuned) for Transit Ridership Forecasting
+astgcn.py  — Attention-Based Spatial-Temporal Graph Convolutional Network (ASTGCN) — Fine-Tuned
 
-Tuned vs base (src/models/attention-based/astgcn.py):
-  | Parameter  | Base | Tuned | Rationale                                       |
-  |------------|------|-------|-------------------------------------------------|
-  | d_model    |  64  |  128  | Low Combined% → more embedding capacity         |
-  | n_heads    |   4  |    8  | Proportional to d_model; richer attention       |
-  | n_blocks   |   2  |    3  | Deeper stacking for more ST interaction         |
-  | dropout    | 0.10 |  0.20 | Moderate variance across lookbacks → reg        |
+Key Features:
+  • Spatial attention over N feature nodes and temporal attention over T timesteps at each block
+  • Chebyshev GCN (K-hop diffusion) applied after spatial attention for graph-aware propagation
+  • n_blocks stacked for progressively deeper spatial-temporal interaction
 
-Training hyperparameters (epochs, batch_size, lr, patience, weight_decay)
-are intentionally unchanged — only architecture parameters differ.
+Tuned Hyperparameters:
+  d_model  : 64   → 128   low Combined% → more embedding capacity
+  n_heads  : 4    → 8     proportional to d_model; richer attention subspaces
+  n_blocks : 2    → 3     deeper stacking for more ST interaction
+  dropout  : 0.10 → 0.20  moderate variance across lookbacks → regularisation
 
-Output directory: src/outputs/astgcn_tuned/
+Architecture (one block):
+  X (B, T, N, d)
+  ──► Spatial Attention → ChebGCN → Temporal Attention → Position-wise FFN
+  Stack n_blocks, then:
+  ──► Mean pool over N → (B, T, d) → Flatten + MLP → (B, T_out)
 
-Uses AMP (fp16) on CUDA — same as base.
-
-Usage:
-  python src/models/attention-tuned/astgcn.py
-  python src/models/attention-tuned/astgcn.py --d-model 128 --n-blocks 3 --n-heads 8
-  python src/models/attention-tuned/astgcn.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled)
 """
 
 import os

@@ -1,23 +1,11 @@
 """
 stsgcn.py  — Spatial-Temporal Synchronous Graph Convolutional Network (STSGCN)
 
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes. STSGCN builds a
-  Spatial-Temporal Synchronous Graph (STSG) that captures both spatial and
-  temporal correlations in a single 3N×3N adjacency matrix for each sliding
-  window of 3 consecutive timesteps:
-
-    STSG = [[A_spa,  I,      0    ],
-            [I,      A_spa,  I    ],
-            [0,      I,      A_spa]]
-
-  where A_spa is the N×N feature-correlation graph (absolute Pearson,
-  threshold=0.1) and I is the N×N identity (temporal self-connections).
-
-  The STSG Convolutional Layer (STSGCL) applies a K-order Chebyshev graph
-  convolution on this 3N×3N graph for every sliding window of 3 timesteps
-  and extracts the centre N nodes as output, producing a synchronous
-  spatio-temporal representation at each timestep.
+Key Features:
+  • Encodes spatial and temporal correlations jointly in a single 3N×3N synchronous graph (STSG)
+  • STSG = block-tridiagonal matrix combining spatial adjacency A_spa and identity temporal edges
+  • STSG Convolutional Layer (STSGCL) applies Chebyshev convolution on the full STSG per sliding 3-timestep window
+  • Centre N nodes extracted after each convolution to preserve per-timestep spatial representations
 
 Architecture:
   Input: X (B, T_in, N)
@@ -30,15 +18,10 @@ Architecture:
 
   Mean pool over N, flatten T, MLP head → (B, T_out)
 
-Comparison:
-  --lstm-results, --bilstm-results, --tpalstm-results,
-  --cnnlstm-results, --cnnbilstm-results, --stlstm-results,
-  --stgcn-results, --mtgnn-results
-  All optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python stsgcn.py
-  python stsgcn.py --hidden 64 --n-layers 2 --cheb-k 2
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

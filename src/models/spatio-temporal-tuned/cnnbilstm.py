@@ -1,19 +1,27 @@
 """
-cnnbilstm.py  — Tuned CNN-BiLSTM for Transit Ridership Forecasting
+cnnbilstm.py  — Convolutional Neural Network Bidirectional LSTM (CNN-BiLSTM) — Fine-Tuned
 
-Fine-tuned variant of the baseline CNN-BiLSTM. Architecture changes vs base:
-  hidden      : 64  → 128   (higher capacity; base Combined% was low)
-  cnn_filters : 32  → 64    (wider feature maps to match larger BiLSTM)
-  dropout     : 0.1 → 0.25  (HIGH; highest variance across lookbacks)
+Key Features:
+  • Combines CNN local pattern extraction with bidirectional LSTM sequential context
+  • BiLSTM sees the full look-back window from both directions over CNN-extracted features
+  • Mid-window anomalies encoded with past and future context rather than only past
 
-All training hyperparameters (lr, batch_size, epochs, patience,
-weight_decay) are unchanged from the standardised baseline run.
+Tuned Hyperparameters:
+  hidden      : 64  → 128   higher capacity; base Combined% was low
+  cnn_filters : 32  → 64    wider feature maps to match larger BiLSTM
+  dropout     : 0.1 → 0.25  highest variance across lookbacks; strong regularisation
 
-Output is written to src/outputs/cnn_bilstm_tuned/.
+Architecture:
+  X             : (B, T_in, F)
+  Conv1d × L    → (B, cnn_filters, T_in) → permute → (B, T_in, cnn_filters)
+  BiLSTM         → h_n : (2×layers, B, hidden)
+  cat([h_fwd, h_bwd]) → (B, hidden × 2)
+  MLP head      → (B, T_out)
 
-Usage:
-  python src/models/spatio-temporal-tuned/cnnbilstm.py          # tuned defaults
-  python src/models/spatio-temporal-tuned/cnnbilstm.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

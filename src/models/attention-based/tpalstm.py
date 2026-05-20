@@ -1,48 +1,26 @@
 """
-tpa_lstm.py  — Temporal Pattern Attention LSTM for Transit Ridership Forecasting
+tpalstm.py  — Temporal Pattern Attention LSTM (TPA-LSTM)
 
-Mirrors lstm_baseline.py and bilstm.py in training loop, metrics, and plot
-style. Adds the TPA (Temporal Pattern Attention) mechanism.
+Key Features:
+  • Applies 1-D CNN over the LSTM hidden-state matrix to extract recurring temporal patterns
+  • Scores each convolutional pattern against the final hidden state via learned attention
+  • Context vector captures which recurring look-back patterns best predict the next T_out steps
+  • Designed for ridership's multi-scale periodicity: daily, weekly, and holiday cycles
 
-Why TPA-LSTM over LSTM / BiLSTM for this task?
-  Standard LSTM reads the sequence left-to-right and compresses everything
-  into a single hidden vector h_T. Bahdanau-style attention over hidden
-  states (one score per timestep) addresses the bottleneck but ignores which
-  INPUT FEATURES drive each timestep's relevance.
+Architecture:
+  X          : (B, T_in, F)
+  LSTM        → H : (B, T_in, hidden),  h_T : (B, hidden)
+  H_ctx       = H[:, :-1, :]                     # (B, T_in-1, hidden)
+  Conv1d(H_ctx.T) → ReLU → adaptive_avg_pool     # (B, n_filters, ...)
+  score       = sigmoid(h_T @ W_score @ C^T)     # (B, n_filters)
+  attn        = softmax(score)
+  context     = attn @ C_pool                    # (B, hidden)
+  cat([h_T, context]) → MLP head → (B, T_out)
 
-  TPA applies a 1-D CNN to the LSTM hidden-state matrix H (treating each
-  hidden dimension as a channel over time) to extract TEMPORAL PATTERNS,
-  then scores each pattern against the final hidden state. The resulting
-  context vector tells the decoder WHICH RECURRING PATTERNS IN THE LOOK-BACK
-  WINDOW are most predictive of the next T_out steps.
-
-  For transit ridership this is particularly useful because ridership has
-  strong multi-scale periodicity (daily, weekly, holiday) that TPA can
-  detect as distinct convolutional filters.
-
-Architecture (forward pass):
-  X         : (B, T_in, F)
-  LSTM       → H : (B, T_in, hidden),  h_T : (B, hidden)
-  H_ctx      = H[:, :-1, :]                   # (B, T_in-1, hidden)
-  H_ctx_T    = H_ctx.permute(0, 2, 1)         # (B, hidden, T_in-1)
-  C          = Conv1d(H_ctx_T) → ReLU → pool  # (B, n_filters, *)
-  C_flat     = adaptive_avg_pool → (B, n_filters, hidden // n_filters groups)
-  score      = sigmoid(h_T @ W_score @ C^T)   # (B, n_filters)
-  attn       = softmax(score)                 # (B, n_filters)
-  context    = attn @ C_pool                  # (B, hidden)  — weighted pattern sum
-  head_in    = cat([h_T, context])            # (B, hidden*2)
-  output     = MLP(head_in)                   # (B, T_out)
-
-Comparison:
-  --lstm-results   path/to/lstm/results.json
-  --bilstm-results path/to/bilstm/results.json
-  Both are optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python tpa_lstm.py                           # defaults, auto-compare
-  python tpa_lstm.py --hidden 64 --filters 32 --kernel-size 3
-  python tpa_lstm.py --lstm-results src/outputs/lstm/<id>/results.json \\
-                     --bilstm-results src/outputs/bilstm/<id>/results.json
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

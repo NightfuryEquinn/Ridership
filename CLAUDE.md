@@ -8,9 +8,8 @@ Malaysian transit ridership forecasting research (Masters FYP). Compares 15 deep
 
 ## Hardware
 
-- CPU: 13th Gen Intel Core i5
 - RAM: 32 GB
-- GPU: NVIDIA GeForce RTX 4050 (6 GB VRAM)
+- GPU: NVIDIA A100 (32 GB VRAM)
 
 ## Environment
 
@@ -187,7 +186,7 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 
 ### AMP (Mixed Precision)
 
-The four new attention-based models (ASTGCN, TFT, Autoformer, Informer) use `torch.cuda.amp.GradScaler` + `autocast` to fit within RTX 4050 6 GB VRAM. Autoformer wraps its FFT ops with an explicit `float32` cast inside `autocast` for numerical stability. LSTM-family and graph-based models do not use AMP.
+The four new attention-based models (ASTGCN, TFT, Autoformer, Informer) use `torch.cuda.amp.GradScaler` + `autocast` for mixed-precision training on the A100. Autoformer wraps its FFT ops with an explicit `float32` cast inside `autocast` for numerical stability. LSTM-family and graph-based models do not use AMP.
 
 ### Output Structure
 

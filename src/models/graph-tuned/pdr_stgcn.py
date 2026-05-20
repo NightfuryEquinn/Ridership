@@ -1,30 +1,17 @@
 """
-pdr_stgcn.py  — Tuned Periodicity-Aware Dynamic Relational STGCN (PDR-STGCN)
+pdr_stgcn.py  — Periodicity-Aware Dynamic Relational STGCN (PDR-STGCN) — Fine-Tuned
 
-Tuning rationale vs base (src/models/graph-based/pdr_stgcn.py):
-  hidden   : 128 → 256   (low Combined% → larger capacity)
-  n_blocks : 2   → 3     (deeper temporal receptive field)
-  kt       : 3   → 2     (REQUIRED: with n_blocks=3, T_in=14, kt=3 gives
-                            T_after = 14 - 2*(7) = 0 which fails the assertion;
-                            kt=2 gives T_after = 14 - 1*(7) = 7 ✓)
-  dk       : 32  → 64    (larger attention key/query dim, proportional to hidden)
-  dropout  : 0.1 → 0.20  (MED variance → moderate regularisation increase)
+Key Features:
+  • Periodicity encoding: x_diff[t] = x[t] − x[t−period] makes weekly seasonality explicit as a second channel
+  • Dynamic relational graph mixes static Pearson adjacency with per-sample attention adjacency via learned λ
+  • ST block: TemporalGatedConv → DynamicRelationalGraphConv → TemporalGatedConv → BN
 
-All training hyperparameters (epochs, lr, batch_size, patience, weight_decay)
-are unchanged per the standardised baseline schedule.
-
-Novel architecture combining three ideas into the STGCN backbone:
-
-1. Periodicity Encoding
-   A second input channel: x_diff[t] = x[t] - x[t - period]
-   (zero-padded for t < period)
-
-2. Dynamic Relational Graph Convolution
-   Two-path convolution mixing static + input-adaptive dynamic graph:
-   out = σ(λ) · static + (1-σ(λ)) · dynamic
-
-3. ST Block Structure (unchanged from STGCN)
-   TemporalGatedConv → DynamicRelationalGraphConv → TemporalGatedConv → BN
+Tuned Hyperparameters:
+  hidden   : 128 → 256   low Combined% → larger capacity
+  n_blocks : 2   → 3     deeper temporal receptive field
+  kt       : 3   → 2     required: n_blocks=3, T_in=14, kt=3 → T_after=0; kt=2 → T_after=7 ✓
+  dk       : 32  → 64    larger attention key/query dimension, proportional to hidden
+  dropout  : 0.1 → 0.20  medium variance → moderate regularisation increase
 
 Architecture:
   X (B, T_in, N)
@@ -33,11 +20,12 @@ Architecture:
   PDR-ST Block k:
     TemporalGatedConv → DynamicRelGraph → TemporalGatedConv → BN
 
-  Output: TemporalGatedConv → mean N → flatten → MLP → (B, T_out)
+  Output: TemporalGatedConv → mean over N → flatten → MLP head → (B, T_out)
 
-Usage:
-  python src/models/graph-tuned/pdr_stgcn.py
-  python src/models/graph-tuned/pdr_stgcn.py --hidden 256 --n-blocks 3 --kt 2 --dk 64
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

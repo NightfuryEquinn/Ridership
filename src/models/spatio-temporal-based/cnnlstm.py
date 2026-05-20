@@ -1,55 +1,12 @@
 """
-cnnlstm.py  — CNN-LSTM for Transit Ridership Forecasting
+cnnlstm.py  — Convolutional Neural Network LSTM (CNN-LSTM)
 
-Mirrors bilstm.py and tpalstm.py in training loop, metrics, and plot style.
-Supports two fusion modes via --mode:
-
-  sequential (default)
-    CNN extracts local temporal features → LSTM models dependencies across
-    the CNN output sequence → MLP head on the final LSTM hidden state.
-    The LSTM never sees raw features; it operates entirely on higher-level
-    CNN representations.
-
-    X → CNN → LSTM → MLP
-    head_in = hidden
-
-  parallel
-    CNN and LSTM process the raw input independently and simultaneously.
-    The CNN output is globally pooled to a fixed-size vector; the LSTM
-    produces its final hidden state from the original feature sequence.
-    Both vectors are concatenated before the MLP head, letting the model
-    exploit local CNN patterns and global LSTM context without one branch
-    constraining the other.
-
-    X → CNN → global avg pool ─┐
-                                ├─ cat → MLP
-    X → LSTM → h_T            ─┘
-    head_in = cnn_filters + hidden
-
-  augmented
-    Augmented Sequential CNN-LSTM.
-    Retains the sequential CNN→LSTM hierarchy but adds a skip connection
-    that globally pools the raw input and concatenates it with the LSTM
-    final hidden state before the MLP head.  The LSTM still only sees
-    higher-level CNN representations (not raw features), preserving the
-    hierarchical abstraction of sequential, while the skip path restores
-    direct access to low-level temporal signals that aggressive CNN
-    filtering may suppress (e.g. absolute ridership level, rare spikes).
-
-    X → CNN → LSTM → h_T ─────────────────┐
-                                            ├─ cat → MLP
-    X → global avg pool → skip_vec ────────┘
-    head_in = hidden + n_features
-
-Why three modes?
-  Sequential is the classic stacked design — strong when CNN features are
-  a better input to the LSTM than raw features (noisy, high-dimensional).
-  Parallel preserves the original feature sequence for the LSTM branch,
-  which can matter when raw temporal correlations (e.g. absolute ridership
-  level at t−1) carry information that the CNN discards through its
-  filters.  Augmented Sequential bridges both: the LSTM still benefits from
-  CNN abstraction while the skip connection prevents information loss,
-  typically yielding stronger generalisation than either alone.
+Key Features:
+  • Three fusion modes via --mode: sequential, parallel, augmented
+  • Sequential: CNN extracts local temporal features fed into LSTM for global sequential context
+  • Parallel: CNN and LSTM process raw input independently; outputs concatenated before MLP
+  • Augmented: sequential CNN→LSTM hierarchy with a raw-input skip connection to the MLP head
+  • Each CNN block: Conv1d → BatchNorm1d → ReLU
 
 Architecture — sequential:
   X             : (B, T_in, F)
@@ -57,43 +14,26 @@ Architecture — sequential:
   Conv1d × L    → (B, cnn_filters, T_in)   # same-padding
   permute        → (B, T_in, cnn_filters)
   LSTM           → h_n[-1] : (B, hidden)
-  MLP            → (B, T_out)
+  MLP head      → (B, T_out)
 
 Architecture — parallel:
   X             : (B, T_in, F)
-  permute        → (B, F, T_in)
-  Conv1d × L    → (B, cnn_filters, T_in)   # same-padding
-  mean(dim=-1)  → cnn_out : (B, cnn_filters)   # global avg pool
+  Conv1d × L    → mean(dim=-1) : (B, cnn_filters)   # global avg pool
   LSTM(X)        → h_n[-1] : (B, hidden)
   cat            → (B, cnn_filters + hidden)
-  MLP            → (B, T_out)
+  MLP head      → (B, T_out)
 
 Architecture — augmented:
   X             : (B, T_in, F)
-  permute        → (B, F, T_in)
-  Conv1d × L    → (B, cnn_filters, T_in)   # same-padding
-  permute        → (B, T_in, cnn_filters)
-  LSTM           → h_n[-1] : (B, hidden)
-  mean(dim=1, X) → skip    : (B, n_features) # global avg pool of raw input
+  Conv1d × L → LSTM → h_n[-1] : (B, hidden)
+  mean(dim=1, X) → skip : (B, n_features)
   cat            → (B, hidden + n_features)
-  MLP            → (B, T_out)
+  MLP head      → (B, T_out)
 
-Each CNN block: Conv1d → BatchNorm1d → ReLU.
-
-Comparison:
-  --lstm-results     path/to/lstm/results.json
-  --bilstm-results   path/to/bilstm/results.json
-  --tpalstm-results  path/to/tpa_lstm/results.json
-  All three are optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python cnnlstm.py                                    # sequential, auto-compare
-  python cnnlstm.py --mode parallel                    # parallel mode
-  python cnnlstm.py --mode augmented                   # augmented sequential mode
-  python cnnlstm.py --cnn-filters 64 --cnn-layers 2 --cnn-kernel-size 3
-  python cnnlstm.py --lstm-results src/outputs/lstm/<id>/results.json \\
-                    --bilstm-results src/outputs/bilstm/<id>/results.json \\
-                    --tpalstm-results src/outputs/tpa_lstm/<id>/results.json
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

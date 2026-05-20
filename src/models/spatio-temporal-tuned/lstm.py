@@ -1,21 +1,25 @@
 """
-lstm.py  — Tuned LSTM for Transit Ridership Forecasting
+lstm.py  — Long Short-Term Memory (LSTM) — Fine-Tuned
 
-Fine-tuned variant of the baseline LSTM. Architecture changes vs base:
-  hidden   : 64  → 128   (higher capacity; base Combined% was low)
-  layers   : 1   → 2     (deeper stack improves temporal abstraction)
-  dropout  : 0.1 → 0.15  (moderate increase for 2-layer regularisation)
+Key Features:
+  • Baseline sequential model — no attention, graph convolution, or bidirectionality
+  • Unidirectional LSTM encoder compresses the T_in look-back window into a single hidden vector
+  • MLP head projects the final hidden state directly to T_out forecast steps
 
-All training hyperparameters (lr, batch_size, epochs, patience,
-weight_decay) are unchanged from the standardised baseline run.
+Tuned Hyperparameters:
+  hidden  : 64  → 128   higher capacity; base Combined% was low
+  layers  : 1   → 2     deeper stack improves temporal abstraction
+  dropout : 0.1 → 0.15  moderate increase for 2-layer regularisation
 
-Output is written to src/outputs/lstm_tuned/ to keep tuned runs
-separate from baseline src/outputs/lstm/ runs.
+Architecture:
+  X         : (B, T_in, F)
+  LSTM       → h_T : (B, hidden)
+  MLP head  → (B, T_out)
 
-Usage:
-  python src/models/spatio-temporal-tuned/lstm.py          # tuned defaults
-  python src/models/spatio-temporal-tuned/lstm.py --hidden 256 --layers 3
-  python src/models/spatio-temporal-tuned/lstm.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

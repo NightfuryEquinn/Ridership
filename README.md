@@ -237,7 +237,7 @@ The comparison system automatically:
 ### Model-Specific Notes
 - **Reference Model**: `src/models/spatio-temporal-based/stlstm.py` serves as the canonical reference for training loop structure, output format, and comparison patterns
 - **Graph Construction**: Graph-based models treat features as nodes; adjacency built from Pearson correlation (threshold=0.1) of training features
-- **AMP Usage**: Four attention-based models (ASTGCN, TFT, Autoformer, Informer) use mixed precision training to fit within RTX 4050 6GB VRAM
+- **AMP Usage**: Four attention-based models (ASTGCN, TFT, Autoformer, Informer) use mixed precision training on the A100
 - **TFT/Autoformer Specifics**: 
   - TFT uses standard AMP implementation
   - Autoformer wraps FFT operations in explicit float32 casts within autocast for numerical stability

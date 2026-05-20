@@ -1,30 +1,28 @@
 """
-informer.py  — Informer (Fine-Tuned) for Transit Ridership Forecasting
+informer.py  — Informer — Fine-Tuned
 
-Tuned vs base (src/models/attention-based/informer.py):
-  | Parameter  | Base | Tuned | Rationale                                       |
-  |------------|------|-------|-------------------------------------------------|
-  | d_model    |  64  |  128  | Low Combined% → more capacity                   |
-  | n_heads    |   4  |    8  | Proportional to d_model                         |
-  | e_layers   |   2  |    3  | Deeper encoder (more ProbSparse + distil steps) |
-  | d_ff       | 128  |  256  | Proportional to d_model; wider FFN              |
-  | dropout    | 0.10 |  0.15 | Moderate variance across lookbacks → mild reg   |
+Key Features:
+  • ProbSparse self-attention in O(L log L): selects top-u queries by KL-divergence sparsity measure
+  • Self-attention distilling halves sequence length after each encoder layer via Conv1d + MaxPool1d
+  • Generative decoder generates all T_out steps in one forward pass with start token + zero-padding
+  • With e_layers=3 and T_in=14: distilling produces 14 → 7 → 4; decoder input remains length 14
 
-Training hyperparameters (epochs, batch_size, lr, patience, weight_decay)
-are intentionally unchanged — only architecture parameters differ.
+Tuned Hyperparameters:
+  d_model  : 64   → 128   low Combined% → more capacity
+  n_heads  : 4    → 8     proportional to d_model
+  e_layers : 2    → 3     deeper encoder; more ProbSparse + distil steps
+  d_ff     : 128  → 256   proportional to d_model; wider FFN
+  dropout  : 0.10 → 0.15  moderate variance across lookbacks → mild regularisation
 
-Output directory: src/outputs/informer_tuned/
+Architecture:
+  Encoder:  [ProbSparseAttn + ConvLayer(distil)] × (e_layers-1) + [ProbSparseAttn]
+  Decoder:  [FullAttn(self) + FullAttn(cross)] × d_layers
+  Output:   last T_out rows → Linear(d_model, 1) → (B, T_out)
 
-Note: with e_layers=3 and T_in=14, distilling produces 14→7→4 length reduction.
-The final encoder memory passed to the decoder is (B, 4, d_model).
-The decoder input remains length = T_label + T_out = 7 + 7 = 14.
-
-Uses AMP (fp16) on CUDA — same as base.
-
-Usage:
-  python src/models/attention-tuned/informer.py
-  python src/models/attention-tuned/informer.py --d-model 128 --e-layers 3
-  python src/models/attention-tuned/informer.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled)
 """
 
 import os

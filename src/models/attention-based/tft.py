@@ -1,19 +1,13 @@
 """
-tft.py  — Temporal Fusion Transformer for Transit Ridership Forecasting
+tft.py  — Temporal Fusion Transformer (TFT)
 
-Adaptation:
-  The original TFT uses static metadata, known future inputs, and
-  observed past inputs. Since all 59 features are observed past inputs
-  (no static or future covariates), this implementation focuses on:
+Key Features:
+  • Gated Residual Network (GRN) with ELU activation and GLU gating as the core building block
+  • Variable Selection Network (VSN) applies softmax-weighted feature selection at each timestep
+  • LSTM encoder captures local temporal dynamics before the attention layers
+  • Multi-head self-attention layers model long-range dependencies across the encoded sequence
 
-  • Gated Residual Network (GRN) — core building block with ELU + GLU gate
-  • Variable Selection Network (VSN) — softmax-weighted feature selection
-  • LSTM encoder — captures local temporal dynamics
-  • Multi-head Self-Attention — captures long-range dependencies
-  • Gated Add-and-Norm — residual connections with gating throughout
-  • MLP output head — projects to T_out scalar predictions
-
-Architecture (forward pass):
+Architecture:
   X (B, T_in, F)
   ──► VSN            : per-timestep feature selection → (B, T_in, d_model)
   ──► LSTM encoder   : local processing → (B, T_in, d_model)
@@ -21,17 +15,10 @@ Architecture (forward pass):
   ──► Mean pool      : (B, d_model)
   ──► MLP head       : (B, T_out)
 
-Hardware optimisations (RTX 4050 6 GB, 32 GB RAM, i5):
-  • AMP (fp16) halves VRAM for activations and optimizer state.
-  • GradScaler prevents gradient underflow in fp16.
-  • Conservative defaults: d_model=64, n_lstm_layers=1, n_attn_layers=2.
-
-Comparison (13-way):
-  All 11 prior + ASTGCN, auto-detected from output directories.
-
-Usage:
-  python tft.py
-  python tft.py --d-model 128 --n-heads 8 --n-attn-layers 2
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled)
 """
 
 import os

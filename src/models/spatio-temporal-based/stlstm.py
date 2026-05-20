@@ -1,49 +1,20 @@
 """
-stlstm.py  — Spatio-Temporal LSTM for Transit Ridership Forecasting
+stlstm.py  — Spatio-Temporal Long Short-Term Memory (ST-LSTM)
 
-Mirrors all other model scripts in training loop, metrics, and plot style.
+Key Features:
+  • Decouples temporal dynamics from cross-feature spatial patterns via two parallel streams
+  • Temporal stream: LSTM over the T_in window captures sequential evolution — the "when" dimension
+  • Spatial stream: shared-weight MLP per timestep, mean-pooled to summarise persistent cross-feature patterns
+  • Each stream specialises independently; fusion before MLP head combines both representations
 
-Why ST-LSTM?
-  Plain LSTM, BiLSTM, TPA-LSTM, and the CNN-LSTM variants all treat the
-  feature vector at each timestep as an opaque vector fed into a recurrent
-  cell.  None of them explicitly model cross-feature interactions — i.e.
-  how combinations of spatial attributes (population density, POI counts,
-  GTFS accessibility, walking distance) interact with each other independent
-  of the temporal ordering.
-
-  ST-LSTM decouples this with two parallel streams:
-
-  Temporal stream  (LSTM)
-    Standard LSTM over the T_in look-back window.  Captures how the
-    feature sequence evolves over time — the "when" dimension.
-    Output: h_T  (B, hidden_t)
-
-  Spatial stream  (shared MLP per timestep, then temporal pooling)
-    A small MLP with shared weights is applied to each timestep's full
-    feature vector, projecting it to a compact spatial embedding.
-    The embeddings are mean-pooled over the time axis, collapsing
-    temporal order and summarising "which cross-feature spatial patterns
-    persist across the look-back window".
-    Output: sp  (B, spatial_hidden)
-
-  Fusion
-    cat([h_T, sp])  →  MLP head  →  (B, T_out)
-
-  The spatial stream is time-invariant (shared weights) and pooled, making
-  it insensitive to the ordering of timesteps — that sensitivity is left
-  entirely to the LSTM.  This clean separation lets each branch specialise:
-  the LSTM learns temporal dynamics, the spatial encoder learns persistent
-  cross-feature patterns.
-
-Architecture (forward pass):
+Architecture:
   X                 : (B, T_in, F)
 
-  Temporal:
+  Temporal stream:
     LSTM(X)          → h_T : (B, hidden_t)
 
-  Spatial:
-    X.reshape(B*T, F) → Linear → ReLU → Linear → ReLU
-                      → (B*T, spatial_hidden)
+  Spatial stream:
+    X.reshape(B*T, F) → Linear → ReLU → Linear → ReLU → (B*T, spatial_hidden)
     reshape            → (B, T_in, spatial_hidden)
     mean(dim=1)        → sp : (B, spatial_hidden)
 
@@ -51,18 +22,10 @@ Architecture (forward pass):
     cat([h_T, sp])   → (B, hidden_t + spatial_hidden)
     MLP head         → (B, T_out)
 
-Comparison:
-  --lstm-results      path/to/lstm/results.json
-  --bilstm-results    path/to/bilstm/results.json
-  --tpalstm-results   path/to/tpa_lstm/results.json
-  --cnnlstm-results   path/to/cnn_lstm/results.json
-  --cnnbilstm-results path/to/cnn_bilstm/results.json
-  All five optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python stlstm.py                               # defaults, auto-compare
-  python stlstm.py --hidden 64 --spatial-hidden 32
-  python stlstm.py --lstm-results src/outputs/lstm/<id>/results.json
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

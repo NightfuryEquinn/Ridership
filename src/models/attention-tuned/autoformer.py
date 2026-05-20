@@ -1,26 +1,28 @@
 """
-autoformer.py  — Autoformer (Fine-Tuned) for Transit Ridership Forecasting
+autoformer.py  — Autoformer — Fine-Tuned
 
-Tuned vs base (src/models/attention-based/autoformer.py):
-  | Parameter  | Base | Tuned | Rationale                                       |
-  |------------|------|-------|-------------------------------------------------|
-  | d_model    |  64  |  128  | Low Combined% → more model capacity             |
-  | n_heads    |   4  |    8  | Proportional to d_model                         |
-  | e_layers   |   2  |    3  | Deeper encoder for richer auto-correlation      |
-  | d_ff       | 128  |  256  | Proportional to d_model; wider FFN              |
-  | dropout    | 0.10 |  0.20 | Moderate variance across lookbacks → reg        |
+Key Features:
+  • Series decomposition into trend (MovingAvg) and seasonal (residual) components
+  • FFT-based auto-correlation in O(L log L) replaces softmax attention; top-k lag aggregation
+  • Encoder-decoder accumulates trend across decoder layers; seasonal predicted as residual
 
-Training hyperparameters (epochs, batch_size, lr, patience, weight_decay)
-are intentionally unchanged — only architecture parameters differ.
+Tuned Hyperparameters:
+  d_model  : 64   → 128   low Combined% → more model capacity
+  n_heads  : 4    → 8     proportional to d_model
+  e_layers : 2    → 3     deeper encoder for richer auto-correlation
+  d_ff     : 128  → 256   proportional to d_model; wider FFN
+  dropout  : 0.10 → 0.20  moderate variance across lookbacks → regularisation
 
-Output directory: src/outputs/autoformer_tuned/
+Architecture:
+  Encoder: e_layers × [AutoCorr + Decomp + FFN + Decomp]
+  Decoder: d_layers × [AutoCorr + CrossCorr + Decomp + FFN + Decomp]
+  Output = trend_accum[:, -T_out:, :] + seasonal_dec[:, -T_out:, :]
+         → Linear(n_features, 1) per step → (B, T_out)
 
-Uses AMP (fp16) on CUDA with explicit float32 cast for FFT ops — same as base.
-
-Usage:
-  python src/models/attention-tuned/autoformer.py
-  python src/models/attention-tuned/autoformer.py --d-model 128 --e-layers 3
-  python src/models/attention-tuned/autoformer.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled; FFT ops cast to float32 for stability)
 """
 
 import os

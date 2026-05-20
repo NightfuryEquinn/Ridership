@@ -1,28 +1,21 @@
 """
-lstm_baseline.py  — Baseline LSTM for Transit Ridership Forecasting
+lstm.py  — Long Short-Term Memory (LSTM)
 
-Loads the sequences produced by sequence_builder.py and trains a single-layer
-LSTM, then evaluates on the held-out test set.
+Key Features:
+  • Baseline sequential model — no attention, graph convolution, or bidirectionality
+  • Unidirectional LSTM encoder compresses the T_in look-back window into a single hidden vector
+  • MLP head projects the final hidden state directly to T_out forecast steps
+  • Establishes the performance floor for the 15-model comparison chain
 
-This is the baseline. It intentionally stays simple:
-  - No attention, no graph convolution, no bidirectional layers
-  - Standard MSE loss, Adam optimiser, ReduceLROnPlateau scheduler
-  - Metrics: Combined%, MAE%, RMSE%, MAPE, R², raw MAE, raw RMSE
+Architecture:
+  X         : (B, T_in, F)
+  LSTM       → h_T : (B, hidden)
+  MLP head  → (B, T_out)
 
-Metric definitions (from METRICS.md):
-  MAPE      = mean(|ŷ - y| / |y|) × 100
-  MAE%      = (MAE / ȳ) × 100           — MAE as % of mean demand
-  RMSE%     = (RMSE / ȳ) × 100          — RMSE as % of mean demand
-  Combined  = max(0, 100 − MAPE − MAE% − RMSE%)   [higher is better]
-  R²        = 1 − SSR/SST
-
-Use it to establish a performance floor before swapping in BiLSTM,
-TPA-LSTM, or GCN-based variants.
-
-Usage:
-  python lstm_baseline.py                          # defaults
-  python lstm_baseline.py --hidden 128 --layers 2  # tune
-  python lstm_baseline.py --seq-dir data/sequences/lstm --epochs 100
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

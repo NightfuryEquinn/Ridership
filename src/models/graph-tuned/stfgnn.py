@@ -1,27 +1,18 @@
 """
-stfgnn.py  — Tuned Spatial-Temporal Fusion Graph Neural Network (STFGNN)
+stfgnn.py  — Spatial-Temporal Fusion Graph Neural Network (STFGNN) — Fine-Tuned
 
-Tuning rationale vs base (src/models/graph-based/stfgnn.py):
-  hidden   : 64  → 128   (low Combined% → larger capacity)
-  n_layers : 3   → 4     (deeper dual-graph fusion)
-  dropout  : 0.1 → 0.30  (HIGH variance across lookbacks → strong regularisation)
+Key Features:
+  • Dual static graphs: A_spa (feature co-variation) and A_tem (shared intra-window dynamics)
+  • Learnable scalar gate α blends spatial and temporal GCN outputs per fusion block
+  • GatedTCN provides temporal context before each dual-GCN application
 
-All training hyperparameters (epochs, lr, batch_size, patience, weight_decay)
-are unchanged per the standardised baseline schedule.
-
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes.  STFGNN fuses
-  two complementary static graphs:
-
-  A_spa — Spatial graph:
-    Absolute Pearson correlation of feature values across training samples.
-
-  A_tem — Temporal graph:
-    Absolute Pearson correlation of the mean temporal profile of each node.
+Tuned Hyperparameters:
+  hidden   : 64  → 128   low Combined% → larger capacity
+  n_layers : 3   → 4     deeper dual-graph fusion
+  dropout  : 0.1 → 0.30  high variance across lookbacks → strong regularisation
 
 Architecture:
-  Input: X (B, T_in, N)
-  Input projection: → (B, hidden, N, T_in)
+  Input: X (B, T_in, N) → projection → (B, hidden, N, T_in)
 
   Fusion Block × n_layers:
     GatedTCN → dual GraphConv2d (spatial + temporal) → learnable gate →
@@ -29,9 +20,10 @@ Architecture:
 
   Global mean pool over N and T → MLP → (B, T_out)
 
-Usage:
-  python src/models/graph-tuned/stfgnn.py
-  python src/models/graph-tuned/stfgnn.py --hidden 128 --n-layers 4
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

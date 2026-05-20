@@ -1,19 +1,26 @@
 """
-stlstm.py  — Tuned Spatio-Temporal LSTM for Transit Ridership Forecasting
+stlstm.py  — Spatio-Temporal Long Short-Term Memory (ST-LSTM) — Fine-Tuned
 
-Fine-tuned variant of the baseline ST-LSTM. Architecture changes vs base:
-  hidden         : 64  → 128   (higher capacity; base Combined% was low)
-  spatial_hidden : 32  → 64    (scaled up proportionally with hidden)
-  dropout        : 0.1 → 0.20  (MED-HIGH; moderate variance across lookbacks)
+Key Features:
+  • Two parallel streams: LSTM for temporal dynamics, shared-weight MLP for spatial cross-feature patterns
+  • Spatial stream mean-pooled over time; insensitive to ordering, allowing the LSTM to specialise temporally
+  • Fusion of both streams before MLP head
 
-All training hyperparameters (lr, batch_size, epochs, patience,
-weight_decay) are unchanged from the standardised baseline run.
+Tuned Hyperparameters:
+  hidden         : 64  → 128   higher capacity; base Combined% was low
+  spatial_hidden : 32  → 64    scaled proportionally with hidden
+  dropout        : 0.1 → 0.20  moderate variance across lookbacks
 
-Output is written to src/outputs/st_lstm_tuned/.
+Architecture:
+  X                 : (B, T_in, F)
+  Temporal: LSTM(X)  → h_T : (B, hidden_t)
+  Spatial: X.reshape(B*T, F) → MLP → mean(dim=1) → sp : (B, spatial_hidden)
+  cat([h_T, sp]) → MLP head → (B, T_out)
 
-Usage:
-  python src/models/spatio-temporal-tuned/stlstm.py          # tuned defaults
-  python src/models/spatio-temporal-tuned/stlstm.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

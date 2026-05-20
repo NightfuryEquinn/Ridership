@@ -1,12 +1,11 @@
 """
 stgcn.py  — Spatio-Temporal Graph Convolutional Network (STGCN)
 
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes. The temporal
-  dimension (T_in=14) provides the scalar signal for each node. The adjacency
-  matrix is derived from absolute Pearson correlation between features on
-  training data, symmetrically normalised into a scaled Laplacian L_tilde
-  stored as a model buffer (so it travels with .to(device)).
+Key Features:
+  • Treats N input features as graph nodes with scalar temporal signals
+  • Adjacency derived from absolute Pearson correlation (threshold=0.1), symmetrically normalised into scaled Laplacian
+  • Alternating temporal gated convolution and Chebyshev graph convolution in each ST block
+  • BatchNorm after each block stabilises training across deep stacks
 
 Architecture:
   X (B, T_in, N)  →  reshape  →  (B, N, 1, T_in)
@@ -18,16 +17,12 @@ Architecture:
     BatchNorm2d
 
   Output Layer:
-    TemporalGatedConv → pool over N (mean) → flatten → MLP head → (B, T_out)
+    TemporalGatedConv → mean over N → flatten → MLP head → (B, T_out)
 
-Comparison:
-  --lstm-results, --bilstm-results, --tpalstm-results,
-  --cnnlstm-results, --cnnbilstm-results, --stlstm-results
-  All optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python stgcn.py
-  python stgcn.py --hidden 64 --cheb-k 2 --n-blocks 2 --kt 3
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

@@ -1,46 +1,26 @@
 """
-autoformer.py  — Autoformer for Transit Ridership Forecasting
+autoformer.py  — Autoformer
 
-Key ideas:
-  1. Series Decomposition: X = MovingAvg(X) [trend] + (X − MovingAvg(X)) [seasonal]
-     Applied as a learnable building block throughout encoder and decoder.
+Key Features:
+  • Series decomposition: MovingAvg extracts trend; residual is seasonal; applied throughout encoder and decoder
+  • Auto-Correlation mechanism replaces softmax attention with FFT-based time-delay correlation in O(L log L)
+  • Top-k lag selection: rolls V by each discovered lag, aggregates with softmax weights over correlation scores
+  • Encoder-decoder architecture accumulates trend across decoder layers; seasonal component predicted as residual
 
-  2. Auto-Correlation Mechanism (replaces standard softmax attention):
-     Instead of pairwise query-key dot-products, compute the time-delayed
-     autocorrelation of queries with keys via FFT in O(L log L):
-       corr(τ) = IFFT(FFT(Q) · conj(FFT(K)))
-     Select the top-k lags, roll V by each lag, and aggregate with
-     softmax weights proportional to corr(τ).
-     This discovers periodic sub-series dependencies rather than
-     point-wise token similarity.
+Architecture:
+  Encoder: e_layers × [AutoCorr + Decomp + FFN + Decomp]
+  Decoder: d_layers × [AutoCorr + CrossCorr + Decomp + FFN + Decomp]
+           with accumulated trend from each decomposition
 
-  3. Encoder-Decoder:
-     Encoder: L_e layers of [AutoCorr + Decomp + FFN + Decomp]
-     Decoder: L_d layers of [AutoCorr + CrossCorr + Decomp + FFN + Decomp]
-              with accumulated trend from each decomposition.
-
-Adaptation for T_in=14, T_out=7:
-  Decoder start token = last T_out steps of encoder input (seasonal) +
-  zeros(T_out) for the unknown future → length = 2 * T_out = T_dec.
-  Trend init = last T_out steps of encoder input (trend component) +
-  zeros(T_out). The decoder accumulates trend across layers; seasonal
-  is predicted as the residual.
-
+  Decoder start token : last T_out encoder steps (seasonal) + zeros(T_out)
+  Trend init          : last T_out encoder steps (trend) + zeros(T_out)
   Output = trend_accum[:, -T_out:, :] + seasonal_dec[:, -T_out:, :]
-         → Linear(n_features, 1) per timestep → (B, T_out)
+         → Linear(n_features, 1) per step → (B, T_out)
 
-Hardware optimisations (RTX 4050 6 GB, 32 GB RAM, i5):
-  • AMP (fp16) for forward pass and gradient computation.
-  • GradScaler for numerically stable fp16 training.
-  • Conservative defaults: d_model=64, e_layers=2, d_layers=1.
-  • FFT operations are AMP-compatible on CUDA.
-
-Comparison (14-way):
-  All 11 prior + ASTGCN + TFT, auto-detected from output directories.
-
-Usage:
-  python autoformer.py
-  python autoformer.py --d-model 128 --n-heads 8 --e-layers 2 --d-layers 1
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled; FFT ops cast to float32 for stability)
 """
 
 import os

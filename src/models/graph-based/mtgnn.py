@@ -1,20 +1,11 @@
 """
 mtgnn.py  — Multi-Scale Temporal Graph Neural Network (MTGNN)
 
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes with scalar
-  signals.  MTGNN learns an asymmetric directed adjacency via two trainable
-  node-embedding matrices M1, M2 ∈ (N, d_emb):
-    A = softmax(ReLU(tanh(α) * (M1 @ M2.T − M2 @ M1.T)))
-  No pre-built correlation graph is needed.
-
-  Multi-scale temporal modelling uses a 4-branch Dilated Inception module
-  with kernel sizes [1, 3, 5, 7] and GLU activation, capturing daily,
-  multi-day, and weekly periodicity in the T_in=14 look-back window.
-
-  Mix-hop graph convolution aggregates each node's 0-, 1-, …, d_hop-hop
-  neighbourhood with independent linear projections:
-    out = Σ_k  A^k @ x @ W_k   k = 0…d_hop
+Key Features:
+  • Learns an asymmetric directed adjacency end-to-end from two trainable node-embedding matrices
+  • No pre-built correlation graph: A = softmax(ReLU(tanh(α) · (M1@M2.T − M2@M1.T)))
+  • Dilated Inception module with kernel sizes [1, 3, 5, 7] captures multi-scale temporal patterns
+  • Mix-hop graph convolution aggregates k-hop neighbourhoods with independent linear projections
 
 Architecture (per block):
   (B, hidden, N, T)  →  InceptionBlock  →  (B, hidden, N, T)
@@ -22,15 +13,10 @@ Architecture (per block):
                      →  skip + residual
   Skip aggregation → ReLU → mean(N, T) → MLP → (B, T_out)
 
-Comparison:
-  --lstm-results, --bilstm-results, --tpalstm-results,
-  --cnnlstm-results, --cnnbilstm-results, --stlstm-results,
-  --stgcn-results
-  All optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python mtgnn.py
-  python mtgnn.py --hidden 32 --n-layers 3 --d-emb 10 --d-hop 2
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

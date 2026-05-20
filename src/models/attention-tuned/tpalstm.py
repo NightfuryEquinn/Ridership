@@ -1,23 +1,28 @@
 """
-tpalstm.py  — TPA-LSTM (Fine-Tuned) for Transit Ridership Forecasting
+tpalstm.py  — Temporal Pattern Attention LSTM (TPA-LSTM) — Fine-Tuned
 
-Tuned vs base (src/models/attention-based/tpalstm.py):
-  | Parameter    | Base | Tuned | Rationale                                      |
-  |--------------|------|-------|------------------------------------------------|
-  | hidden       |  64  |  128  | Low Combined% → more capacity                  |
-  | filters      |  32  |   64  | Proportional to hidden; richer pattern space   |
-  | dropout      | 0.10 |  0.15 | Moderate variance across lookbacks → mild reg  |
+Key Features:
+  • 1-D CNN over the LSTM hidden-state matrix extracts recurring temporal patterns
+  • Patterns scored against the final hidden state via learned attention
+  • Context vector captures which recurring look-back patterns best predict the next T_out steps
 
-Training hyperparameters (epochs, batch_size, lr, patience, weight_decay)
-are intentionally unchanged — only architecture parameters differ.
+Tuned Hyperparameters:
+  hidden  : 64   → 128   low Combined% → more capacity
+  filters : 32   → 64    proportional to hidden; richer pattern space
+  dropout : 0.10 → 0.15  moderate variance across lookbacks → mild regularisation
 
-Output directory: src/outputs/tpa_lstm_tuned/
+Architecture:
+  X          : (B, T_in, F)
+  LSTM        → H : (B, T_in, hidden),  h_T : (B, hidden)
+  Conv1d(H[:, :-1, :].T) → ReLU → adaptive_avg_pool → C
+  score       = sigmoid(h_T @ W_score @ C^T) → softmax → attn
+  context     = attn @ C_pool : (B, hidden)
+  cat([h_T, context]) → MLP head → (B, T_out)
 
-Usage:
-  python src/models/attention-tuned/tpalstm.py
-  python src/models/attention-tuned/tpalstm.py --hidden 128 --filters 64 --dropout 0.15
-  python src/models/attention-tuned/tpalstm.py --lookback 28
-  python src/models/attention-tuned/tpalstm.py --include-mco
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

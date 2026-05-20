@@ -1,24 +1,38 @@
 """
-cnnlstm.py  — Tuned CNN-LSTM for Transit Ridership Forecasting
+cnnlstm.py  — Convolutional Neural Network LSTM (CNN-LSTM) — Fine-Tuned
 
-Fine-tuned variant of the baseline CNN-LSTM. Architecture changes vs base:
-  cnn_filters : 32  → 64    (wider feature maps; base Combined% was low)
-  dropout     : 0.1 → 0.20  (default; sequential mode had MED-HIGH variance)
+Key Features:
+  • Three fusion modes via --mode: sequential, parallel, augmented
+  • Sequential: CNN extracts local temporal features fed into LSTM for global sequential context
+  • Parallel: CNN and LSTM process raw input independently; outputs concatenated before MLP
+  • Augmented: sequential CNN→LSTM hierarchy with a raw-input skip connection to the MLP head
+  • Each CNN block: Conv1d → BatchNorm1d → ReLU
 
-All training hyperparameters (lr, batch_size, epochs, patience,
-weight_decay) are unchanged from the standardised baseline run.
+Tuned Hyperparameters:
+  cnn_filters : 32  → 64    wider feature maps; base Combined% was low
+  dropout     : 0.1 → 0.20  sequential mode had medium-high variance across lookbacks
 
-Output is written to src/outputs/cnn_lstm_tuned/.
+Architecture — sequential:
+  X             : (B, T_in, F)
+  Conv1d × L    → (B, cnn_filters, T_in) → LSTM → h_n[-1] : (B, hidden)
+  MLP head      → (B, T_out)
 
-Recommended run commands:
-  # Sequential — best: exclude MCO
-  --mode sequential --hidden 256 --layers 2 --dropout 0.3 --cnn-filters 128 --cnn-layers 1
+Architecture — parallel:
+  X             : (B, T_in, F)
+  Conv1d × L    → mean(dim=-1) : (B, cnn_filters)
+  LSTM(X)        → h_n[-1] : (B, hidden)
+  cat            → (B, cnn_filters + hidden) → MLP head → (B, T_out)
 
-  # Parallel — best: exclude MCO
-  --mode parallel --hidden 512 --layers 2 --dropout 0.2 --cnn-filters 256 --cnn-layers 1
+Architecture — augmented:
+  X             : (B, T_in, F)
+  Conv1d × L → LSTM → h_n[-1] : (B, hidden)
+  mean(dim=1, X) → skip : (B, n_features)
+  cat            → (B, hidden + n_features) → MLP head → (B, T_out)
 
-  # Augmented — best: exclude MCO
-  --mode augmented --hidden 256 --layers 2 --dropout 0.3 --cnn-filters 128 --cnn-layers 1
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

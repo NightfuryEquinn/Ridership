@@ -1,31 +1,18 @@
 """
-stsgcn.py  — Tuned Spatial-Temporal Synchronous Graph Convolutional Network (STSGCN)
+stsgcn.py  — Spatial-Temporal Synchronous Graph Convolutional Network (STSGCN) — Fine-Tuned
 
-Tuning rationale vs base (src/models/graph-based/stsgcn.py):
-  hidden   : 64  → 128   (low Combined% → larger capacity)
-  n_layers : 2   → 3     (deeper synchronous graph convolution;
-                           T_final = 14 - 2*3 = 8 > 0 ✓)
-  dropout  : 0.1 → 0.20  (MED-HIGH variance across lookbacks → moderate regularisation)
+Key Features:
+  • Joint spatial and temporal correlations in a single 3N×3N synchronous graph
+  • Chebyshev convolution on STSG per sliding 3-timestep window; centre N nodes extracted as output
+  • GLU activation for gated information flow in each synchronous convolutional layer
 
-All training hyperparameters (epochs, lr, batch_size, patience, weight_decay)
-are unchanged per the standardised baseline schedule.
-
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes. STSGCN builds a
-  Spatial-Temporal Synchronous Graph (STSG) that captures both spatial and
-  temporal correlations in a single 3N×3N adjacency matrix for each sliding
-  window of 3 consecutive timesteps:
-
-    STSG = [[A_spa,  I,      0    ],
-            [I,      A_spa,  I    ],
-            [0,      I,      A_spa]]
-
-  where A_spa is the N×N feature-correlation graph (absolute Pearson,
-  threshold=0.1) and I is the N×N identity (temporal self-connections).
+Tuned Hyperparameters:
+  hidden   : 64  → 128   low Combined% → larger capacity
+  n_layers : 2   → 3     deeper synchronous graph convolution; T_final = 14−2×3 = 8 > 0 ✓
+  dropout  : 0.1 → 0.20  medium-high variance across lookbacks → moderate regularisation
 
 Architecture:
-  Input: X (B, T_in, N)
-  Input projection: → (B, T_in, N, hidden)
+  Input: X (B, T_in, N) → projection → (B, T_in, N, hidden)
 
   STSGCL × n_layers:
     Unfold T into windows: (B, T-2, 3N, C_in)
@@ -34,9 +21,10 @@ Architecture:
 
   Mean pool over N, flatten T, MLP head → (B, T_out)
 
-Usage:
-  python src/models/graph-tuned/stsgcn.py
-  python src/models/graph-tuned/stsgcn.py --hidden 128 --n-layers 3
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

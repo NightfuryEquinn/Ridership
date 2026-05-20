@@ -1,23 +1,16 @@
 """
-stgcn.py  — Tuned Spatio-Temporal Graph Convolutional Network (STGCN)
+stgcn.py  — Spatio-Temporal Graph Convolutional Network (STGCN) — Fine-Tuned
 
-Tuning rationale vs base (src/models/graph-based/stgcn.py):
-  hidden    : 128 → 256   (low Combined% → larger capacity)
-  n_blocks  : 2   → 3     (deeper temporal receptive field)
-  kt        : 3   → 2     (REQUIRED: with n_blocks=3, T_in=14, kt=3 gives
-                            T_after = 14 - 2*(7) = 0 which fails the assertion;
-                            kt=2 gives T_after = 14 - 1*(7) = 7 ✓)
-  dropout   : 0.1 → 0.15  (LOW variance → light regularisation increase)
+Key Features:
+  • N input features as graph nodes; adjacency from absolute Pearson correlation (threshold=0.1)
+  • Alternating temporal gated convolution and Chebyshev graph convolution in each ST block
+  • BatchNorm after each block stabilises training across the deeper 3-block stack
 
-All training hyperparameters (epochs, lr, batch_size, patience, weight_decay)
-are unchanged per the standardised baseline schedule.
-
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes. The temporal
-  dimension (T_in=14) provides the scalar signal for each node. The adjacency
-  matrix is derived from absolute Pearson correlation between features on
-  training data, symmetrically normalised into a scaled Laplacian L_tilde
-  stored as a model buffer (so it travels with .to(device)).
+Tuned Hyperparameters:
+  hidden   : 128 → 256   low Combined% → larger capacity
+  n_blocks : 2   → 3     deeper temporal receptive field
+  kt       : 3   → 2     required: n_blocks=3, T_in=14, kt=3 → T_after=0; kt=2 → T_after=7 ✓
+  dropout  : 0.1 → 0.15  low variance → light regularisation increase
 
 Architecture:
   X (B, T_in, N)  →  reshape  →  (B, N, 1, T_in)
@@ -28,12 +21,12 @@ Architecture:
     TemporalGatedConv   (B, N, C_mid, T')   →  (B, N, C_out, T'-Kt+1)
     BatchNorm2d
 
-  Output Layer:
-    TemporalGatedConv → pool over N (mean) → flatten → MLP head → (B, T_out)
+  Output: TemporalGatedConv → mean over N → flatten → MLP head → (B, T_out)
 
-Usage:
-  python src/models/graph-tuned/stgcn.py
-  python src/models/graph-tuned/stgcn.py --hidden 256 --n-blocks 3 --kt 2
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

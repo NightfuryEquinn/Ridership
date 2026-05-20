@@ -1,34 +1,24 @@
 """
-bilstm.py  — Bidirectional LSTM for Transit Ridership Forecasting
+bilstm.py  — Bidirectional Long Short-Term Memory (BiLSTM)
 
-Mirrors lstm_baseline.py exactly in training loop, metrics, and plot style.
-The only architectural change is bidirectional=True in the LSTM cell, which
-concatenates the forward and backward hidden states before the MLP head,
-doubling the representational capacity at each layer.
+Key Features:
+  • Extends LSTM with a reversed pass over the look-back window
+  • Forward and backward hidden states are concatenated, doubling representational capacity
+  • Captures mid-window peaks and dips that a unidirectional model underweights
+  • Bidirectionality is valid for forecasting: it applies over the fully observed input, not the future
 
-Why BiLSTM over LSTM for this task?
-  A standard LSTM at timestep t only sees tokens 0…t (causal).
-  A BiLSTM also sees tokens t…T_in via a reversed pass, letting the model
-  use later context in the look-back window when encoding timestep t.
-  In practice this helps capture mid-window peaks/dips that a unidirectional
-  model may underweight because it hasn't "seen ahead" yet.
+Architecture:
+  X         : (B, T_in, F)
+  BiLSTM     → h_n : (2×layers, B, hidden)
+  h_fwd      = h_n[-2] : (B, hidden)   # last layer, forward direction
+  h_bwd      = h_n[-1] : (B, hidden)   # last layer, backward direction
+  cat        → (B, hidden × 2)
+  MLP head  → (B, T_out)
 
-  NOTE: BiLSTM is still valid for forecasting — the look-back window is
-  already fully observed at inference time; bidirectionality applies only
-  over the INPUT sequence, not into the future.
-
-Architectural difference vs LSTM:
-  LSTM   head input size = hidden_size
-  BiLSTM head input size = hidden_size * 2   (forward ‖ backward concat)
-
-Comparison:
-  Pass --lstm-results src/outputs/lstm/<run_id>/results.json to print a
-  side-by-side metric table and save a comparison bar chart.
-
-Usage:
-  python bilstm.py                                         # defaults
-  python bilstm.py --hidden 64 --layers 2 --dropout 0.2
-  python bilstm.py --lstm-results src/outputs/lstm/<id>/results.json
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

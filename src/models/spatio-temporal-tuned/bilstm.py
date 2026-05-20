@@ -1,21 +1,28 @@
 """
-bilstm.py  — Tuned Bidirectional LSTM for Transit Ridership Forecasting
+bilstm.py  — Bidirectional Long Short-Term Memory (BiLSTM) — Fine-Tuned
 
-Fine-tuned variant of the baseline BiLSTM. Architecture changes vs base:
-  hidden   : 64  → 128   (higher capacity; base Combined% was low)
-  layers   : 1   → 2     (deeper stack improves temporal abstraction)
-  dropout  : 0.1 → 0.15  (moderate increase for 2-layer regularisation)
+Key Features:
+  • Extends LSTM with a reversed pass over the look-back window
+  • Forward and backward hidden states concatenated, doubling representational capacity
+  • Bidirectionality is valid for forecasting: applied over the fully observed input, not the future
 
-All training hyperparameters (lr, batch_size, epochs, patience,
-weight_decay) are unchanged from the standardised baseline run.
+Tuned Hyperparameters:
+  hidden  : 64  → 128   higher capacity; base Combined% was low
+  layers  : 1   → 2     deeper stack improves temporal abstraction
+  dropout : 0.1 → 0.15  moderate increase for 2-layer regularisation
 
-Output is written to src/outputs/bilstm_tuned/ to keep tuned runs
-separate from baseline src/outputs/bilstm/ runs.
+Architecture:
+  X         : (B, T_in, F)
+  BiLSTM     → h_n : (2×layers, B, hidden)
+  h_fwd      = h_n[-2] : (B, hidden)
+  h_bwd      = h_n[-1] : (B, hidden)
+  cat        → (B, hidden × 2)
+  MLP head  → (B, T_out)
 
-Usage:
-  python src/models/spatio-temporal-tuned/bilstm.py          # tuned defaults
-  python src/models/spatio-temporal-tuned/bilstm.py --hidden 256 --layers 3
-  python src/models/spatio-temporal-tuned/bilstm.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

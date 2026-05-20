@@ -1,55 +1,28 @@
 """
-cnnbilstm.py  — CNN-BiLSTM for Transit Ridership Forecasting
+cnnbilstm.py  — Convolutional Neural Network Bidirectional LSTM (CNN-BiLSTM)
 
-Mirrors cnnlstm.py in training loop, metrics, and plot style.
-Replaces the unidirectional LSTM encoder with a BiLSTM, giving the model
-full bidirectional context over the CNN-extracted feature sequence.
+Key Features:
+  • Combines CNN local pattern extraction with bidirectional LSTM sequential context
+  • CNN applied channels-first with same-padding, preserving the time dimension
+  • BiLSTM replaces LSTM so the encoder sees the full look-back window from both directions
+  • Mid-window anomalies encoded with past and future context rather than only past
+  • Each CNN block: Conv1d → BatchNorm1d → ReLU
 
-Why CNN-BiLSTM over CNN-LSTM for this task?
-  CNN-LSTM feeds CNN features into a unidirectional LSTM that only sees
-  earlier timesteps when encoding each position.  Replacing it with a BiLSTM
-  adds a reversed pass so the encoder sees the entire look-back window from
-  both directions at every step.  For transit ridership the look-back window
-  is fully observed at inference time, so bidirectionality is valid and
-  beneficial: mid-window anomalies (e.g. a holiday spike on day 7 of a 14-day
-  window) are encoded with both past and future context rather than only past.
-
-  CNN-BiLSTM thus combines two complementary inductive biases:
-    • CNN  — local pattern detection (short receptive field, translation-
-             invariant, applied before recurrence)
-    • BiLSTM — global sequential context (bidirectional over the full
-               CNN-feature sequence)
-
-  The head receives a richer representation than CNN-LSTM's h_T alone:
-  cat([h_fwd, h_bwd]) of size hidden_size × 2 from the top BiLSTM layer.
-
-Architecture (forward pass):
+Architecture:
   X             : (B, T_in, F)
   permute        → (B, F, T_in)              # channels-first for Conv1d
   Conv1d × L    → (B, cnn_filters, T_in)    # same-padding preserves T_in
-  permute        → (B, T_in, cnn_filters)    # back to sequence format
-  BiLSTM         → h_n: (2×lstm_layers, B, hidden)
-  h_fwd = h_n[-2]: (B, hidden)              # last layer, forward direction
-  h_bwd = h_n[-1]: (B, hidden)              # last layer, backward direction
-  h_cat          : (B, hidden × 2)
+  permute        → (B, T_in, cnn_filters)
+  BiLSTM         → h_n : (2×layers, B, hidden)
+  h_fwd          = h_n[-2] : (B, hidden)    # last layer, forward direction
+  h_bwd          = h_n[-1] : (B, hidden)    # last layer, backward direction
+  cat            → (B, hidden × 2)
   MLP head      → (B, T_out)
 
-Each CNN block: Conv1d → BatchNorm1d → ReLU.
-
-Comparison:
-  --lstm-results     path/to/lstm/results.json
-  --bilstm-results   path/to/bilstm/results.json
-  --tpalstm-results  path/to/tpa_lstm/results.json
-  --cnnlstm-results  path/to/cnn_lstm/results.json
-  All four optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python cnnbilstm.py                              # defaults, auto-compare
-  python cnnbilstm.py --cnn-filters 64 --cnn-layers 2 --cnn-kernel-size 3
-  python cnnbilstm.py --lstm-results src/outputs/lstm/<id>/results.json \\
-                      --bilstm-results src/outputs/bilstm/<id>/results.json \\
-                      --tpalstm-results src/outputs/tpa_lstm/<id>/results.json \\
-                      --cnnlstm-results src/outputs/cnn_lstm/<id>/results.json
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

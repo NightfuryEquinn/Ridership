@@ -1,26 +1,29 @@
 """
-tft.py  — TFT (Fine-Tuned) for Transit Ridership Forecasting
+tft.py  — Temporal Fusion Transformer (TFT) — Fine-Tuned
 
-Tuned vs base (src/models/attention-based/tft.py):
-  | Parameter      | Base | Tuned | Rationale                                      |
-  |----------------|------|-------|------------------------------------------------|
-  | d_model        |  64  |  128  | Low Combined% → more capacity                  |
-  | n_heads        |   4  |    8  | Proportional to d_model                        |
-  | n_lstm_layers  |   1  |    2  | Deeper LSTM encoder for richer local dynamics  |
-  | n_attn_layers  |   2  |    3  | More self-attention layers for long-range dep. |
-  | dropout        | 0.10 |  0.25 | HIGH variance across lookbacks → stronger reg  |
+Key Features:
+  • GRN with ELU + GLU gating as the core building block throughout
+  • VSN for per-timestep softmax-weighted feature selection
+  • LSTM encoder followed by multi-head self-attention layers
 
-Training hyperparameters (epochs, batch_size, lr, patience, weight_decay)
-are intentionally unchanged — only architecture parameters differ.
+Tuned Hyperparameters:
+  d_model       : 64   → 128   low Combined% → more capacity
+  n_heads       : 4    → 8     proportional to d_model
+  n_lstm_layers : 1    → 2     deeper LSTM encoder for richer local dynamics
+  n_attn_layers : 2    → 3     more self-attention layers for long-range dependencies
+  dropout       : 0.10 → 0.25  high variance across lookbacks → stronger regularisation
 
-Output directory: src/outputs/tft_tuned/
+Architecture:
+  X (B, T_in, F)
+  ──► VSN → (B, T_in, d_model)
+  ──► LSTM encoder → (B, T_in, d_model)
+  ──► Multi-head SA (n_attn_layers) → mean pool → (B, d_model)
+  ──► MLP head → (B, T_out)
 
-Uses AMP (fp16) on CUDA — same as base.
-
-Usage:
-  python src/models/attention-tuned/tft.py
-  python src/models/attention-tuned/tft.py --d-model 128 --n-heads 8
-  python src/models/attention-tuned/tft.py --lookback 28
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : AMP fp16 (GradScaler enabled)
 """
 
 import os

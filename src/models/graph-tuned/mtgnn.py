@@ -1,27 +1,16 @@
 """
-mtgnn.py  — Tuned Multi-Scale Temporal Graph Neural Network (MTGNN)
+mtgnn.py  — Multi-Scale Temporal Graph Neural Network (MTGNN) — Fine-Tuned
 
-Tuning rationale vs base (src/models/graph-based/mtgnn.py):
-  hidden   : 32  → 64    (low Combined% → larger capacity)
-  skip_ch  : 64  → 128   (proportional increase with hidden)
-  n_layers : 3   → 4     (deeper feature extraction)
-  dropout  : 0.1 → 0.15  (LOW variance → light regularisation increase)
+Key Features:
+  • End-to-end learned asymmetric directed adjacency from trainable node-embedding matrices
+  • Dilated Inception module with kernel sizes [1, 3, 5, 7] for multi-scale temporal patterns
+  • Mix-hop graph convolution aggregates k-hop neighbourhoods with independent linear projections
 
-All training hyperparameters (epochs, lr, batch_size, patience, weight_decay)
-are unchanged per the standardised baseline schedule.
-
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes with scalar
-  signals.  MTGNN learns an asymmetric directed adjacency via two trainable
-  node-embedding matrices M1, M2 ∈ (N, d_emb):
-    A = softmax(ReLU(tanh(α) * (M1 @ M2.T − M2 @ M1.T)))
-  No pre-built correlation graph is needed.
-
-  Multi-scale temporal modelling uses a 4-branch Dilated Inception module
-  with kernel sizes [1, 3, 5, 7] and GLU activation.
-
-  Mix-hop graph convolution aggregates each node's 0-, 1-, …, d_hop-hop
-  neighbourhood with independent linear projections.
+Tuned Hyperparameters:
+  hidden   : 32  → 64    low Combined% → larger capacity
+  skip_ch  : 64  → 128   proportional increase with hidden
+  n_layers : 3   → 4     deeper feature extraction
+  dropout  : 0.1 → 0.15  low variance → light regularisation increase
 
 Architecture (per block):
   (B, hidden, N, T)  →  InceptionBlock  →  (B, hidden, N, T)
@@ -29,9 +18,10 @@ Architecture (per block):
                      →  skip + residual
   Skip aggregation → ReLU → mean(N, T) → MLP → (B, T_out)
 
-Usage:
-  python src/models/graph-tuned/mtgnn.py
-  python src/models/graph-tuned/mtgnn.py --hidden 64 --skip-ch 128 --n-layers 4
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os

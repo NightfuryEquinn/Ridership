@@ -1,19 +1,11 @@
 """
 stfgnn.py  — Spatial-Temporal Fusion Graph Neural Network (STFGNN)
 
-Adaptation for multivariate feature-node graph:
-  The n_features input features are treated as N graph nodes.  STFGNN fuses
-  two complementary static graphs:
-
-  A_spa — Spatial graph:
-    Absolute Pearson correlation of feature values across training samples
-    (identical to STGCN, threshold=0.1).  Captures which features co-vary
-    in the same direction at the same time.
-
-  A_tem — Temporal graph:
-    Absolute Pearson correlation of the mean temporal profile of each node,
-    i.e. |corr(μ_i, μ_j)| where μ_i = X_train[:, :, i].mean(axis=0) ∈ R^T_in.
-    Captures which features share the same intra-window dynamics.
+Key Features:
+  • Fuses two complementary static graphs: spatial (feature co-variation) and temporal (intra-window dynamics)
+  • A_spa: absolute Pearson correlation of feature values across training samples (threshold=0.1)
+  • A_tem: absolute Pearson correlation of each node's mean temporal profile over T_in
+  • Learnable scalar gate α blends spatial and temporal GCN outputs at each fusion block
 
 Architecture:
   Input: X (B, T_in, N)
@@ -23,20 +15,15 @@ Architecture:
     GatedTCN       (same-length temporal conv + GLU)
     Spatial GCN    (sym-norm A_spa propagation)
     Temporal GCN   (sym-norm A_tem propagation)
-    Learnable gate : h = α * spa_feat + (1-α) * tem_feat
+    Learnable gate : h = α · spa_feat + (1-α) · tem_feat
     LayerNorm + residual
 
   Global mean pool over N and T → MLP → (B, T_out)
 
-Comparison:
-  --lstm-results, --bilstm-results, --tpalstm-results,
-  --cnnlstm-results, --cnnbilstm-results, --stlstm-results,
-  --stgcn-results, --mtgnn-results, --stsgcn-results
-  All optional; each auto-detects the most recent run if omitted.
-
-Usage:
-  python stfgnn.py
-  python stfgnn.py --hidden 64 --n-layers 3
+Hardware:
+  GPU  : NVIDIA A100 (32 GB VRAM)
+  RAM  : 32 GB
+  Precision : float32
 """
 
 import os
