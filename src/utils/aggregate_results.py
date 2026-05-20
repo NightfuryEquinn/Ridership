@@ -1,21 +1,28 @@
 """
 aggregate_results.py — Collect all model run results into a summary table.
 
-Scans src/outputs/{model}/**/ for results.json files and aggregates them
-across three dimensions:
+Scans two directory tiers under outputs_root:
+  Base runs  : src/outputs/{model}/           → fine_tuned = "no"
+  Tuned runs : src/outputs/{model}_tuned/     → fine_tuned = "yes"
+
+Aggregates across three dimensions:
 
   Model      : 17 entries — 15 base models + CNN-LSTM parallel + CNN-LSTM augmented
   MCO        : "include" (train start < 2022-01-01 → 2019-2025 range)
              | "exclude" (train start >= 2022-01-01 → 2022-2025 range)
   Lookback   : 14 | 28 | 56 days  (from split_dates.T_in)
-  Fine-tuned : "no"  → oldest run in the (model, MCO, lookback) group
-             | "yes" → newest run in the (model, MCO, lookback) group
-               (if only one run exists, it appears once as fine-tuned="no")
+  Fine-tuned : "no"  → newest run found in {model}/
+             | "yes" → newest run found in {model}_tuned/
 
 Output
 ------
-  - Formatted console table grouped by (MCO, Lookback)
-  - src/outputs/aggregate_results.csv
+  - Console: one pivot table per metric, grouped as:
+      Base · No MCO  [lb14, lb28, lb56]
+      Base · MCO     [lb14, lb28, lb56]
+      Tuned · No MCO [lb14, lb28, lb56]
+      Tuned · MCO    [lb14, lb28, lb56]
+    Requires a ~140-char-wide terminal.
+  - src/outputs/aggregate_results.csv  (wide-format pivot)
 
 Usage
 -----
@@ -112,193 +119,409 @@ def _timestamp_from_run_id(run_id):
 
 # ── Core scan ─────────────────────────────────────────────────────────────────
 
-def scan_all_results(outputs_root):
+def _scan_dir(outputs_root, subdir, fine_tuned_tag, mode_filter, display_name):
     """
-    Walk every results.json under outputs_root and return a list of record dicts.
+    Scan one directory (base or tuned) for results.json files.
 
-    Each record has:
-      model_name, model_dir, mco, lookback, mode, run_id, timestamp, metrics, path
+    Returns a list of record dicts, each tagged with fine_tuned=fine_tuned_tag.
     """
     records = []
+    model_dir = os.path.join(outputs_root, subdir)
+    if not os.path.isdir(model_dir):
+        return records
 
-    for display_name, subdir, mode_filter in MODEL_REGISTRY:
-        model_dir = os.path.join(outputs_root, subdir)
-        if not os.path.isdir(model_dir):
+    pattern = os.path.join(model_dir, "**", "results.json")
+    for path in sorted(glob.glob(pattern, recursive=True)):
+        data = _load_json(path)
+        if data is None:
             continue
 
-        pattern = os.path.join(model_dir, "**", "results.json")
-        for path in sorted(glob.glob(pattern, recursive=True)):
-            data = _load_json(path)
-            if data is None:
+        # For CNN-LSTM variants, skip files that don't match the mode filter
+        if mode_filter is not None:
+            file_mode = _get_mode(data)
+            if file_mode != mode_filter:
                 continue
 
-            # For CNN-LSTM variants, skip files that don't match the mode filter
-            if mode_filter is not None:
-                file_mode = _get_mode(data)
-                if file_mode != mode_filter:
-                    continue
+        run_id  = data.get("run_id", os.path.basename(os.path.dirname(path)))
+        lb      = _get_lookback(data)
+        mco     = _infer_mco(data.get("split_dates") or {})
+        overall = _get_overall(data)
+        ts      = _timestamp_from_run_id(run_id)
 
-            run_id   = data.get("run_id", os.path.basename(os.path.dirname(path)))
-            lb       = _get_lookback(data)
-            mco      = _infer_mco(data.get("split_dates") or {})
-            overall  = _get_overall(data)
-            ts       = _timestamp_from_run_id(run_id)
-
-            records.append({
-                "model":     display_name,
-                "subdir":    subdir,
-                "mco":       mco,
-                "lookback":  lb,
-                "mode":      _get_mode(data),
-                "run_id":    run_id,
-                "timestamp": ts,
-                "metrics":   overall,
-                "path":      path,
-            })
+        records.append({
+            "model":      display_name,
+            "subdir":     subdir,
+            "fine_tuned": fine_tuned_tag,
+            "mco":        mco,
+            "lookback":   lb,
+            "mode":       _get_mode(data),
+            "run_id":     run_id,
+            "timestamp":  ts,
+            "metrics":    overall,
+            "path":       path,
+        })
 
     return records
 
 
-# ── Selection: oldest (no fine-tune) and newest (fine-tuned) ─────────────────
+def scan_all_results(outputs_root):
+    """
+    Walk base ({model}/) and tuned ({model}_tuned/) directories for every
+    entry in MODEL_REGISTRY and return a list of record dicts.
+
+    Each record has:
+      model, subdir, fine_tuned, mco, lookback, mode, run_id, timestamp,
+      metrics, path
+    """
+    records = []
+
+    for display_name, subdir, mode_filter in MODEL_REGISTRY:
+        # Base runs: src/outputs/{subdir}/
+        records.extend(_scan_dir(outputs_root, subdir, "no", mode_filter, display_name))
+        # Tuned runs: src/outputs/{subdir}_tuned/
+        records.extend(_scan_dir(outputs_root, subdir + "_tuned", "yes", mode_filter, display_name))
+
+    return records
+
+
+# ── Selection: newest run per (model, fine_tuned, mco, lookback) ─────────────
 
 def select_runs(records):
     """
-    Group records by (model, mco, lookback) and pick:
-      oldest  → fine_tuned = "no"
-      newest  → fine_tuned = "yes"  (only emitted when a 2nd distinct run exists)
+    Group records by (model, fine_tuned, mco, lookback) and keep the newest
+    run in each group (latest timestamp).
 
     Returns a list of row dicts ready for tabulation/CSV.
     """
     groups = defaultdict(list)
     for r in records:
-        key = (r["model"], r["mco"], r["lookback"])
+        key = (r["model"], r["fine_tuned"], r["mco"], r["lookback"])
         groups[key].append(r)
 
     rows = []
-    for (model, mco, lookback), group in sorted(groups.items()):
-        group_sorted = sorted(group, key=lambda r: r["timestamp"])
-        oldest = group_sorted[0]
-        newest = group_sorted[-1]
-
-        def _make_row(rec, fine_tuned):
-            m = rec["metrics"]
-            return {
-                "Model":       model,
-                "MCO":         mco,
-                "Lookback":    lookback,
-                "Fine-tuned":  fine_tuned,
-                "Combined%":   m.get("Combined"),
-                "MAPE%":       m.get("MAPE"),
-                "MAE%":        m.get("MAE_pct"),
-                "RMSE%":       m.get("RMSE_pct"),
-                "R²":          m.get("R2"),
-                "MAE":         m.get("MAE"),
-                "RMSE":        m.get("RMSE"),
-                "run_id":      rec["run_id"],
-                "path":        rec["path"],
-            }
-
-        rows.append(_make_row(oldest, "no"))
-        if newest["run_id"] != oldest["run_id"]:
-            rows.append(_make_row(newest, "yes"))
+    for (model, fine_tuned, mco, lookback), group in sorted(groups.items()):
+        newest = max(group, key=lambda r: r["timestamp"])
+        m = newest["metrics"]
+        rows.append({
+            "Model":       model,
+            "MCO":         mco,
+            "Lookback":    lookback,
+            "Fine-tuned":  fine_tuned,
+            "Combined%":   m.get("Combined"),
+            "MAPE%":       m.get("MAPE"),
+            "MAE%":        m.get("MAE_pct"),
+            "RMSE%":       m.get("RMSE_pct"),
+            "R²":          m.get("R2"),
+            "MAE":         m.get("MAE"),
+            "RMSE":        m.get("RMSE"),
+            "run_id":      newest["run_id"],
+            "path":        newest["path"],
+        })
 
     return rows
 
 
-# ── Console table ─────────────────────────────────────────────────────────────
+# ── Side-by-side pivot table ──────────────────────────────────────────────────
 
-def _fmt(v, key):
+# Column order: (fine_tuned, mco, lookback)
+_CONFIGS = [
+    ("no",  "exclude", 14), ("no",  "exclude", 28), ("no",  "exclude", 56),
+    ("no",  "include", 14), ("no",  "include", 28), ("no",  "include", 56),
+    ("yes", "exclude", 14), ("yes", "exclude", 28), ("yes", "exclude", 56),
+    ("yes", "include", 14), ("yes", "include", 28), ("yes", "include", 56),
+]
+
+# (display_key_in_row, min_cell_width)
+_PIVOT_METRICS = [
+    ("Combined%", 8),
+    ("MAPE%",     8),
+    ("MAE%",      8),
+    ("RMSE%",     8),
+    ("R²",        8),
+    ("MAE",      10),
+    ("RMSE",     10),
+]
+
+# ── Tuned-vs-base comparison ───────────────────────────────────────────────────
+
+# Column order for the delta table: (mco, lookback)
+_COMPARE_CONFIGS = [
+    ("exclude", 14), ("exclude", 28), ("exclude", 56),
+    ("include", 14), ("include", 28), ("include", 56),
+]
+
+# True = higher is better; False = lower is better
+_METRIC_HIGHER_BETTER = {
+    "Combined%": True,
+    "MAPE%":     False,
+    "MAE%":      False,
+    "RMSE%":     False,
+    "R²":        True,
+    "MAE":       False,
+    "RMSE":      False,
+}
+
+
+def _delta_direction(delta, metric):
+    """Return direction symbol: ↑ (improved), ↓ (degraded), = (unchanged)."""
+    if delta is None:
+        return "—"
+    if abs(delta) < 1e-9:
+        return "="
+    higher_better = _METRIC_HIGHER_BETTER.get(metric, False)
+    return "↑" if ((higher_better and delta > 0) or (not higher_better and delta < 0)) else "↓"
+
+
+def _fmt_delta_cell(delta, metric, direction, cell_w):
+    """Format a delta+direction value, e.g. '+2.34↑', right-justified to cell_w."""
+    if delta is None:
+        return "—".rjust(cell_w)
+    if metric in ("MAE", "RMSE"):
+        s = f"{delta:+,.0f}{direction}"
+    elif metric == "R²":
+        s = f"{delta:+.4f}{direction}"
+    else:
+        s = f"{delta:+.2f}{direction}"
+    return s.rjust(cell_w)
+
+
+def _delta_csv_col(mco, lb, metric, kind):
+    """Build a flat column name, e.g. delta_nomco_lb14_Combined%  or  delta_nomco_lb14_Combined%_dir."""
+    mco_tag = "nomco" if mco == "exclude" else "mco"
+    suffix  = "" if kind == "delta" else "_dir"
+    return f"delta_{mco_tag}_lb{lb}_{metric}{suffix}"
+
+
+def _build_pivot(rows):
+    """Return (model_order, pivot) where pivot[model][(ft, mco, lb)] = row."""
+    pivot = defaultdict(dict)
+    model_order = []
+    for r in rows:
+        m = r["Model"]
+        if m not in model_order:
+            model_order.append(m)
+        key = (r["Fine-tuned"], r["MCO"], r["Lookback"])
+        pivot[m][key] = r
+    return model_order, pivot
+
+
+def _fmt_cell(v, metric):
     if v is None:
         return "—"
-    if key in ("MAE", "RMSE"):
+    if metric in ("MAE", "RMSE"):
         return f"{v:,.0f}"
-    if key == "R²":
+    if metric == "R²":
         return f"{v:.4f}"
     return f"{v:.2f}"
 
 
-def print_table(rows):
-    """Print a grouped, human-readable console table."""
+def print_comparison_table(rows):
+    """
+    Print one pivot table per metric.
+
+    Layout (12 columns, grouped):
+      Base · No MCO  [14, 28, 56] | Base · With MCO  [14, 28, 56]
+      Tuned · No MCO [14, 28, 56] | Tuned · With MCO [14, 28, 56]
+
+    Requires a ~140-char-wide terminal.
+    """
     if not rows:
         print("[INFO] No results found.")
         return
 
-    col_widths = {
-        "Model":      max(len("Model"),      max(len(r["Model"])      for r in rows)),
-        "MCO":        max(len("MCO"),        max(len(r["MCO"])        for r in rows)),
-        "Lookback":   max(len("Lookback"),   8),
-        "Fine-tuned": max(len("Fine-tuned"), 10),
-        "Combined%":  max(len("Combined%"),  9),
-        "MAPE%":      max(len("MAPE%"),      7),
-        "MAE%":       max(len("MAE%"),       7),
-        "RMSE%":      max(len("RMSE%"),      7),
-        "R²":         max(len("R²"),         8),
-        "MAE":        max(len("MAE"),        10),
-        "RMSE":       max(len("RMSE"),       10),
-    }
+    model_order, pivot = _build_pivot(rows)
 
-    display_cols = ["Model", "MCO", "Lookback", "Fine-tuned",
-                    "Combined%", "MAPE%", "MAE%", "RMSE%", "R²", "MAE", "RMSE"]
+    model_w = max(len("Model"), max(len(m) for m in model_order))
+    cell_w  = 8          # fits "100.00", "0.9999", "1,234,567"
+    gap     = "  "
 
-    def _row_str(r_dict):
-        parts = []
-        for col in display_cols:
-            v = r_dict.get(col)
-            if col in ("Combined%", "MAPE%", "MAE%", "RMSE%", "R²", "MAE", "RMSE"):
-                key_map = {"Combined%": "Combined%", "MAPE%": "MAPE%", "MAE%": "MAE%",
-                           "RMSE%": "RMSE%", "R²": "R²", "MAE": "MAE", "RMSE": "RMSE"}
-                s = _fmt(v, col)
-                parts.append(s.rjust(col_widths[col]))
-            else:
-                s = str(v) if v is not None else "—"
-                parts.append(s.ljust(col_widths[col]))
-        return "  ".join(parts)
+    n_configs = len(_CONFIGS)                    # 12
+    sub_span  = (cell_w + len(gap)) * 3          # 3 lookbacks per sub-group (No MCO / With MCO)
+    grp_span  = sub_span * 2                     # Base or Tuned block
 
-    def _header():
-        parts = [col.ljust(col_widths[col]) if col not in
-                 ("Combined%", "MAPE%", "MAE%", "RMSE%", "R²", "MAE", "RMSE")
-                 else col.rjust(col_widths[col])
-                 for col in display_cols]
-        return "  ".join(parts)
+    # Total line width
+    total_w = model_w + len(gap) + (cell_w + len(gap)) * n_configs - len(gap)
+    eq  = "═" * total_w
+    sep = "─" * total_w
 
-    sep_len = sum(col_widths[c] for c in display_cols) + 2 * (len(display_cols) - 1)
-    sep = "─" * sep_len
+    lb_labels = (["14", "28", "56"] * 4)
 
-    # Group by (MCO, Lookback) for visual separation
-    from itertools import groupby
-    grouped = sorted(rows, key=lambda r: (r["MCO"], r["Lookback"] or 0, r["Model"], r["Fine-tuned"]))
+    def _grp_hdr():
+        base_lbl  = "── Base (No Fine-Tune) ──"
+        tuned_lbl = "── Fine-Tuned ──"
+        return (
+            f"{''.ljust(model_w)}{gap}"
+            f"{base_lbl.ljust(grp_span)}"
+            f"{tuned_lbl.ljust(grp_span)}"
+        )
 
-    print(f"\n{'=' * sep_len}")
-    print("Aggregate Results — All Models")
-    print(f"{'=' * sep_len}")
-    print(_header())
-    print(sep)
+    def _sub_hdr():
+        return (
+            f"{''.ljust(model_w)}{gap}"
+            f"{'No MCO'.center(sub_span)}"
+            f"{'With MCO'.center(sub_span)}"
+            f"{'No MCO'.center(sub_span)}"
+            f"{'With MCO'.center(sub_span)}"
+        )
 
-    prev_group = None
-    for r in grouped:
-        cur_group = (r["MCO"], r["Lookback"])
-        if prev_group is not None and cur_group != prev_group:
-            print(sep)
-        print(_row_str(r))
-        prev_group = cur_group
+    def _col_hdr():
+        cells = gap.join(lbl.rjust(cell_w) for lbl in lb_labels)
+        return f"{'Model'.ljust(model_w)}{gap}{cells}"
 
-    print(f"{'=' * sep_len}")
-    print(f"Total rows: {len(rows)}")
+    def _data_row(model, metric):
+        m_data = pivot[model]
+        cells = []
+        for cfg in _CONFIGS:
+            r = m_data.get(cfg)
+            v = r.get(metric) if r else None
+            cells.append(_fmt_cell(v, metric).rjust(cell_w))
+        return f"{model.ljust(model_w)}{gap}" + gap.join(cells)
 
+    for metric, _ in _PIVOT_METRICS:
+        print(f"\n{eq}")
+        print(f"  {metric}  ·  Model × [Base/Tuned  ·  No MCO/With MCO  ·  Lookback]")
+        print(eq)
+        print(_grp_hdr())
+        print(_sub_hdr())
+        print(_col_hdr())
+        print(sep)
+        for model in model_order:
+            print(_data_row(model, metric))
+        print(eq)
 
-# ── CSV export ────────────────────────────────────────────────────────────────
-
-CSV_COLS = ["Model", "MCO", "Lookback", "Fine-tuned",
-            "Combined%", "MAPE%", "MAE%", "RMSE%", "R²", "MAE", "RMSE",
-            "run_id", "path"]
+    print(f"\nModels: {len(model_order)}  |  — = no data for that configuration")
 
 
-def save_csv(rows, csv_path):
+def print_tuned_vs_base_table(rows):
+    """
+    Print per-metric delta tables: tuned minus base for each (MCO, lookback) combo.
+
+    Layout (6 columns):
+      No MCO [14, 28, 56] | With MCO [14, 28, 56]
+
+    ↑ = improved, ↓ = degraded, = = unchanged, — = base or tuned absent.
+    """
+    if not rows:
+        return
+
+    model_order, pivot = _build_pivot(rows)
+
+    model_w = max(len("Model"), max(len(m) for m in model_order))
+    cell_w  = 12          # fits "+1,234,567↑" for large MAE/RMSE deltas
+    gap     = "  "
+
+    n_compare = len(_COMPARE_CONFIGS)              # 6
+    sub_span  = (cell_w + len(gap)) * 3            # 3 lookbacks per MCO group
+    total_w   = model_w + len(gap) + (cell_w + len(gap)) * n_compare - len(gap)
+
+    eq  = "═" * total_w
+    sep = "─" * total_w
+    lb_labels = ["14", "28", "56", "14", "28", "56"]
+
+    def _sub_hdr():
+        return (
+            f"{''.ljust(model_w)}{gap}"
+            f"{'No MCO'.center(sub_span)}"
+            f"{'With MCO'.center(sub_span)}"
+        )
+
+    def _col_hdr():
+        cells = gap.join(lbl.rjust(cell_w) for lbl in lb_labels)
+        return f"{'Model'.ljust(model_w)}{gap}{cells}"
+
+    def _data_row(model, metric):
+        m_data = pivot[model]
+        cells = []
+        for mco, lb in _COMPARE_CONFIGS:
+            base_row  = m_data.get(("no",  mco, lb))
+            tuned_row = m_data.get(("yes", mco, lb))
+            if base_row is None or tuned_row is None:
+                cells.append("—".rjust(cell_w))
+                continue
+            bv = base_row.get(metric)
+            tv = tuned_row.get(metric)
+            if bv is None or tv is None:
+                cells.append("—".rjust(cell_w))
+                continue
+            delta = tv - bv
+            direction = _delta_direction(delta, metric)
+            cells.append(_fmt_delta_cell(delta, metric, direction, cell_w))
+        return f"{model.ljust(model_w)}{gap}" + gap.join(cells)
+
+    for metric, _ in _PIVOT_METRICS:
+        print(f"\n{eq}")
+        print(f"  TUNED vs BASE Δ  ·  {metric}  (↑ improved  ↓ degraded  = unchanged  — absent)")
+        print(eq)
+        print(_sub_hdr())
+        print(_col_hdr())
+        print(sep)
+        for model in model_order:
+            print(_data_row(model, metric))
+        print(eq)
+
+    print(f"\n  — = base or tuned run absent for that configuration")
+
+
+# ── Wide-format CSV export ────────────────────────────────────────────────────
+
+def _csv_col(ft, mco, lb, metric):
+    """Build a flat column name like base_nomco_lb14_Combined%."""
+    ft_tag  = "base"  if ft  == "no"      else "tuned"
+    mco_tag = "nomco" if mco == "exclude"  else "mco"
+    return f"{ft_tag}_{mco_tag}_lb{lb}_{metric}"
+
+
+def save_comparison_csv(rows, csv_path):
+    """
+    Save a wide-format pivot CSV.
+
+    Columns: Model, then for each of the 12 (fine_tuned × MCO × lookback)
+    configurations: one column per metric, plus a run_id column.
+    """
+    model_order, pivot = _build_pivot(rows)
+    metric_keys = [m for m, _ in _PIVOT_METRICS]
+
+    fieldnames = ["Model"]
+    for ft, mco, lb in _CONFIGS:
+        for metric in metric_keys:
+            fieldnames.append(_csv_col(ft, mco, lb, metric))
+    for ft, mco, lb in _CONFIGS:
+        fieldnames.append(_csv_col(ft, mco, lb, "run_id"))
+    # Tuned-vs-base delta columns
+    for mco, lb in _COMPARE_CONFIGS:
+        for metric in metric_keys:
+            fieldnames.append(_delta_csv_col(mco, lb, metric, "delta"))
+            fieldnames.append(_delta_csv_col(mco, lb, metric, "dir"))
+
     os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLS, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(rows)
+        for model in model_order:
+            m_data = pivot[model]
+            rec = {"Model": model}
+            for ft, mco, lb in _CONFIGS:
+                r = m_data.get((ft, mco, lb))
+                for metric in metric_keys:
+                    rec[_csv_col(ft, mco, lb, metric)] = r.get(metric) if r else None
+                rec[_csv_col(ft, mco, lb, "run_id")] = r.get("run_id") if r else None
+            # Compute deltas
+            for mco, lb in _COMPARE_CONFIGS:
+                base_r  = m_data.get(("no",  mco, lb))
+                tuned_r = m_data.get(("yes", mco, lb))
+                for metric in metric_keys:
+                    bv = base_r.get(metric)  if base_r  else None
+                    tv = tuned_r.get(metric) if tuned_r else None
+                    if bv is not None and tv is not None:
+                        delta     = tv - bv
+                        direction = _delta_direction(delta, metric)
+                        rec[_delta_csv_col(mco, lb, metric, "delta")] = round(delta, 6)
+                        rec[_delta_csv_col(mco, lb, metric, "dir")]   = direction
+                    else:
+                        rec[_delta_csv_col(mco, lb, metric, "delta")] = None
+                        rec[_delta_csv_col(mco, lb, metric, "dir")]   = None
+            writer.writerow(rec)
+
     print(f"\n[INFO] CSV saved → {csv_path}")
 
 
@@ -334,10 +557,11 @@ def main():
     print(f"[INFO] Aggregated {len(rows)} row(s) after oldest/newest selection.")
 
     if not args.no_table:
-        print_table(rows)
+        print_comparison_table(rows)
+        print_tuned_vs_base_table(rows)
 
     if not args.no_csv:
-        save_csv(rows, csv_out)
+        save_comparison_csv(rows, csv_out)
 
 
 if __name__ == "__main__":
