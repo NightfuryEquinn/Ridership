@@ -1,0 +1,192 @@
+{
+  "run_id": "20260521_162449",
+  "model": "STSGCNForecaster",
+  "hparams": {
+    "hidden": 256,
+    "n_layers": 4,
+    "cheb_k": 3,
+    "adj_threshold": 0.1,
+    "dropout": 0.1,
+    "weight_decay": 0.0001,
+    "T_in": 56,
+    "T_out": 7,
+    "n_features": 79,
+    "n_edges": 697,
+    "batch_size": 32,
+    "lr": 0.001,
+    "loss": "huber",
+    "warmup_epochs": 5
+  },
+  "training": {
+    "best_epoch": 23,
+    "best_val_loss": 0.007512,
+    "total_epochs": 38
+  },
+  "split_dates": {
+    "train": {
+      "start": "2019-01-01",
+      "end": "2023-11-24"
+    },
+    "val": {
+      "start": "2023-11-25",
+      "end": "2024-12-12"
+    },
+    "test": {
+      "start": "2024-12-13",
+      "end": "2025-12-31"
+    },
+    "T_in": 56,
+    "T_out": 7,
+    "n_features": 79,
+    "target_col": "total_ridership",
+    "target_col_idx": 12,
+    "dtype": "float16",
+    "compressed": false
+  },
+  "test_metrics": {
+    "overall": {
+      "Combined": 50.1308,
+      "MAPE": 15.8258,
+      "MAE_pct": 16.0939,
+      "RMSE_pct": 17.9495,
+      "R2": 0.106,
+      "MAE": 199725.5142,
+      "RMSE": 222754.6536
+    },
+    "per_step": [
+      {
+        "Combined": 56.8894,
+        "MAPE": 14.3375,
+        "MAE_pct": 13.6858,
+        "RMSE_pct": 15.0872,
+        "R2": 0.3671,
+        "MAE": 169910.2921,
+        "RMSE": 187308.7046
+      },
+      {
+        "Combined": 56.3336,
+        "MAPE": 14.3346,
+        "MAE_pct": 13.9675,
+        "RMSE_pct": 15.3643,
+        "R2": 0.3439,
+        "MAE": 173327.5312,
+        "RMSE": 190661.9126
+      },
+      {
+        "Combined": 48.8134,
+        "MAPE": 16.1143,
+        "MAE_pct": 16.6232,
+        "RMSE_pct": 18.4491,
+        "R2": 0.055,
+        "MAE": 206265.4705,
+        "RMSE": 228922.8948
+      },
+      {
+        "Combined": 46.7516,
+        "MAPE": 16.6258,
+        "MAE_pct": 17.312,
+        "RMSE_pct": 19.3107,
+        "R2": -0.0323,
+        "MAE": 214774.6347,
+        "RMSE": 239571.1131
+      },
+      {
+        "Combined": 44.0711,
+        "MAPE": 17.2426,
+        "MAE_pct": 18.2125,
+        "RMSE_pct": 20.4738,
+        "R2": -0.1612,
+        "MAE": 225854.6368,
+        "RMSE": 253897.6759
+      },
+      {
+        "Combined": 46.3542,
+        "MAPE": 16.8226,
+        "MAE_pct": 17.4693,
+        "RMSE_pct": 19.3539,
+        "R2": -0.0439,
+        "MAE": 216812.3839,
+        "RMSE": 240202.8566
+      },
+      {
+        "Combined": 52.4281,
+        "MAPE": 15.3035,
+        "MAE_pct": 15.3901,
+        "RMSE_pct": 16.8784,
+        "R2": 0.2128,
+        "MAE": 191133.6498,
+        "RMSE": 209617.4656
+      }
+    ]
+  },
+  "comparison": {
+    "lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "bilstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "tpa_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "cnn_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "cnn_bilstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "st_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "stgcn": {
+      "run_id": null,
+      "overall": null
+    },
+    "mtgnn": {
+      "run_id": null,
+      "overall": null
+    },
+    "stfgnn": {
+      "run_id": null,
+      "overall": null
+    },
+    "pdr_stgcn": {
+      "run_id": null,
+      "overall": null
+    },
+    "astgcn": {
+      "run_id": null,
+      "overall": null
+    },
+    "tft": {
+      "run_id": null,
+      "overall": null
+    },
+    "autoformer": {
+      "run_id": null,
+      "overall": null
+    },
+    "informer": {
+      "run_id": null,
+      "overall": null
+    },
+    "stsgcn": {
+      "run_id": "20260521_162449",
+      "overall": {
+        "Combined": 50.1308,
+        "MAPE": 15.8258,
+        "MAE_pct": 16.0939,
+        "RMSE_pct": 17.9495,
+        "R2": 0.106,
+        "MAE": 199725.5142,
+        "RMSE": 222754.6536
+      }
+    }
+  }
+}
