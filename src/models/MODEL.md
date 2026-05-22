@@ -1,6 +1,6 @@
 # Model Descriptions
 
-This document describes all 15 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three series: **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based**. All models share the same input/output dimensions (T_in=14/28/56 look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (59 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE).
+This document describes all 16 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 15 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
 
 **Shared training optimizations (all 15 models):** AdamW optimiser (decoupled weight decay), HuberLoss (default, selectable via `--loss {mse,huber,mae}`), and a 5-epoch linear LR warm-up before ReduceLROnPlateau (configurable via `--warmup-epochs`). Architecture and hyperparameter values are unchanged.
 
@@ -363,7 +363,7 @@ n_blocks stacked, then:
 
 **Script:** `tft.py`
 
-A fully transformer-style model designed for interpretable multi-horizon forecasting. All 59 features are treated as observed past inputs (no static or future covariates in this adaptation). Three core components:
+A fully transformer-style model designed for interpretable multi-horizon forecasting. All 79 features are treated as observed past inputs (no static or future covariates in this adaptation). Three core components:
 
 - **Variable Selection Network (VSN):** Softmax-weighted selection over input features per timestep, identifying the most predictive features for the forecast.
 - **LSTM Encoder:** Captures local sequential dynamics after feature selection.
@@ -474,7 +474,94 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
 → MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
 → ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
+→ HMT-TSF (17-way)
 ```
+
+---
+
+## Series 4 — Hybrid SOTA
+
+Located in `src/models/hybrid/`. A purpose-built model that combines temporal, spatial, and regime-aware representations in a single end-to-end architecture. Uses AMP (fp16 + GradScaler) on the A100. Full architecture diagram and component rationale in `src/models/hybrid/HMT-TSF.md`.
+
+---
+
+### 16. HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
+
+**Script:** `src/models/hybrid/hmttsf.py`
+
+The SOTA model for this study. Fuses three parallel encoders into a single gated representation, then optionally corrects residuals with a trained gradient boosting model.
+
+**Five Feature-Group Encoders → Single Fused Embedding:**
+
+All 79 input features are first split into five semantic groups and independently embedded via small MLPs before fusion:
+- **Target context** (idx 0–12): 13 service-line ridership values → MLP → d/2
+- **Temporal/cyclical** (idx 13–28): 16 holiday + cyclical features → MLP → d/2
+- **External** (idx 29–58): 30 fuel + rainfall features → MLP → d/2
+- **Lag** (idx 59–61): 3 autoregressive lags → MLP → d/2
+- **Static** (idx 62–78): 17 population/GTFS/OSM/GADM features → MLP → d/2
+
+The five embeddings are concatenated, gated, and projected to `d_model` via `Linear → GELU → LayerNorm`. RevIN (Reversible Instance Normalisation) is applied to the raw input before encoding to reduce within-batch distribution shift from MCO/COVID regime changes.
+
+**Three Parallel Encoders:**
+
+1. **Multi-Scale TCN:** Causal dilated convolutions at 1–3 scales (full T_in, T_in//2 for ≥28, T_in//4 for ≥56). WaveNet-style gated activations (tanh ⊙ σ) with residuals. Learned attention blending across scales → single `(B, d_model)` temporal summary.
+
+2. **Feature Graph Encoder (GCN):** Mean-pools the fused embedding over T, treats the result as node features on an F×F Pearson-correlation adjacency (threshold=0.1, same strategy as STGCN/ASTGCN), runs 2-layer GCN, global mean-pools over nodes → `(B, d_model)` spatial summary.
+
+3. **Regime Gating Embedding:** Mean-pools fused embedding over T, applies a linear to produce K=3 soft gate logits (pre-COVID / COVID / post-COVID), multiplies each gate weight by a learned regime embedding vector → soft mixture → `(B, d_model)` regime summary.
+
+**Gated Fusion:**
+```
+h = cat[h_temporal, h_spatial, h_regime]   (B, 3·d_model)
+g = σ(Linear(h))
+out = Linear(g ⊙ h) → GELU → Dropout → LayerNorm   (B, d_model)
+```
+
+**Dual Forecast Heads:**
+- **Primary head:** `h → 2d → d → T_out` with highway residual.
+- **Boosting head:** `h → d → T_out`, scaled by `sigmoid(α)` (α initialised to 0.1 to suppress early boosting).
+- `y_final = y_primary + y_boosting`
+
+**Optional Post-Hoc Residual Boosting (Phase 3):**
+- Collect neural predictions on the training set; compute residuals `Δ = y_true − y_neural`.
+- Fit CatBoost (if installed) or sklearn MLP on flattened `(X_train, Δ)`.
+- Apply correction: `y_final += 0.5 × Δ_boost` — only if Combined% improves on validation.
+- Activate via `--use-catboost`.
+
+**Walk-Forward Evaluation (Phase 4):**
+- Test set split into 3 equal chronological blocks; Combined% and R² reported per block.
+- Allows detection of temporal performance degradation.
+
+**Custom Loss:**
+```
+L = WeightedHuber(step-decay γ=0.9) + λ · TemporalSmoothness
+```
+Step 1 has weight 1.0; subsequent steps decay geometrically. Temporal smoothness penalises `‖y_{t+1} − y_t‖²` across T_out to prevent oscillatory predictions.
+
+**Optional HPO:** Optuna with MedianPruner — `--tune-trials N` runs N trials (up to 40 epochs each) before full training. Search space covers `d_model`, `n_tcn_blocks`, `graph_hidden`, `dropout`, `lr`, `smooth_weight`.
+
+**Architecture (end-to-end):**
+```
+X (B, T_in, 79)  →  RevIN  →  FeatureGroupFusion  →  (B, T_in, d_model)
+                                    ↙           ↓           ↘
+                         Multi-Scale TCN   Feature GCN   Regime Gating
+                                    ↘           ↓           ↙
+                                         Gated Fusion  →  (B, d_model)
+                                              ↓
+                                    Primary + Boost Heads  →  (B, T_out=7)
+                                              ↓  [optional]
+                                    CatBoost / MLP residual correction
+```
+
+**Default hyperparameters:** `d_model=128`, `n_tcn_blocks=3`, `graph_hidden=64`, `n_regimes=3`, `dropout=0.1`, `epochs=150`, `batch_size=32`, `lr=1e-3`, `weight_decay=1e-4`, `patience=15`, `warmup_epochs=5`, `smooth_weight=0.01`, `loss_decay=0.9`.
+
+**Lookback support:** {7, 14, 28, 56, 84} days — wider than the 15 base models ({14, 28, 56} only). Multi-scale TCN: Scale 2 (T//2) activates for T_in ≥ 28; Scale 3 (T//4) activates for T_in ≥ 56. Sequence dirs for lookback 7 and 84 must be built before use:
+```bash
+python src/features/sequence_builder.py --T-in 7
+python src/features/sequence_builder.py --T-in 84
+```
+
+**Optimisation targets:** Combined% ≥ 80, R² ≥ 0.78.
 
 ---
 
@@ -539,3 +626,4 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 | 13 | TFT | Attention | No | Self-Attn | Yes | Variable selection + LSTM encoder + Transformer decoder |
 | 14 | Autoformer | Attention | No | Auto-Corr (FFT) | Yes | Decomposition + FFT-based periodic autocorrelation |
 | 15 | Informer | Attention | No | ProbSparse | Yes | Sparse attention + distilling for efficiency |
+| 16 | HMT-TSF | Hybrid | Static Pearson (GCN) | — | Yes | Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction |

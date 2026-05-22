@@ -7,65 +7,65 @@ Input X: (B, T_in, F=79)   [MinMax-scaled by data pipeline]
           │
   ┌───────┴──────────────────────────────────────────────────────────┐
   │                 RevIN (input-only instance norm)                 │
-  │  x̂ = (x − μ_sample) / σ_sample * γ + β   (per B per F)         │
+  │  x̂ = (x − μ_sample) / σ_sample * γ + β   (per B per F)           │
   └───────┬──────────────────────────────────────────────────────────┘
           │
   ┌───────┴──────────────────────────────────────────────────────────┐
   │              Feature Group Fusion  →  (B, T_in, d_model)         │
-  │                                                                   │
-  │  ┌──────────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────────┐│
-  │  │Target context│ │Temporal/Cyc. │ │ Lag enc. │ │Static enc.   ││
-  │  │  idx  0–12   │ │  idx 13–28   │ │ idx 59–61│ │  idx 62–78   ││
-  │  │  MLP→d/2     │ │  MLP→d/2    │ │  MLP→d/2 │ │  MLP→d/2    ││
-  │  └──────┬───────┘ └──────┬───────┘ └────┬─────┘ └──────┬───────┘│
+  │                                                                  │
+  │  ┌──────────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────────┐ │
+  │  │Target context│ │Temporal/Cyc. │ │ Lag enc. │ │Static enc.   │ │
+  │  │  idx  0–12   │ │  idx 13–28   │ │ idx 59–61│ │  idx 62–78   │ │
+  │  │  MLP→d/2     │ │  MLP→d/2     │ │  MLP→d/2 │ │  MLP→d/2     │ │
+  │  └──────┬───────┘ └──────┬───────┘ └────┬─────┘ └──────┬───────┘ │
   │         │ External enc.  │              │              │         │
   │  ┌──────┴───────┐        │              │              │         │
   │  │  idx 29–58   │        │              │              │         │
   │  │  MLP→d/2     │        │              │              │         │
   │  └──────┬───────┘        │              │              │         │
   │         └────────────────┴──────────────┴──────────────┘         │
-  │                   concat + learned group gates                    │
+  │                   concat + learned group gates                   │
   │                   Linear→d_model, GELU, LayerNorm                │
   └───────┬──────────────────────────────────────────────────────────┘
           │  (B, T_in, d_model)
-          ├───────────────────────────┬────────────────────────────────
-          │                           │                                │
-  ┌───────▼────────────┐   ┌──────────▼───────────┐   ┌──────────────▼──┐
-  │  Multi-Scale TCN   │   │ Feature Graph Encoder │   │  Regime Gating  │
-  │                    │   │                       │   │  Embedding      │
-  │  Scale 1 (T_in)    │   │  x.mean(T) → (B,F,1)  │   │                 │
-  │  CausalConv dil=1  │   │  Linear(1, g_hid)     │   │  x.mean(T) →    │
-  │  CausalConv dil=2  │   │  GCN(g_hid, g_hid)    │   │  Linear→K logit │
-  │  CausalConv dil=4  │   │  GCN(g_hid, d_model)  │   │  Softmax → gate │
+          ├───────────────────────────┬───────────────────────────────┐
+          │                           │                               │
+  ┌───────▼────────────┐   ┌──────────▼──────────-─-┐   ┌──────────────▼──┐
+  │  Multi-Scale TCN   │   │ Feature Graph Encoder  │   │  Regime Gating  │
+  │                    │   │                        │   │  Embedding      │
+  │  Scale 1 (T_in)    │   │  x.mean(T) → (B,F,1)   │   │                 │
+  │  CausalConv dil=1  │   │  Linear(1, g_hid)      │   │  x.mean(T) →    │
+  │  CausalConv dil=2  │   │  GCN(g_hid, g_hid)     │   │  Linear→K logit │
+  │  CausalConv dil=4  │   │  GCN(g_hid, d_model)   │   │  Softmax → gate │
   │  …                 │   │  mean(F) → (B, d_model)│   │  gate @ E_k     │
-  │                    │   │                       │   │  → (B, d_model) │
-  │  Scale 2 (T_in//2) │   │  Pearson adj (F×F):   │   │                 │
-  │  (if T_in ≥ 28)    │   │  |corr|≥0.1, sym-norm │   │  K=3 regime     │
-  │                    │   │                       │   │  embeddings     │
-  │  Scale 3 (T_in//4) │   │                       │   │  (pre/MCO/post) │
-  │  (if T_in ≥ 56)    │   │                       │   │                 │
-  │                    │   │                       │   │                 │
-  │  learned scale attn│   │                       │   │                 │
-  │  pool → (B,d_model)│   │                       │   │                 │
-  └───────┬────────────┘   └──────────┬────────────┘   └──────┬──────────┘
-          │ h_t (B,d)                 │ h_s (B,d)             │ h_r (B,d)
-          └───────────────────────────┴───────────────────────┘
+  │                    │   │                        │   │  → (B, d_model) │
+  │  Scale 2 (T_in//2) │   │  Pearson adj (F×F):    │   │                 │
+  │  (if T_in ≥ 28)    │   │  |corr|≥0.1, sym-norm  │   │  K=3 regime     │
+  │                    │   │                        │   │  embeddings     │
+  │  Scale 3 (T_in//4) │   │                        │   │  (pre/MCO/post) │
+  │  (if T_in ≥ 56)    │   │                        │   │                 │
+  │                    │   │                        │   │                 │
+  │  learned scale attn│   │                        │   │                 │
+  │  pool → (B,d_model)│   │                        │   │                 │
+  └───────┬────────────┘   └──────────┬────────────-┘   └──────┬──────────┘
+          │ h_t (B,d)                 │ h_s (B,d)              │ h_r (B,d)
+          └───────────────────────────┴─────────────────────-──┘
                                       │
                           ┌───────────▼──────────────┐
-                          │      Gated Fusion         │
-                          │                           │
+                          │      Gated Fusion        │
+                          │                          │
                           │  h = cat[h_t, h_s, h_r]  │
-                          │  g = σ(Linear(h))         │
-                          │  Linear(g⊙h) → d_model    │
-                          │  GELU → Dropout → LN      │
+                          │  g = σ(Linear(h))        │
+                          │  Linear(g⊙h) → d_model  │
+                          │  GELU → Dropout → LN     │
                           └───────────┬──────────────┘
                                       │ (B, d_model)
-                          ┌───────────▼──────────────┐
+                          ┌───────────▼────────────-──┐
                           │      Forecast Heads       │
                           │                           │
                           │  Primary:                 │
                           │   h → 2d → d → T_out      │
-                          │   (highway residual)       │
+                          │   (highway residual)      │
                           │                           │
                           │  Boosting:                │
                           │   h → d → T_out           │
@@ -73,15 +73,15 @@ Input X: (B, T_in, F=79)   [MinMax-scaled by data pipeline]
                           │   (small α init=0.1)      │
                           │                           │
                           │  y_final = y_p + y_b      │
-                          └───────────┬──────────────┘
+                          └───────────┬────────────-──┘
                                       │
-                          ┌───────────▼──────────────┐
-                          │ Post-hoc Residual Booster │
-                          │  (optional, out-of-graph) │
-                          │  CatBoost / sklearn MLP   │
+                          ┌───────────▼────────────--──┐
+                          │ Post-hoc Residual Booster  │
+                          │  (optional, out-of-graph)  │
+                          │  CatBoost / sklearn MLP    │
                           │  trained on train residuals│
-                          │  y_final += 0.5 * Δ_boost │
-                          └───────────────────────────┘
+                          │  y_final += 0.5 * Δ_boost  │
+                          └──────────────────────────-─┘
 
 Output: (B, T_out=7)  [MinMax-scaled]
         → scaler_y.inverse_transform() → raw ridership counts

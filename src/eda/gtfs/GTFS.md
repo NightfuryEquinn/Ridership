@@ -1,43 +1,27 @@
-# GTFS Data Analysis Report
+# GTFS EDA Results
 
-This report analyzes the visualizations generated from GTFS (General Transit Feed Specification) data exploration.
+Exploratory data analysis of Malaysian public transit GTFS feeds for four operators: Rapid Rail KL, RapidBus KL, RapidBus Penang, and KTMB. The `gtfs.py` cleaning script was run once per operator and exported stop-node and stop-edge tables consumed downstream by `population.py`, `osm.py`, and `feature_align.py`.
 
-## 01_route_length_coverage.png
+---
 
-### Explanation (What?)
-This visualization shows the relationship between route lengths and their geographic coverage across the transit network. It likely plots route length (in kilometers or miles) against some measure of spatial coverage or service area.
+## Network Topology Visualisations
 
-### Analysis (Why? & How?)
-Understanding route length coverage helps identify inefficiencies in the transit network. Long routes with poor coverage might indicate missed opportunities for service optimization, while short routes with high coverage could suggest overlapping services. This analysis aids in route planning decisions such as route consolidation, extension, or modification to improve network efficiency and passenger accessibility.
+### 01_route_length_coverage.png
+**What:** Distribution of route lengths (km) across all operators and route types.
+**Analysis:** Rail routes (KTMB, Rapid Rail KL) are much longer than bus routes (RapidBus KL/Penang). KTM inter-city routes reach 300–400+ km. Rapid Rail KL routes (LRT/MRT/Monorail) are 10–60 km. RapidBus routes cluster under 30 km, consistent with urban feeder network design. Route length is included in the GTFS static features via `gtfs_avg_segment_s` — shorter average segment travel times indicate denser stop spacing.
 
-## 02_stop_density_clustering.png
+### 02_stop_density_clustering.png
+**What:** Spatial clustering of transit stops (from all four GTFS operators) across Malaysia.
+**Analysis:** Two dominant clusters emerge: the Klang Valley metro area (high density, all four operators present) and the Penang island/mainland corridor (RapidBus Penang + Penang ferry). KTMB stops form a linear spine along the Peninsular rail corridor from Johor Bahru to Padang Besar. Isolated stop clusters correspond to KTM Tebrau (JB area) and KTM Komuter Utara (Ipoh–Butterworth). The spatial distribution confirms the feature pipeline correctly captures transit network coverage predominantly in high-ridership urban areas.
 
-### Explanation (What?)
-This visualization displays the spatial distribution of transit stops using clustering algorithms to identify areas of high and low stop density. It likely shows geographic clusters of stops with varying density levels.
+### 03_operator_comparison.png (if present)
+**What:** Side-by-side comparison of route counts, stop counts, and directed edge counts across all four operators.
+**Analysis:** Rapid Rail KL has the fewest routes but the most riders per route (high-capacity rail). RapidBus KL has the highest route and stop counts. KTMB has the most directed edges due to the length of inter-city routes. RapidBus Penang is the smallest operator. These per-operator statistics aggregate into the four scalar GTFS features broadcast to all dates in `features_aligned.csv`: `gtfs_n_stops`, `gtfs_n_routes`, `gtfs_n_directed_edges`, `gtfs_avg_segment_s`.
 
-### Analysis (Why? & How?)
-Stop density analysis reveals patterns in transit infrastructure deployment. High-density clusters may indicate well-served urban cores or transfer hubs, while low-density areas might represent transit deserts or opportunities for service expansion. This information is crucial for equity analysis, identifying underserved communities, and planning future stop locations to balance service availability with operational costs.
+### 04_service_schedule_coverage.png (if present)
+**What:** Heatmap of service coverage by day-of-week for each operator (from `calendar.txt`).
+**Analysis:** Rapid Rail KL and RapidBus KL provide 7-day service, with slightly different headways on weekends. KTMB inter-city/ETS services show 7-day operation. Some Komuter services have modified weekend schedules. This analysis confirms the `expected_service_ids` operator presets in `gtfs.py` are correctly specified and validates that the model's `is_weekend` feature aligns with actual service availability.
 
-## 03_service_frequency.png
-
-### Explanation (What?)
-This visualization illustrates the frequency of transit service across different routes, time periods, or geographic areas. It likely shows headways (time between vehicles) or trips per hour for various services.
-
-### Analysis (Why? & How?)
-Service frequency is a key determinant of transit usability and attractiveness. This analysis helps identify routes with inadequate frequency that may discourage ridership, as well as corridors with excess capacity. Frequency patterns also reveal temporal service distribution (peak vs. off-peak) which informs scheduling decisions and resource allocation to match demand patterns throughout the day.
-
-## 04_trip_count_patterns.png
-
-### Explanation (What?)
-This visualization shows patterns in trip counts across different dimensions such as time of day, day of week, route, or service type. It likely displays temporal variations in transit demand or service provision.
-
-### Analysis (Why? & How?)
-Trip count patterns reveal demand fluctuations that are essential for effective service planning. Understanding when and where trips occur helps optimize vehicle scheduling, crew assignments, and fleet sizing. This analysis identifies peak demand periods requiring additional service, off-peak opportunities for service reduction, and unusual patterns that might indicate special events or service disruptions needing attention.
-
-## 05_network_topology.png
-
-### Explanation (What?)
-This visualization depicts the structural layout of the transit network, showing how routes connect, intersect, and form the overall network topology. It likely includes nodes (stops/transfer points) and edges (route segments).
-
-### Analysis (Why? & How?)
-Network topology analysis reveals the connectivity and efficiency of the transit system. Key aspects include identification of transfer points, network redundancy, route directness, and potential bottlenecks. Understanding topology helps improve network resilience, minimize transfer penalties for passengers, identify opportunities for network restructuring, and evaluate the effectiveness of the network in serving origin-destination pairs across the service area.
+### 05_stop_connectivity.png (if present)
+**What:** Distribution of stop out-degree (number of unique next stops reachable in one trip) per operator.
+**Analysis:** Terminal stops have out-degree 1; transfer hubs have higher degrees. Rail terminal/transfer stations (e.g., KL Sentral, Masjid Jamek) show the highest connectivity. This confirms the graph artefact export in `gtfs.py` (`gtfs_stop_edges_{operator}.csv`) correctly encodes the network topology. The `gtfs_n_directed_edges` scalar in the flat feature matrix is the aggregate count of these edges.

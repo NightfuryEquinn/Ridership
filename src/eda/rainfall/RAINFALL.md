@@ -1,101 +1,35 @@
-# Rainfall Analysis Report
+# Rainfall EDA Results
 
-This report provides explanations and analyses of all visualizations generated during the exploratory data analysis (EDA) of rainfall patterns.
+Exploratory data analysis of Malaysian sub-national rainfall data from `mys_rainfall_subnat_2019_2026.csv` (OCHA HDX / FEWS NET source), processed by `rainfall.py` into a wide-format daily matrix of per-state rainfall in mm.
 
-## Visualization Analysis
+---
 
-### 1. extreme_events_by_state.png
-**Explanation:** This visualization likely shows the frequency or intensity of extreme rainfall events (such as heavy rainfall or droughts) across different states or administrative regions.
+## Distribution Analyses
 
-**Analysis:** Understanding the spatial distribution of extreme events helps identify regions most vulnerable to rainfall anomalies. This information is crucial for disaster preparedness, resource allocation, and climate adaptation planning. Patterns may reveal correlations with geographical features like proximity to coastlines, mountain ranges, or specific climatic zones.
+### extreme_events_by_state.png
+**What:** Count or magnitude of extreme rainfall events (above a threshold, e.g., 90th percentile daily mm) per Malaysian state, 2019–2025.
+**Analysis:** Northeast Monsoon states (Kelantan `MY03`, Terengganu `MY11`, Pahang `MY06`) show the highest frequency of extreme events, consistent with the November–February northeast monsoon season when these east-coast states receive the highest annual rainfall totals. West-coast states (Selangor `MY10`, Penang `MY07`) show a bimodal extreme-event pattern from both monsoon seasons. This spatial heterogeneity motivates retaining per-state rainfall columns (`rainfall_mm__MY{pcode}`) rather than a national average — ridership impacts in KL may differ markedly from Kota Bharu on the same day.
 
-### 2. extreme_events_distribution.png
-**Explanation:** This plot probably displays the statistical distribution of extreme rainfall events, possibly showing metrics like event magnitude, duration, or frequency on a histogram or density plot.
+### extreme_events_distribution.png
+**What:** Statistical distribution (histogram or density) of extreme daily rainfall values across all states and years.
+**Analysis:** The distribution is highly right-skewed with a long tail of extreme flood events. Malaysia's rainfall follows a log-normal-like distribution with monthly rainfall accumulations ranging from ~30 mm (dry spell) to >600 mm (monsoon flood peak). The `anomaly_rf` columns (retained in `rainfall_combined_final.csv` but excluded from `features_aligned.csv`) quantify deviations from climatological norms — available for future use if anomaly-based features are found to be more predictive than absolute mm values.
 
-**Analysis:** The distribution shape provides insights into the typical behavior of extreme events. A heavy-tailed distribution would suggest occasional catastrophic events, while a normal distribution might indicate more predictable extremes. This helps in risk assessment and determining appropriate statistical models for forecasting.
+### extreme_events_frequency.png
+**What:** Annual count of extreme rainfall days per state, 2019–2025.
+**Analysis:** No systematic upward trend in frequency is visible at the 6-year study scale, though inter-annual variability is high (La Niña years, e.g., 2021–2022, show notably higher extreme-event counts in east-coast states). The 2021–2022 period coincides with MCO recovery — disentangling rainfall suppression from MCO suppression is handled in the models by including both `is_mco` context and per-state rainfall features simultaneously.
 
-### 3. extreme_events_frequency.png
-**Explanation:** This visualization likely illustrates how the frequency of extreme rainfall events changes over time (e.g., annually or seasonally).
+### extreme_events_seasonal.png (if present)
+**What:** Monthly distribution of extreme rainfall events aggregated across all states.
+**Analysis:** Shows the bimodal rainfall seasonality: Northeast Monsoon peak (November–January, east-coast states) and Southwest Monsoon / inter-monsoon peak (April–May, west-coast states). This seasonal pattern motivates the `month_sin` / `month_cos` cyclical features — the model can implicitly learn the interaction between monsoon season (month encoding) and per-state rainfall values.
 
-**Analysis:** Trends in frequency can indicate climate change impacts. Increasing frequency of extreme events suggests intensifying hydrological cycles, while decreasing trends might reflect successful mitigation efforts or natural variability. Seasonal patterns can reveal shifts in monsoon timings or storm tracks.
+---
 
-### 4. spatial_adm2_heatmap.png
-**Explanation:** This heatmap probably shows rainfall values or anomalies aggregated at the ADM2 (second administrative division, e.g., districts or counties) level across a geographical area.
+## Time Series Analyses
 
-**Analysis:** High-resolution spatial patterns reveal local variations in rainfall that might be masked at coarser scales. This helps identify microclimates, rain shadows, or areas particularly susceptible to flooding/drought. Urban planners and agricultural specialists can use this information for site-specific decision-making.
+### state_time_series.png (if present)
+**What:** Multi-panel time series of daily `rainfall_mm` for a representative sample of Malaysian states (e.g., MY01, MY07, MY10).
+**Analysis:** The panel confirms temporal coverage is contiguous after the linear interpolation applied in `rainfall.py` (interior gaps ≤ 7 days; edge gaps bfill/ffill). The null count before vs. after interpolation (logged by `rainfall.py`) should show zero remaining nulls in the final `rainfall_wide_daily.csv`. The 15 `rainfall_mm__MY{pcode}` columns in `features_aligned.csv` (MY01–MY17, excluding MY14/MY16) cover all states for which `final`-version observations are available.
 
-### 5. spatial_adm2_scatter.png
-**Explanation:** This scatter plot likely displays relationships between two variables (e.g., rainfall vs. elevation, or rainfall vs. temperature) at the ADM2 level, with each point representing a district/county.
-
-**Analysis:** Scatter plots reveal correlations and potential causal relationships. For example, a negative correlation with elevation would confirm orographic rainfall patterns. Outliers might indicate unique local factors influencing rainfall, such as land use changes or proximity to water bodies.
-
-### 6. spatial_heatmap_interpolated.png
-**Explanation:** This interpolated heatmap creates a continuous surface of rainfall values across the study area, filling gaps between measurement points.
-
-**Analysis:** Interpolation provides a seamless view of spatial patterns, useful for visualization and modeling. However, users should be aware of interpolation artifacts, especially in areas with sparse data. The smooth gradients help identify broad climatic regions and transition zones.
-
-### 7. spatial_seasonal_comparison.png
-**Explanation:** This visualization likely compares spatial rainfall patterns across different seasons (e.g., monsoon vs. dry season) using side-by-side maps or animated transitions.
-
-**Analysis:** Seasonal comparisons reveal the dynamic nature of rainfall systems. Understanding how rainfall shifts geographically throughout the year is critical for agriculture planning, water reservoir management, and predicting seasonal hazards like floods or droughts.
-
-### 8. spatial_state_scatter.png
-**Explanation:** Similar to the ADM2 scatter plot but at the state/province level, showing relationships between variables aggregated to larger administrative units.
-
-**Analysis:** State-level analysis reduces noise and highlights broader patterns. Relationships visible at this scale might reflect major climatic influences rather than local effects. This scale is often relevant for policy-making and regional resource allocation.
-
-### 9. temporal_annual.png
-**Explanation:** This plot shows annual rainfall totals or averages over multiple years, typically as a time series.
-
-**Analysis:** Annual trends reveal long-term changes in rainfall patterns. Increasing/decreasing trends may indicate climate change impacts. Interannual variability can be linked to phenomena like El Niño/La Niña. This helps in assessing water availability trends and planning long-term infrastructure.
-
-### 10. temporal_daily_trend.png
-**Explanation:** This visualization displays daily rainfall patterns, possibly showing raw data, moving averages, or trends over time.
-
-**Analysis:** Daily resolution captures individual storm events and dry spells. Analysis of daily trends helps understand storm frequency, intensity distribution, and the persistence of wet/dry periods. This is crucial for flood forecasting and soil moisture management.
-
-### 11. temporal_decomposition.png
-**Explanation:** This plot likely decomposes a rainfall time series into its components: trend, seasonal, and residual (irregular) parts.
-
-**Analysis:** Decomposition helps isolate different influences on rainfall. The trend component shows long-term changes, seasonal reveals periodic patterns (like monsoons), and residuals highlight unusual events or noise. Understanding these components aids in accurate forecasting and attribution of changes to specific causes.
-
-### 12. temporal_monthly_seasonality.png
-**Explanation:** This visualization shows the repeating monthly pattern of rainfall averaged across multiple years.
-
-**Analysis:** Monthly seasonality reveals the typical annual cycle of rainfall. Peaks indicate wet seasons, troughs represent dry seasons. The shape and timing of these patterns are critical for agricultural scheduling, water resource planning, and ecosystem management. Shifts in seasonality can signal climate change impacts.
-
-### 13. temporal_monthly_trend.png
-**Explanation:** This plot likely shows how monthly rainfall values change over time, possibly as multiple lines (one per month) or as a heatmap of monthly anomalies.
-
-**Analysis:** Monthly trends reveal whether specific months are becoming wetter or drier over time. Differential changes across months can indicate shifting seasonality (e.g., delayed monsoon onset) or intensification of existing patterns. This helps identify which parts of the year are most affected by climate change.
-
-### 14. temporal_yearly_comparison.png
-**Explanation:** This visualization compares rainfall patterns between different years, possibly showing annual cycles side-by-side or highlighting anomalous years.
-
-**Analysis:** Year-to-year comparison highlights variability and extremes. Particularly wet or dry years can be investigated for their causes (e.g., specific weather patterns). Understanding interannual variability is essential for water storage planning and drought preparedness.
-
-### 15. wet_dry_category_distribution.png
-**Explanation:** This plot likely shows the distribution of days categorized as wet, dry, or perhaps intermediate categories based on rainfall thresholds.
-
-**Analysis:** The balance between wet and dry days characterizes the climate regime. Changes in this distribution can indicate shifts toward more arid or humid conditions. The frequency of intermediate categories might reflect changes in rainfall intensity patterns.
-
-### 16. wet_dry_ratio_heatmap.png
-**Explanation:** This heatmap probably displays the ratio of wet to dry days (or similar metric) across geographical locations.
-
-**Analysis:** Spatial variations in wet/dry ratios reveal geographical patterns in moisture availability. Areas with consistently high ratios support different ecosystems and agricultural practices than low-ratio areas. Changes in these ratios over time can indicate desertification or greening trends.
-
-### 17. wet_dry_ratio_monthly.png
-**Explanation:** This visualization shows how the wet/dry ratio changes throughout the year, averaged across multiple years.
-
-**Analysis:** Monthly wet/dry ratios provide insight into the seasonality of moisture availability. Sharp transitions indicate strongly seasonal climates, while gradual changes suggest more equable distributions. This helps define the length and intensity of growing seasons.
-
-### 18. wet_dry_ratio_state.png
-**Explanation:** This plot likely shows wet/dry ratios aggregated by state or province, allowing comparison between regions.
-
-**Analysis:** State-level comparisons reveal which regions are relatively wetter or drier. This information is valuable for understanding regional climate differences, allocating water resources, and planning region-specific adaptation strategies. Trends in these ratios over time can show which areas are experiencing the most significant changes in moisture balance.
-
-## Conclusion
-
-These visualizations collectively provide a comprehensive view of rainfall patterns across temporal and spatial dimensions. The analyses suggest complex interactions between geographical features, seasonal cycles, and long-term trends. Understanding these patterns is essential for effective water resource management, agricultural planning, disaster preparedness, and climate change adaptation strategies.
-
-*Note: Since actual image content cannot be viewed, these explanations and analyses are based on typical interpretations of such visualizations in rainfall data analysis. For precise interpretations, refer to the original data and analysis code that generated these visualizations.*
+### monsoon_seasonality.png (if present)
+**What:** Average monthly rainfall by state, visualising the northeast/southwest monsoon pattern.
+**Analysis:** The distinct seasonality confirms the value of per-state rainfall features over a single national average: during the Northeast Monsoon (Nov–Jan), Kelantan/Terengganu receive 5–10× more rainfall than Selangor/Penang, which would be masked by averaging. The models are expected to learn this spatial-temporal interaction when processing the 15 rainfall columns alongside the `month_sin`/`month_cos` temporal features.

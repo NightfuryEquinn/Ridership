@@ -4,10 +4,11 @@ Masters Final Year Project comparing 15 deep-learning models for Malaysian publi
 
 ## Overview
 
-This repository contains the implementation and evaluation of 15 deep learning models for forecasting Malaysian public transit ridership. The models are organized into three series:
+This repository contains the implementation and evaluation of 15 deep learning models plus one hybrid SOTA model for forecasting Malaysian public transit ridership. The models are organized into three baseline series and one hybrid series:
 - **Spatio-temporal (LSTM-family)**: LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
 - **Graph-based**: STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN
 - **Attention-based**: TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
+- **Hybrid (SOTA)**: HMT-TSF (Hybrid Multi-scale Temporal Spatio-Feature Forecaster)
 
 All models are trained and evaluated on the same dataset comprising 8 spatio-temporal feature sources:
 - Ridership data
@@ -38,8 +39,8 @@ Ridership/
 │   │   ├── spatio-temporal-tuned/   # Tuned ST variants
 │   │   ├── graph-tuned/             # Tuned graph variants
 │   │   ├── attention-tuned/         # Tuned attention variants
-│   │   ├── MODEL.md                 # Base model descriptions
-│   │   └── TUNED-MODEL.md           # Tuned model descriptions and rationale
+│   │   ├── hybrid/                  # Hybrid SOTA model (HMT-TSF)
+│   │   └── MODEL.md                 # All model descriptions + tuning rationale
 │   ├── outputs/            # Model outputs (organized by model and timestamp)
 │   └── utils/              # Shared utilities (metrics, comparison)
 ├── docs/                   # Documentation (PDFs, reports, presentations)
@@ -135,6 +136,36 @@ python src/models/attention-based/autoformer.py
 python src/models/attention-based/informer.py
 ```
 
+### Hybrid SOTA Model
+
+HMT-TSF is a purpose-built hybrid that fuses three parallel encoders (Multi-Scale TCN, Feature GCN, Regime Gating) with a gated combiner and an optional post-hoc residual boosting stage:
+
+```bash
+# Default run (lookback=14, d_model=128, 3 TCN blocks)
+python src/models/hybrid/hmttsf.py
+
+# Longer lookback with more TCN depth
+python src/models/hybrid/hmttsf.py --lookback 28 --n-tcn-blocks 4 --d-model 192
+
+# With Optuna HPO (50 trials) then full training
+python src/models/hybrid/hmttsf.py --tune-trials 50 --lookback 56
+
+# With CatBoost residual boosting
+python src/models/hybrid/hmttsf.py --use-catboost
+
+# With SHAP feature importance
+python src/models/hybrid/hmttsf.py --shap --shap-samples 150
+
+# Maximum configuration (84-day lookback, HPO, SHAP, CatBoost)
+python src/models/hybrid/hmttsf.py \
+  --lookback 84 --d-model 256 --n-tcn-blocks 5 \
+  --graph-hidden 128 --dropout 0.15 \
+  --tune-trials 50 --use-catboost --shap \
+  --epochs 150 --patience 20 --warmup-epochs 8
+```
+
+See `src/models/hybrid/HMT-TSF.md` for the full architecture diagram, component rationale, hyperparameter search space, and scaling recommendations.
+
 ### Fine-Tuned Models
 
 Fifteen fine-tuned variants with revised architecture hyperparameters (training params unchanged):
@@ -169,12 +200,12 @@ python src/models/spatio-temporal-tuned/cnnlstm.py --mode parallel   --lookback 
 python src/models/spatio-temporal-tuned/cnnlstm.py --mode augmented  --lookback 14
 ```
 
-Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full architecture change rationale is in `src/models/TUNED-MODEL.md`.
+Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full architecture change rationale is in `src/models/MODEL.md` (Fine-Tuned Model Series section).
 
 ### Common Arguments
 All models accept these arguments:
 - `--seq-dir`: Override sequence directory (if not set, resolved from `--lookback`)
-- `--lookback {14,28,56}`: Look-back window; auto-selects the matching `data/sequences/` directory (default: `14`)
+- `--lookback {14,28,56}`: Look-back window for the 15 base models; auto-selects the matching `data/sequences/` directory (default: `14`). HMT-TSF additionally supports `7` and `84`.
 - `--loss {mse,huber,mae}`: Training loss function (default: `huber`)
 - `--warmup-epochs N`: Linear LR warm-up epochs before ReduceLROnPlateau (default: `5`)
 - `--epochs`: Number of training epochs
@@ -185,11 +216,25 @@ All models accept these arguments:
 - `--seed`: Random seed for reproducibility
 - Model-specific hyperparameters (see each script's docstring)
 
+**HMT-TSF additional arguments:**
+- `--d-model {64,128,192,256}`: Model dimension (default: `128`)
+- `--n-tcn-blocks N`: Number of TCN blocks per scale (default: `3`)
+- `--graph-hidden {32,64,128}`: GCN hidden dimension (default: `64`)
+- `--n-regimes N`: Number of regime embeddings (default: `3`)
+- `--tune-trials N`: Optuna HPO trials before full training (default: `0`, disabled)
+- `--use-catboost`: Enable CatBoost post-hoc residual boosting stage
+- `--no-boost`: Disable the neural boost head
+- `--no-revin`: Disable Reversible Instance Normalisation
+- `--shap`: Run SHAP feature importance after evaluation
+- `--shap-samples N`: Background samples for SHAP KernelExplainer (default: `100`)
+- `--smooth-weight λ`: Temporal smoothness regularisation weight (default: `0.01`)
+- `--loss-decay γ`: Geometric decay factor for step-weighted Huber loss (default: `0.9`)
+
 The `--device auto` option automatically selects CUDA → MPS → CPU.
 
 ## Output Structure
 
-Each baseline model run creates a timestamped directory in `src/outputs/{model_name}/`; each tuned run writes to `src/outputs/{model_name}_tuned/`:
+Each baseline model run creates a timestamped directory in `src/outputs/{model_name}/`; each tuned run writes to `src/outputs/{model_name}_tuned/`; the hybrid model writes to `src/outputs/hmttsf/`:
 
 ```
 src/outputs/{model_name}/{YYYYMMDD_HHMMSS}/
@@ -212,6 +257,7 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
 → MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
 → ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
+→ HMT-TSF (17-way)
 ```
 
 The comparison system automatically:
@@ -221,13 +267,22 @@ The comparison system automatically:
 
 ## Technical Details
 
-### Training Optimizations (all 15 models)
-- **Optimiser**: AdamW (decoupled weight decay) — same hyperparameter values as before
+### Training Optimizations (all models)
+- **Optimiser**: AdamW (decoupled weight decay)
 - **Loss**: HuberLoss (delta=1.0, default) — robust to ridership outliers; selectable via `--loss`
 - **LR schedule**: 5-epoch linear warm-up → ReduceLROnPlateau; configurable via `--warmup-epochs`
 
+### HMT-TSF Specific
+- **Loss**: WeightedHuber (step-decayed, γ=0.9) + TemporalSmoothness regularisation (λ=0.01)
+- **AMP**: GradScaler + autocast fp16 on CUDA (same as attention-based models)
+- **Gradient clipping**: max_norm=1.0
+- **Optional HPO**: Optuna with MedianPruner (via `--tune-trials N`)
+- **Optional residual boosting**: CatBoost or sklearn MLP trained on train-set residuals; correction applied at 0.5× weight only if it improves Combined% (via `--use-catboost`)
+- **Walk-forward evaluation**: test set split into 3 equal blocks; per-block Combined% and R² reported
+- **Lookback support**: 7 / 14 / 28 / 56 / 84 days (`lookback_7` and `lookback_84` sequence dirs must be built separately if needed)
+
 ### Data Configuration
-- **Look-back window (T_in)**: 14 / 28 / 56 days (controlled via `--lookback` or `--T-in`)
+- **Look-back window (T_in)**: 14 / 28 / 56 days for the 15 base models; 7 / 14 / 28 / 56 / 84 days for HMT-TSF (controlled via `--lookback` or `--T-in`)
 - **Forecast horizon (T_out)**: 7 days
 - **Data split**: 70% train / 15% validation / 15% test (chronological)
 - **MCO exclusion**: Movement Control Order period (2020-03-18 to 2021-12-31) excluded by default
@@ -236,11 +291,12 @@ The comparison system automatically:
 
 ### Model-Specific Notes
 - **Reference Model**: `src/models/spatio-temporal-based/stlstm.py` serves as the canonical reference for training loop structure, output format, and comparison patterns
-- **Graph Construction**: Graph-based models treat features as nodes; adjacency built from Pearson correlation (threshold=0.1) of training features
-- **AMP Usage**: Four attention-based models (ASTGCN, TFT, Autoformer, Informer) use mixed precision training on the A100
+- **Graph Construction**: Graph-based models and HMT-TSF treat features as nodes; adjacency built from Pearson correlation (threshold=0.1) of training features
+- **AMP Usage**: Attention-based models (ASTGCN, TFT, Autoformer, Informer) and HMT-TSF use mixed precision training on the A100
 - **TFT/Autoformer Specifics**: 
   - TFT uses standard AMP implementation
   - Autoformer wraps FFT operations in explicit float32 casts within autocast for numerical stability
+- **HMT-TSF Architecture**: Five feature-group encoders → parallel Multi-Scale TCN + Feature GCN + Regime Gating → Gated Fusion → dual forecast heads (primary + boost) → optional CatBoost residual correction
 
 ## Evaluation Metrics
 

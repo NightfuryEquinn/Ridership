@@ -121,7 +121,7 @@ FEAT_GROUPS = {
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. Reversible Instance Normalisation (RevIN)
 # ══════════════════════════════════════════════════════════════════════════════
-
+    
 class RevIN(nn.Module):
     """
     Per-sample, per-feature normalisation that is reversed at output.

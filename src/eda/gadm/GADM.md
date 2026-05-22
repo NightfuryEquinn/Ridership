@@ -1,55 +1,19 @@
-# GADM Exploratory Data Analysis Report
+# GADM EDA Results
 
-## Overview
-This report analyzes the exploratory data analysis (EDA) results for the GADM (Global Administrative Areas) dataset focusing on Malaysian states and territories. The analysis includes visualizations of spatial relationships and geometric properties.
+Exploratory data analysis of Malaysia's Level-1 administrative boundaries from the GADM dataset (`gadm_mys_l1.json`), covering all 16 states and federal territories (13 states + KL + Labuan + Putrajaya).
 
-## Files Analyzed
-Two PNG files were examined from the `src\eda\gadm\results\` directory:
-1. `adjacency_network.png`
-2. `area_shape_analysis.png`
+---
 
-## Detailed Analysis
+## Spatial Visualisations
 
-### 1. adjacency_network.png
+### adjacency_network.png
+**What:** Network graph where nodes are Malaysian states/territories and edges represent shared land borders, with edge weights proportional to shared border length in km.
+**Analysis:** The adjacency network is the graph structure ultimately consumed by GADM-aware model variants. Malaysia's peninsular states form a dense connected component; Sabah and Sarawak (East Malaysia) are spatially isolated from Peninsular states (separated by the South China Sea) and thus contribute no edges in the network. The `gadm_adj_matrix.npy` binary matrix encodes this structure. Key high-connectivity nodes include Pahang (borders 6 peninsular states) and Perak (borders 5). Federal territories (KL, Labuan, Putrajaya) are small enclaves with 1–2 border edges each.
 
-**Explanation (What?)**
-This visualization represents the adjacency network of Malaysian states and territories. Each node in the network corresponds to a state/territory (e.g., Johor, Kedah, Kelantan, etc.), and edges between nodes indicate that the corresponding regions share a common border.
+The adjacency structure is used in `gadm.py` to export `gadm_adj_matrix_weighted.npy` (border-length-weighted) and `gadm_adj_edges.csv`. The three scalar summaries broadcast to all dates in `feature_align.py` (`gadm_n_states=16`, `gadm_n_border_pairs`, `gadm_mean_border_km`) encode this spatial connectivity in the flat feature matrix consumed by LSTM-family and attention-based models.
 
-**Analysis (Why? & How?)**
-The adjacency network provides insights into the spatial organization and connectivity of Malaysian regions:
-- **Why it matters**: Understanding adjacency patterns is crucial for analyzing spatial interactions, such as disease spread, economic interactions, or infrastructure planning between neighboring regions.
-- **How it was constructed**: The network was likely built using the GADM boundary data, where two regions are connected if their polygons share a boundary segment. Node sizes might represent area or population, while edge thickness could indicate border length.
-- **Key observations**: The network likely shows Peninsular Malaysia states forming a connected component, while East Malaysia states (Sabah and Sarawak) appear as separate components due to their geographical separation by the South China Sea. Federal territories (Kuala Lumpur, Labuan, Putrajaya) would appear as enclaves within their respective states.
+### area_shape_analysis.png
+**What:** Bar chart or scatter of state area (km²) and shape compactness (e.g., perimeter²/area ratio) for all 16 administrative units.
+**Analysis:** Sarawak is by far the largest state (~124,000 km²), followed by Sabah (~73,000 km²). Peninsular states range from ~1,000 km² (Perlis) to ~36,000 km² (Pahang). Shape compactness reveals elongated states (Kelantan, Kedah) vs. compact ones (Melaka, Perlis). This analysis confirms that GADM boundaries correctly parsed all 16 Level-1 units without geometry errors — the `gadm.py` validation check `len(cleaned_features) != 16` is satisfied.
 
-### 2. area_shape_analysis.png
-
-**Explanation (What?)**
-This visualization explores the relationship between geographic area and shape complexity metrics for Malaysian states and territories. It likely includes scatter plots comparing area (in km²) against shape metrics such as compactness and fractal dimension.
-
-**Analysis (Why? & How?)**
-Analyzing area-shape relationships reveals patterns in how region size correlates with geometric complexity:
-- **Why it matters**: Understanding these relationships helps in identifying gerrymandering patterns, natural boundary formation, and the effectiveness of administrative divisions. Compactness values closer to 1 indicate more compact shapes, while values approaching 0 indicate more elongated or complex shapes.
-- **How it was constructed**: The plot likely shows area on the x-axis (possibly log-transformed due to wide range) and shape metrics on the y-axis. Different colors or markers might distinguish Peninsular vs. East Malaysia states.
-- **Key observations**: 
-  - Larger states like Sarawak and Sabah likely show lower compactness values (0.097 and 0.061 respectively) due to their irregular, elongated shapes following natural boundaries.
-  - Smaller federal territories (Kuala Lumpur, Labuan, Putrajaya) show varying compactness: Kuala Lumpur (0.679) is moderately compact, Labuan (0.329) less so, and Putrajaya (0.877) very compact, reflecting its planned city design.
-  - Fractal dimension values (ranging from ~0.994 to ~1.102) indicate how boundary complexity changes with scale - values >1 suggest increasingly complex boundaries at finer scales, typical of natural geographical features.
-
-## Data Context
-The analysis is based on the GADM metrics CSV which contains the following measurements for each state/territory:
-- Area (km²)
-- Compactness (measure of how closely the shape approaches a circle)
-- Fractal dimension (measure of boundary complexity)
-- Number of vertices (defining the boundary polygon)
-- Perimeter (km)
-
-Notable extremes in the data:
-- Largest area: Sarawak (124,085.82 km²)
-- Smallest area: Putrajaya (61.89 km²)
-- Highest compactness: Putrajaya (0.877)
-- Lowest compactness: Sabah (0.061)
-- Highest fractal dimension: Sabah (1.102)
-- Lowest fractal dimension: Putrajaya (0.994)
-
-## Conclusion
-These visualizations provide valuable insights into the geographical and administrative characteristics of Malaysian regions. The adjacency network reveals spatial connectivity patterns essential for understanding regional interactions, while the area-shape analysis highlights how administrative boundaries relate to geographical features and planning principles. Together, these analyses support informed decision-making in fields such as resource allocation, infrastructure development, and regional planning.
+State centroids extracted in `gadm.py` (lat/lon per state) are available for distance-based edge weighting in future graph model extensions.

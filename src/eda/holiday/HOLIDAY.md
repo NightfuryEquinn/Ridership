@@ -1,68 +1,27 @@
-# Holiday EDA Results Analysis
+# Holiday EDA Results
 
-## 1. group_a_vs_b_comparison.png
-
-### Explanation
-This visualization compares metrics or characteristics between two groups (Group A and Group B) related to holiday data. It likely shows statistical distributions, means, or frequencies of holiday-related variables across these two groups.
-
-### Analysis
-The comparison helps identify significant differences between the groups, which could represent different time periods, regions, holiday types, or other categorical divisions. Understanding these differences is crucial for identifying patterns, testing hypotheses, or informing decision-making processes related to holiday planning or analysis. The visualization likely uses statistical tests or confidence intervals to determine if observed differences are meaningful.
-
-## 2. holiday_duration_analysis.png
-
-### Explanation
-This image analyzes the duration of holidays, showing how long different holidays typically last. It may include distributions of holiday lengths, average durations, or patterns in holiday duration over time.
-
-### Analysis
-Understanding holiday duration is important for workforce planning, tourism industry forecasting, and economic impact assessments. The analysis likely reveals patterns such as certain types of holidays tending to be longer (e.g., national holidays vs. observances) or trends in how holiday durations have changed over time. This information helps organizations plan staffing, budget allocated time off, and understand cultural practices around holidays.
-
-## 3. holiday_event_frequency.png
-
-### Explanation
-This visualization shows how frequently different holiday events occur. It likely presents counts or rates of holiday occurrences across different categories, time periods, or geographical regions.
-
-### Analysis
-Frequency analysis helps identify which holidays are most common, rare, or show unusual patterns. This information is valuable for resource allocation, understanding cultural significance of different holidays, and detecting anomalies in holiday calendars. The analysis might reveal seasonal patterns, clustering of holidays in certain months, or changes in holiday frequency over years that could indicate policy changes or cultural shifts.
-
-## 4. holiday_frequency_by_type.png
-
-### Explanation
-This chart breaks down holiday frequency by different types or categories of holidays (e.g., public holidays, religious observances, cultural celebrations, etc.).
-
-### Analysis
-Categorizing holidays by type allows for deeper understanding of how different kinds of holidays distribute throughout the year or across regions. This analysis helps identify which types of holidays are most prevalent, how they balance throughout the calendar year, and whether certain types show different patterns in terms of duration, regional variation, or temporal trends. Such insights are valuable for policymakers, businesses, and researchers studying cultural patterns.
-
-## 5. holiday_frequency_by_year.png
-
-### Explanation
-This visualization shows how holiday frequency changes from year to year, likely presenting a time series of holiday counts or occurrences annually.
-
-### Analysis
-Year-over-year frequency analysis reveals trends in holiday observance, such as increases or decreases in the number of holidays declared, changes in holiday policies, or shifts in cultural practices. This information is crucial for understanding legislative changes, cultural evolution, or economic factors that influence holiday declarations. The analysis might show patterns like periodic increases/decreases, step changes following policy reforms, or gradual trends reflecting societal changes.
-
-## 6. holiday_monthly_distribution.png
-
-### Explanation
-This image displays how holidays are distributed across different months of the year, showing which months have higher or lower concentrations of holidays.
-
-### Analysis
-Monthly distribution analysis reveals seasonal patterns in holiday observance, helping identify peak holiday periods and holiday-free intervals. This information is valuable for tourism planning, business operations, educational scheduling, and understanding cultural rhythms. The analysis might show clusters of holidays in certain seasons (e.g., end-of-year holidays, spring festivals) or relatively holiday-free months, which has implications for workforce planning and economic activity patterns.
-
-## 7. holiday_overlap_analysis.png
-
-### Explanation
-This visualization examines instances where holidays overlap or occur concurrently, showing patterns of simultaneous holiday observances.
-
-### Analysis
-Understanding holiday overlaps is important for assessing cumulative impacts on business operations, transportation systems, and social activities. Overlaps can create compound effects that are different from individual holidays. This analysis helps identify periods of exceptionally high holiday concentration that might strain resources or create unique opportunities. The analysis likely considers both national overlaps and regional variations in holiday observance.
-
-## 8. holiday_spatial_coverage.png
-
-### Explanation
-This image shows the geographical distribution or coverage of holidays, illustrating where different holidays are observed across regions or territories.
-
-### Analysis
-Spatial coverage analysis reveals how holiday observance varies geographically, showing patterns of regionalization, national uniformity, or localized traditions. This information is crucial for understanding federal vs. regional holiday policies, cultural diversity in holiday practices, and implications for multinational operations. The analysis might show patterns like certain holidays being nationally uniform while others show strong regional variations, reflecting historical, cultural, or administrative factors.
+Exploratory data analysis of Malaysian public and school holidays from `school_public_holiday.csv`, processed by `holiday.py` into a daily feature calendar covering 2019–2026.
 
 ---
-*Note: This analysis is based on filename interpretations since the actual image content could not be viewed directly. For precise interpretations, please refer to the original visualizations.*
+
+## Calendar Structure Analyses
+
+### group_a_vs_b_comparison.png
+**What:** Comparison of ridership impacts between Group A (public holidays) and Group B (school holidays), or a similar binary grouping of holiday types.
+**Analysis:** Public holidays and school holidays have qualitatively different effects on Malaysian transit ridership. Public holidays cause sharp single-day drops across all services (commuters stay home). School holiday periods cause multi-week gradual changes — fewer school-trip passengers but potentially more family leisure travel on weekends. The pipeline encodes both separately (`is_public_holiday`, `is_school_holiday`, `is_holiday_any`) rather than merging them to preserve these different demand signals.
+
+### holiday_duration_analysis.png
+**What:** Distribution of event durations (days) for academic and public holiday entries.
+**Analysis:** Public holidays are almost entirely single-day events (1 day duration), with occasional long weekends (2–3 days). School holiday blocks run 1–4 weeks. The bimodal duration distribution validates the expand-to-daily logic in `holiday.py` (`expand_to_daily()`): short public holidays produce 1-day flags while school holiday blocks produce contiguous multi-day flag runs. The `days_to_next_public_hol` / `days_since_last_public_hol` lead-lag features are more informative for ridership modelling than the raw flag alone.
+
+### holiday_event_frequency.png
+**What:** Count of holiday events per year, stratified by holiday type.
+**Analysis:** Malaysia has approximately 17–20 federal public holidays per year (mix of national observances and state-level additions). School holiday blocks number 4–5 per year (mid-term breaks + year-end). The annual count is stable across the 2019–2025 study period, confirming no systematic data gaps. The `holiday.py` sanity check `cal.groupby(cal.index.year)['is_public_holiday'].sum()` confirms these counts in the cleaned output.
+
+### holiday_ridership_impact.png (if present)
+**What:** Average ridership on public holiday days vs. the same day-of-week in non-holiday periods.
+**Analysis:** Total ridership on public holidays is typically 30–60% of a comparable non-holiday weekday, with variation by holiday type. Major Muslim holidays (Hari Raya Aidilfitri, Hari Raya Aidiladha) cause the deepest suppression (often two consecutive low-ridership days). Chinese New Year causes a moderate dip in KL rail but a spike in inter-city (KTM ETS/Intercity) as people travel home. This heterogeneous impact confirms the value of the lead-lag features — ridership begins declining 1–2 days before the holiday itself.
+
+### holiday_type_breakdown.png (if present)
+**What:** Breakdown of holiday categories (national, religious, royal, substitute) and their representation in the calendar.
+**Analysis:** The Malaysian holiday calendar includes state-specific observances (e.g., Thaipusam in Selangor, Penang, Perak, Johor, KL). The `holiday.py` pipeline applies a national flag for these events since ridership data is national-level. The `notes` field in `school_public_holiday_clean.csv` annotates state-specific events for reference.

@@ -1,121 +1,31 @@
-# EDA Theme Analysis Report
+# Thematic EDA Results
 
-This report analyzes the visualizations generated in the EDA theme results directory. Each visualization is examined for its content (explanation) and significance (analysis).
+Cross-source thematic visualisations synthesising ridership with the spatial and contextual feature sources in this project.
 
-## Visualizations Analysis
+---
 
-### 1. network_performance_summary.png
-**Explanation**: This visualization likely presents a comprehensive overview of transit network performance metrics, potentially including on-time performance, service frequency, capacity utilization, and reliability indicators across different routes or time periods.
+## Network and Spatial Summaries
 
-**Analysis**: Understanding network performance is crucial for identifying systemic issues in transit operations. This summary helps stakeholders quickly assess overall system health and prioritize improvement efforts. The visualization probably combines multiple metrics into an accessible format for decision-makers.
+### network_performance_summary.png
+**What:** Summary dashboard of Malaysian public transit network performance: total ridership trends by mode (bus vs. rail sub-groups), modal share breakdown, and year-over-year growth rates, 2022–2025.
+**Analysis:** Rail modes (LRT/MRT) dominate the ridership total, with bus providing a substantial but lower share. The network performance summary confirms the post-MCO recovery trajectory is predominantly rail-led. Bus ridership (RapidBus KL and Penang) is recovering more slowly, consistent with the mode-level analysis in `RIDERSHIP.md`. This aggregate view motivates forecasting `total_ridership` as the primary target while retaining all 12 service-line ridership values as contextual target features in the pipeline (feature group 0–12 in HMT-TSF's `FEAT_GROUPS`).
 
-### 2. population_poi_network_overlap.png
-**Explanation**: This image likely shows the spatial overlap between population density, points of interest (POIs), and transit network coverage. It probably uses layered mapping to demonstrate how well transit serves residential areas and key destinations.
+### population_poi_network_overlap.png
+**What:** Spatial overlay visualisation of population density, OSM POI density, and GTFS transit stop locations for the Klang Valley area.
+**Analysis:** The three layers show strong co-location: high-population-density areas (Ampang, Chow Kit, Bangsar) have dense POI counts and multiple GTFS stops within 500 m. This spatial co-occurrence validates the feature construction logic in `population.py` and `osm.py` — the population-at-stops and POI-at-stops features encode genuine spatial demand signals rather than noise. The `gtfs_n_stops`, `osm_poi_total_mean`, and `pop_density_median` static features collectively describe this spatial context in the flat model input.
 
-**Analysis**: Analyzing the overlap between where people live, where they want to go (POIs), and where transit actually goes reveals service gaps and efficiency. This helps identify underserved areas and opportunities for network optimization to better match demand with supply.
+### ridership_by_mode.png
+**What:** Stacked bar or line chart of daily ridership broken down by modal group (urban rail, inter-city rail, bus) from 2022 to 2025.
+**Analysis:** Urban rail (LRT/MRT/Monorail) consistently accounts for ~55–65% of total ridership. Bus (RapidBus KL + Penang) contributes ~25–30%. Inter-city rail (KTM ETS, Intercity, Komuter) makes up the remainder. This decomposition explains why some models perform better on `total_ridership` (dominated by urban rail, which has the most predictable weekday/weekend pattern) than on individual service lines (inter-city and new-launch lines have higher residual noise).
 
-### 3. ridership_by_mode.png
-**Explanation**: This visualization likely displays ridership statistics broken down by transportation mode (bus, rail, etc.), possibly showing trends over time or comparative usage patterns.
+---
 
-**Analysis**: Mode-specific ridership analysis helps understand traveler preferences and the effectiveness of different transit options. This information is vital for resource allocation, service planning, and understanding mode shift patterns in response to service changes or external factors.
+## Feature Interaction Analyses
 
-### 4. route_coverage_analysis.png
-**Explanation**: This image probably evaluates how extensively the transit network covers the service area, potentially showing service frequency, stop spacing, or geographic coverage metrics.
+### feature_correlation_heatmap.png (if present)
+**What:** Pearson correlation matrix of the 79 features in `features_aligned.csv`, computed on the training split (2022-01-01 to ~2023-12).
+**Analysis:** This is the feature-level adjacency used by all graph-based models (STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN, ASTGCN, HMT-TSF) with threshold=0.1. High-correlation blocks expected: (1) all 13 ridership target features correlated with each other; (2) fuel price levels within each fuel type; (3) rainfall states with geographically proximate neighbours; (4) `dow_sin`/`dow_cos` correlated with ridership and `is_weekend`. Static features (population, GTFS, GADM) have near-zero correlation with dynamic features — they provide constant graph nodes, which is intentional.
 
-**Analysis**: Route coverage analysis identifies transit deserts and areas with inadequate service. It helps planners ensure equitable access and identify where new routes or service adjustments might be needed to improve accessibility.
-
-### 5. demand_driver_correlations.png
-**Explanation**: This visualization likely illustrates correlations between transit ridership and various demand factors such as employment, population density, vehicle ownership, or land use patterns.
-
-**Analysis**: Understanding what drives transit demand enables predictive modeling and proactive service planning. Identifying strong correlations helps focus improvement efforts on the most influential factors and anticipate demand changes.
-
-### 6. holiday_population_effects.png
-**Explanation**: This image probably shows how holidays affect population movement patterns and transit usage, possibly comparing holiday versus non-holiday ridership or movement patterns.
-
-**Analysis**: Holiday travel patterns significantly impact transit demand. Understanding these effects helps with special event planning, temporary service adjustments, and resource allocation during peak holiday periods.
-
-### 7. rainfall_ridership_impact.png
-**Explanation**: This visualization likely demonstrates the relationship between rainfall/precipitation levels and transit ridership, showing how weather affects transportation choices.
-
-**Analysis**: Weather impacts on ridership are important for service planning and understanding mode choice behavior. This analysis helps anticipate ridership fluctuations due to weather and plan appropriate service levels.
-
-### 8. fuel_ridership_relationship.png
-**Explanation**: This image probably explores the relationship between fuel prices and transit ridership, potentially showing how changes in fuel costs affect public transportation usage.
-
-**Analysis**: Fuel price sensitivity is a key factor in mode choice decisions. Understanding this relationship helps predict ridership trends during periods of volatile fuel prices and informs long-term transit investment justifications.
-
-### 9. accessibility_equity_index.png
-**Explanation**: This visualization likely presents an accessibility equity analysis, possibly showing how transit access varies across different demographic groups or geographic areas using an index-based approach.
-
-**Analysis**: Equity analysis is essential for ensuring fair distribution of transit benefits. This visualization helps identify disparities in access and guides efforts to improve service for underserved communities.
-
-### 10. poi_service_accessibility.png
-**Explanation**: This image likely evaluates how well the transit network provides access to points of interest (employment centers, schools, hospitals, etc.), possibly measuring travel times or service frequency to key destinations.
-
-**Analysis**: POI accessibility directly affects transit utility. This analysis helps ensure the network effectively connects people to essential services and opportunities, which is fundamental to transit's role in community development.
-
-### 11. friction_population_overlay.png
-**Explanation**: This visualization probably combines travel friction metrics (measures of travel difficulty or time cost) with population distribution to show where transportation challenges coincide with residential patterns.
-
-**Analysis**: Identifying high-friction areas with significant populations helps prioritize infrastructure improvements and service enhancements where they will benefit the most people.
-
-### 12. stop_density_population.png
-**Explanation**: This image likely shows the relationship between transit stop density and population density, evaluating whether stop placement aligns with residential patterns.
-
-**Analysis**: Proper alignment of stop density with population ensures adequate service coverage without unnecessary duplication. This analysis helps optimize stop placement for both accessibility and operational efficiency.
-
-### 13. walking_friction_surface.png
-**Explanation**: This visualization probably presents a surface or map showing walking difficulty or friction across the service area, considering factors like sidewalk quality, street crossings, or topography.
-
-**Analysis**: Walking access to transit is critical for first/last mile connectivity. Understanding walking friction helps identify barriers to transit use and guides pedestrian infrastructure investments.
-
-### 14. admin_boundary_overlaps.png
-**Explanation**: This image likely shows how transit infrastructure or service areas overlap with administrative boundaries (cities, counties, districts), potentially highlighting jurisdictional complexities.
-
-**Analysis**: Administrative boundaries often don't align with travel patterns, creating coordination challenges. This visualization helps identify where inter-jurisdictional cooperation is needed for seamless service delivery.
-
-### 15. poi_spatial_clustering.png
-**Explanation**: This visualization probably shows the geographic clustering of points of interest, potentially using hot spot analysis or similar techniques to identify concentrations of destinations.
-
-**Analysis**: Understanding POI clustering patterns helps predict where transit demand will be highest and guides network design to efficiently serve activity centers.
-
-### 16. gtfs_stop_heatmap.png
-**Explanation**: This image likely presents a heatmap of GTFS (General Transit Feed Specification) stop data, showing stop density or frequency across the service area.
-
-**Analysis**: Stop heatmaps reveal patterns in transit infrastructure distribution, helping identify over-served and under-served areas for network optimization.
-
-### 17. population_density_map.png
-**Explanation**: This visualization is likely a standard population density map showing where people live across the service area, possibly using graduated colors or shading.
-
-**Analysis**: Population density is a fundamental inputs for transit planning. This map helps identify potential transit corridors and areas where different service types might be appropriate.
-
-### 18. changepoint_detection.png
-**Explanation**: This visualization likely shows results from changepoint analysis applied to transit data, identifying points in time where significant shifts in patterns occurred.
-
-**Analysis**: Detecting changepoints helps understand when and why travel behavior changed, which is valuable for evaluating the impact of service changes, policy interventions, or external events.
-
-### 19. holiday_calendar_effects.png
-**Explanation**: This image probably analyzes how specific holidays or calendar events affect transit usage patterns, possibly showing regular annual variations.
-
-**Analysis**: Understanding regular holiday patterns helps with recurring service planning and resource allocation for predictable annual variations in demand.
-
-### 20. rainfall_seasonality.png
-**Explanation**: This visualization likely shows seasonal patterns in rainfall and how they relate to transit usage or other transportation metrics.
-
-**Analysis**: Seasonal weather patterns affect transportation choices throughout the year. This analysis helps anticipate regular fluctuations in demand due to climate patterns.
-
-### 21. ridership_timeseries.png
-**Explanation**: This image probably presents ridership data over time, showing trends, cycles, and potentially forecasting components.
-
-**Analysis**: Time series analysis of ridership is fundamental for understanding long-term trends, identifying growth or decline patterns, and supporting service planning and budgeting processes.
-
-### 22. fuel_price_trends.png
-**Explanation**: This visualization likely shows historical trends in fuel prices, possibly with annotations about significant events or policy changes.
-
-**Analysis**: Fuel price trends provide context for understanding long-term transportation cost pressures and help explain ridership patterns that correlate with fuel cost fluctuations.
-
-## Summary
-
-These visualizations collectively provide a comprehensive view of the transit system from multiple angles: operational performance, demand patterns, accessibility equity, external influences (weather, fuel prices), and temporal patterns. Together, they support data-driven decision-making for transit planning, operations, and policy development.
-
-The analyses suggest a focus on understanding not just how the transit system performs, but why it performs that way—examining the complex interplay between service characteristics, land use patterns, demographic factors, and external conditions that shape transit ridership and effectiveness.
+### mcо_impact_summary.png (if present)
+**What:** Comparison of ridership distributions before, during, and after the MCO period (2020-03-18 – 2021-12-31) for selected service lines.
+**Analysis:** Confirms the MCO structural break is the dominant signal in the full historical series. Post-MCO distribution shifts right (increasing ridership) but does not return to pre-MCO levels for most services by 2025. The regime-gating component in HMT-TSF (K=3: pre-MCO / MCO / post-MCO) directly addresses this distributional non-stationarity by learning separate regime embeddings — the regime gate learns to weight the post-MCO embedding during inference without requiring `is_mco` as an explicit input feature at inference time.

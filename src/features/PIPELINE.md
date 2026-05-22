@@ -18,7 +18,7 @@ Raw data (data/raw/)
  feature_align.py    ─── merges all sources onto a daily date index
         │                 also computes lag features + year/day_of_year
         ▼
- sequence_builder.py ─── sliding-window tensors (X, y) for all 15 models
+ sequence_builder.py ─── sliding-window tensors (X, y) for all 16 models
         │
         ▼
  data/sequences/lstm/  ─── X_train.npy, y_train.npy, …, scaler_X.pkl, …
@@ -232,7 +232,7 @@ The terminal output reports the total feature count and a breakdown by group
 (targets, temporal, external, lag, static). Feature sources included are listed
 explicitly; any `[SKIP]` messages indicate a cleaning script has not been run.
 
-**Expected feature count** (all 8 sources present): ~69 columns
+**Expected feature count** (all 8 sources present): **79 columns**
 
 | Group | Count | Source |
 |---|---|---|
@@ -241,6 +241,8 @@ explicitly; any `[SKIP]` messages indicate a cleaning script has not been run.
 | External | 30 | fuel (15) + rainfall (15) |
 | Lag | 3 | ridership_lag_7/14/28 |
 | Static | 17 | population + GTFS + OSM POI + GADM |
+
+> The exact column count is written to `data/features/feature_metadata.json` and to `data/sequences/*/split_dates.json → n_features` after each run. Use these files as the authoritative source if sources change.
 
 ---
 
@@ -337,6 +339,13 @@ python src/features/sequence_builder.py --T-in 56     # → data/sequences/lookb
   that the sequence window alone cannot reach.
 
 - **Graph adjacency** — Graph-based models (STGCN, MTGNN, STSGCN, STFGNN,
-  PDR-STGCN, ASTGCN) build their feature-correlation adjacency matrix
-  on-the-fly at training time from the N_features columns in `X_train.npy`.
-  No separate graph file is needed.
+  PDR-STGCN, ASTGCN) and HMT-TSF build their feature-correlation adjacency
+  matrix on-the-fly at training time from the N_features columns in
+  `X_train.npy`. No separate graph file is needed.
+
+- **HMT-TSF lookback 7 and 84** — Sequence dirs for these two non-standard
+  lookbacks must be built separately if needed:
+  ```bash
+  python src/features/sequence_builder.py --T-in 7
+  python src/features/sequence_builder.py --T-in 84
+  ```

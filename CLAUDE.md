@@ -69,6 +69,59 @@ python src/models/attention-based/tft.py
 
 Each model script accepts `--seq-dir`, `--epochs`, `--batch-size`, `--lr`, `--patience`, `--device`, `--seed`, and model-specific hyperparameter flags. See the docstring at the top of each file. `--device auto` selects CUDA → MPS → CPU automatically.
 
+## Running the Hybrid SOTA Model
+
+HMT-TSF is in `src/models/hybrid/`. Run from the repo root:
+
+```bash
+# Default (lookback=14, d_model=128, 3 TCN blocks)
+python src/models/hybrid/hmttsf.py
+
+# Longer lookback with larger model
+python src/models/hybrid/hmttsf.py --lookback 28 --n-tcn-blocks 4 --d-model 192
+
+# With Optuna HPO (50 trials) before full training
+python src/models/hybrid/hmttsf.py --tune-trials 50 --lookback 56
+
+# With CatBoost post-hoc residual boosting
+python src/models/hybrid/hmttsf.py --use-catboost
+
+# With SHAP feature importance
+python src/models/hybrid/hmttsf.py --shap --shap-samples 150
+
+# Maximum configuration (84-day lookback, HPO, SHAP, CatBoost)
+python src/models/hybrid/hmttsf.py \
+  --lookback 84 --d-model 256 --n-tcn-blocks 5 \
+  --graph-hidden 128 --dropout 0.15 \
+  --tune-trials 50 --use-catboost --shap \
+  --epochs 150 --patience 20 --warmup-epochs 8
+```
+
+HMT-TSF-specific flags (in addition to the shared flags below):
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--d-model {64,128,192,256}` | `128` | Model hidden dimension |
+| `--n-tcn-blocks N` | `3` | TCN blocks per scale |
+| `--graph-hidden {32,64,128}` | `64` | GCN hidden dimension |
+| `--n-regimes N` | `3` | Regime embedding count |
+| `--tune-trials N` | `0` | Optuna HPO trials (0 = disabled) |
+| `--use-catboost` | off | CatBoost post-hoc residual boosting |
+| `--no-boost` | off | Disable neural boost head |
+| `--no-revin` | off | Disable RevIN input normalisation |
+| `--shap` | off | Run SHAP feature importance |
+| `--shap-samples N` | `100` | SHAP background samples |
+| `--smooth-weight λ` | `0.01` | Temporal smoothness regularisation |
+| `--loss-decay γ` | `0.9` | Geometric decay for weighted Huber steps |
+
+Lookback choices extend to `{7, 14, 28, 56, 84}`. Sequence dirs for lookback 7 and 84 must be built first if needed:
+```bash
+python src/features/sequence_builder.py --T-in 7
+python src/features/sequence_builder.py --T-in 84
+```
+
+Output is written to `src/outputs/hmttsf/{YYYYMMDD_HHMMSS}/`. Full architecture details in `src/models/hybrid/HMT-TSF.md`.
+
 ## Running a Tuned Model
 
 Fine-tuned variants of all 15 models are in three mirrored folders. Run from the repo root:
@@ -103,17 +156,19 @@ python src/models/spatio-temporal-tuned/cnnlstm.py --mode parallel   --lookback 
 python src/models/spatio-temporal-tuned/cnnlstm.py --mode augmented  --lookback 14
 ```
 
-Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full rationale and per-model details are in `src/models/TUNED-MODEL.md`.
+Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full rationale and per-model details are in `src/models/MODEL.md`.
 
 New shared flags added to all 15 models:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--lookback {14,28,56}` | `14` | Look-back window; auto-resolves `--seq-dir` when not set explicitly |
+| `--lookback {14,28,56}` | `14` | Look-back window for the 15 base models; auto-resolves `--seq-dir` when not set explicitly |
 | `--loss {mse,huber,mae}` | `huber` | Training loss function |
 | `--warmup-epochs N` | `5` | Linear LR warm-up epochs before ReduceLROnPlateau takes over |
 
-Sequence directory auto-resolution: `--lookback 14` → `data/sequences/lstm/`, `--lookback 28` → `data/sequences/lookback_28/`, `--lookback 56` → `data/sequences/lookback_56/`.
+Sequence directory auto-resolution (base models): `--lookback 14` → `data/sequences/lstm/`, `--lookback 28` → `data/sequences/lookback_28/`, `--lookback 56` → `data/sequences/lookback_56/`.
+
+HMT-TSF additionally supports `--lookback 7` → `data/sequences/lookback_7/` and `--lookback 84` → `data/sequences/lookback_84/` (build these dirs first with `sequence_builder.py --T-in 7` / `--T-in 84`).
 
 ## Architecture
 
@@ -134,7 +189,7 @@ data/sequences/lookback_56/    lookback=56: same layout
 src/outputs/{model}/           timestamped run dirs with results.json, plots, model.pt
 ```
 
-**Feature count breakdown** (all 8 sources present, ~69 total):
+**Feature count breakdown** (all 8 sources present, 79 total as of current pipeline):
 
 | Group | ~Count | Features |
 |---|---|---|
@@ -144,13 +199,14 @@ src/outputs/{model}/           timestamped run dirs with results.json, plots, mo
 | Lag | 3 | ridership_lag_7, ridership_lag_14, ridership_lag_28 |
 | Static | 17 | population + GTFS + OSM POI + GADM |
 
-### The Three Model Series (Base)
+### The Three Model Series (Base) + Hybrid SOTA
 
 | Series | Location | Models |
 |---|---|---|
 | Spatio-temporal (LSTM-family) | `src/models/spatio-temporal-based/` | LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
 | Graph-based | `src/models/graph-based/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
 | Attention-based | `src/models/attention-based/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
+| Hybrid SOTA | `src/models/hybrid/` | HMT-TSF |
 
 ### The Three Tuned Series
 
@@ -164,7 +220,7 @@ src/outputs/{model}/           timestamped run dirs with results.json, plots, mo
 
 ### Graph Approach (features-as-nodes)
 
-All graph-based and ASTGCN models treat the N input features as graph nodes rather than geographic locations. STGCN, ASTGCN, STSGCN, STFGNN, and PDR-STGCN build a fixed spatial adjacency from absolute Pearson correlation of feature columns in `X_train` (threshold=0.1). STFGNN additionally builds a temporal adjacency from the correlation of each node's mean temporal profile. STSGCN constructs a 3N×3N Spatial-Temporal Synchronous Graph (STSG) that captures both spatial and temporal correlations in one synchronous adjacency. PDR-STGCN combines a static sym-normalised correlation adjacency with an input-adaptive dynamic attention adjacency (mixed via a learned scalar λ), and adds a periodicity-aware 2-channel input encoding (original signal + weekly lag-difference). MTGNN learns its adjacency end-to-end from node embeddings.
+All graph-based, ASTGCN, and HMT-TSF models treat the N input features as graph nodes rather than geographic locations. STGCN, ASTGCN, STSGCN, STFGNN, PDR-STGCN, and HMT-TSF build a fixed spatial adjacency from absolute Pearson correlation of feature columns in `X_train` (threshold=0.1). STFGNN additionally builds a temporal adjacency from the correlation of each node's mean temporal profile. STSGCN constructs a 3N×3N Spatial-Temporal Synchronous Graph (STSG) that captures both spatial and temporal correlations in one synchronous adjacency. PDR-STGCN combines a static sym-normalised correlation adjacency with an input-adaptive dynamic attention adjacency (mixed via a learned scalar λ), and adds a periodicity-aware 2-channel input encoding (original signal + weekly lag-difference). MTGNN learns its adjacency end-to-end from node embeddings.
 
 ASTGCN additionally computes a scaled Chebyshev Laplacian `L_tilde = -A_sym`.
 
@@ -177,6 +233,7 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
 → MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
 → ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
+→ HMT-TSF (17-way)
 ```
 
 ### Shared Utilities (`src/utils/`)
@@ -186,7 +243,7 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 
 ### AMP (Mixed Precision)
 
-The four new attention-based models (ASTGCN, TFT, Autoformer, Informer) use `torch.cuda.amp.GradScaler` + `autocast` for mixed-precision training on the A100. Autoformer wraps its FFT ops with an explicit `float32` cast inside `autocast` for numerical stability. LSTM-family and graph-based models do not use AMP.
+The attention-based models (ASTGCN, TFT, Autoformer, Informer) and HMT-TSF use `torch.cuda.amp.GradScaler` + `autocast` for mixed-precision training on the A100. Autoformer wraps its FFT ops with an explicit `float32` cast inside `autocast` for numerical stability. LSTM-family and graph-based models do not use AMP.
 
 ### Output Structure
 
@@ -259,4 +316,4 @@ Architecture hyperparameters changed in the tuned scripts (training params uncha
 | Autoformer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.20` |
 | Informer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.15` |
 
-Full per-model rationale is in `src/models/TUNED-MODEL.md`.
+Full per-model rationale is in `src/models/MODEL.md`.

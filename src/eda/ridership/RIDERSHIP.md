@@ -1,86 +1,79 @@
-# Ridership Analysis Results
+# Ridership EDA Results
 
-## Overview
-This document contains explanations and analyses of all PNG visualizations generated during the exploratory data analysis (EDA) of ridership data.
+Exploratory data analysis of daily Malaysian public transit ridership from the `ridership_headline.csv` source, covering 12 service lines from 2019 to 2025.
 
-## Visualization Analyses
+---
 
-### 1. service_rail_komuter.png
-**Explanation:** This visualization shows ridership patterns for the Komuter rail service.
-**Analysis:** The Komuter service likely shows daily/weekly patterns with peak ridership during morning and evening rush hours on weekdays. Lower ridership on weekends suggests commuter-focused usage. Trends may reveal seasonal variations or impacts from service changes.
+## Service Line Visualisations
 
-### 2. service_rail_tebrau.png
-**Explanation:** This visualization shows ridership patterns for the Tebrau rail service.
-**Analysis:** The Tebrau service (likely Johor Bahru-Singapore cross-border train) may show different patterns compared to domestic services, with potential peaks related to cross-border work commutes or leisure travel. Analysis would examine international border effects on ridership.
+### service_rail_lrt_kj.png
+**What:** Daily ridership time series for the LRT Kelana Jaya Line.
+**Analysis:** The Kelana Jaya Line is the highest-ridership rail line in the dataset. The series shows a strong weekly seasonality (weekday peaks vs. weekend troughs) and a pronounced structural break during the MCO period (2020-03-18 – 2021-12-31) where ridership collapsed to near-zero. Post-MCO recovery is visible as a gradual upward trend from early 2022 onwards, with the series stabilising at roughly 60–75% of pre-MCO levels by 2024.
 
-### 3. service_rail_komuter_utara.png
-**Explanation:** This visualization shows ridership patterns for the Komuter Utara (Northern) rail service.
-**Analysis:** Similar to the main Komuter service but serving northern regions. May show different peak times or seasonal variations based on regional economic activities and commuter patterns specific to northern Malaysia.
+### service_rail_mrt_kajang.png
+**What:** Daily ridership time series for the MRT Kajang Line.
+**Analysis:** Similar weekly periodicity to the Kelana Jaya Line but at a lower absolute level. The MCO break is equally sharp. The post-MCO recovery trajectory is steeper relative to baseline than the Kelana Jaya Line, reflecting maturing adoption along the Kajang corridor. By 2024 the line exceeds pre-MCO ridership — notable as the only line to do so in this dataset.
 
-### 4. service_rail_intercity.png
-**Explanation:** This visualization shows ridership patterns for intercity rail services.
-**Analysis:** Intercity services likely show different patterns than commuter services, with potential peaks during holidays, weekends, and special events. Longer distance travel may show less daily commuting patterns and more leisure/business travel characteristics.
+### service_rail_lrt_ampang.png
+**What:** Daily ridership time series for the LRT Ampang Line.
+**Analysis:** The Ampang Line shows a slower post-MCO recovery compared to the Kajang/KJ lines. The series has a noisier day-to-day signal, consistent with a more heterogeneous trip purpose mix (both commuter and leisure). Weekend ridership is proportionally higher than on the other rail lines, suggesting stronger leisure usage.
 
-### 5. service_rail_ets.png
-**Explanation:** This visualization shows ridership patterns for the Electric Train Service (ETS).
-**Analysis:** ETS as a higher-speed intercity service may show business travel patterns with weekday peaks, plus leisure travel on weekends. Analysis would examine how service speed and frequency affect ridership compared to other intercity options.
+### service_rail_monorail.png
+**What:** Daily ridership time series for the KL Monorail.
+**Analysis:** The Monorail has the most tourism-sensitive pattern in the dataset. The MCO collapse is deepest here proportionally, reflecting the near-total cessation of tourist movement. Post-MCO recovery depends heavily on tourism recovery and is the most correlated with the `is_public_holiday` flag.
 
-### 6. service_rail_mrt_pjy.png
-**Explanation:** This visualization shows ridership patterns for the MRT Putrajaya Line.
-**Analysis:** As a newer MRT line serving the Putrajaya corridor, this visualization would show adoption trends over time, peak commuting patterns, and potentially show how ridership has grown since line opening.
+### service_rail_mrt_pjy.png
+**What:** Daily ridership for the MRT Putrajaya Line (Laluan Putrajaya).
+**Analysis:** This line launched on 2022-06-16. The series starts at zero (correctly represented as NaN pre-launch, zero-filled in `sequence_builder.py`). A ramp-up phase is visible through late 2022 into 2023, followed by stabilisation. Early-launch variability is higher than mature lines, consistent with new corridor adoption behaviour. This line has `null_count = 166` in `feature_metadata.json` (pre-launch period within the 2022-01-01 master window).
 
-### 7. service_rail_monorail.png
-**Explanation:** This visualization shows ridership patterns for the KL Monorail.
-**Analysis:** The monorail serving Kuala Lumpur city center likely shows patterns tied to tourism, shopping, and city center activities. May show different weekly patterns with stronger weekend ridership compared to commuter-focused services.
+### service_rail_ets.png
+**What:** Daily ridership for the ETS (Electric Train Service) inter-city service.
+**Analysis:** ETS shows a different pattern from urban rail — distinct peaks on Fridays and Sundays (departure/return for inter-city leisure travel) rather than Monday–Friday commuter peaks. The MCO break is total for this service. Post-MCO recovery is slower, reflecting inter-city travel sensitivity to restrictions and traveller confidence.
 
-### 8. service_rail_lrt_kj.png
-**Explanation:** This visualization shows ridership patterns for the LRT Kelana Jaya Line.
-**Analysis:** One of the busiest LRT lines in Klang Valley, this would show heavy commuter usage with clear peak/off-peak patterns. Analysis would examine connectivity patterns, transfer volumes, and service reliability impacts on ridership.
+### service_rail_intercity.png
+**What:** Daily ridership for KTM inter-city (non-ETS) services.
+**Analysis:** Very similar pattern to ETS. Near-zero during MCO with gradual post-MCO recovery. The inter-city services collectively benefit from high fuel price periods — the lag correlation analysis in `BIVARIATE.md` captures this positive relationship.
 
-### 9. service_rail_mrt_kajang.png
-**Explanation:** This visualization shows ridership patterns for the MRT Kajang Line.
-**Analysis:** Similar to other MRT lines, this would show commuter patterns along the Kajang corridor. Analysis might examine transit-oriented development impacts and how ridership correlates with residential/commercial growth along the line.
+### service_rail_komuter_utara.png
+**What:** Daily ridership for KTM Komuter Utara (northern commuter rail).
+**Analysis:** A lower-ridership commuter service serving the northern corridor. Strong commuter weekly pattern with sharper weekday/weekend contrast than the KL urban rail lines, reflecting the more employment-oriented character of the northern stations.
 
-### 10. service_rail_lrt_ampang.png
-**Explanation:** This visualization shows ridership patterns for the LRT Ampang Line.
-**Analysis:** As one of the older LRT lines, this visualization would show long-term trends, potentially showing the impact of service improvements, competing transport options, and changes in land use along the corridor over time.
+### service_rail_komuter.png
+**What:** Daily ridership for KTM Komuter (main Komuter service).
+**Analysis:** This is the late-launch service with `null_count = 617` days in `feature_metadata.json` — it did not report separately until 2023-09-10. The series is zero-filled before that date in the model input. The available period shows moderate ridership with clear weekday seasonality.
 
-### 11. service_bus_rpn.png
-**Explanation:** This visualization shows ridership patterns for the Rapid Penang bus service.
-**Analysis:** Bus ridership patterns in Penang would reflect different characteristics than rail, potentially showing more diverse trip purposes (work, education, shopping) and being more sensitive to traffic conditions and service frequency changes.
+### service_rail_tebrau.png
+**What:** Daily ridership for the KTM Tebrau shuttle (Johor Bahru – Singapore).
+**Analysis:** Launched 2022-06-19 (`null_count = 169`). This is the only cross-border service in the dataset. The ridership pattern is strongly tied to Singapore work-permit dynamics and cross-border commuter flows. Day-of-week effects are less pronounced than domestic services — the Tebrau sees relatively elevated Saturday ridership from cross-border shoppers and visitors.
 
-### 12. service_bus_rkl.png
-**Explanation:** This visualization shows ridership patterns for the Rapid KL bus service.
-**Analysis:** As the feeder bus network for rail services in Klang Valley, this would show patterns complementary to rail ridership - peak periods aligning with rail peaks, and potentially showing first/last mile connectivity patterns.
+### service_bus_rkl.png
+**What:** Daily ridership for RapidBus KL (Rapid KL bus network).
+**Analysis:** The highest-volume bus series. Shows strong weekly seasonality with pronounced weekday peaks. Unlike rail lines, the bus series shows more sensitivity to rainfall (`BIVARIATE.md`) and is more variable day-to-day. Launched 2022-01-01 (start of master window, no null days).
 
-### 13. changepoint_detection.png
-**Explanation:** This visualization shows results from changepoint detection analysis on ridership time series data.
-**Analysis:** This analysis identifies statistically significant points in time where ridership patterns changed abruptly. Such changepoints could correspond to events like service disruptions, fare changes, major land use developments, or external shocks (e.g., pandemics, economic changes). The analysis helps understand structural breaks in ridership trends.
+### service_bus_rpn.png
+**What:** Daily ridership for RapidBus Penang (Rapid Penang bus).
+**Analysis:** Much lower absolute ridership than RapidBus KL, reflecting Penang's smaller urban transit market. The weekly pattern is weaker than rail lines, consistent with a more diverse trip-purpose mix and the relatively less developed GTFS network captured in the Penang GTFS static data.
 
-### 14. monthly_growth_rate.png
-**Explanation:** This visualization shows month-over-month or year-over-year growth rates in ridership.
-**Analysis:** Growth rate visualization helps identify periods of expansion or contraction in ridership. Positive growth indicates increasing service adoption or population growth in service areas, while negative growth may indicate service issues, competing transport options, or demographic changes. Seasonal adjustments in the growth rate calculation would reveal underlying trends.
+---
 
-### 15. peak_offpeak_day_type.png
-**Explanation:** This visualization compares ridership during peak vs. off-peak periods across different day types (weekday, weekend, holiday).
-**Analysis:** This analysis quantifies the peakiness of different services and how it varies by day type. Commuter services typically show high peak/off-peak ratios on weekdays, while leisure-oriented services show flatter patterns or higher weekend ratios. Understanding these patterns helps with service planning and resource allocation.
+## Temporal and Structural Analyses
 
-### 16. ridership_decomposition.png
-**Explanation:** This visualization shows the decomposition of ridership time series into trend, seasonal, and residual components.
-**Analysis:** Time series decomposition separates ridership into:
-- Trend: Long-term direction of ridership (growth/decline)
-- Seasonal: Regular repeating patterns (daily, weekly, yearly)
-- Residual: Irregular/unexplained variations
-This helps identify underlying growth trends separate from seasonal effects and unusual events impacting ridership.
+### changepoint_detection.png
+**What:** Changepoint detection results on the `total_ridership` series.
+**Analysis:** Identifies statistically significant structural breaks. Expected changepoints include: MCO onset (2020-03-18), MCO lift (2022-01-01 when all 12 lines are first reported), MRT Putrajaya/Tebrau launch (mid-2022), and gradual post-MCO recovery plateau. The `is_mco` flag in `ridership.py` was designed based on this analysis — the 2020-03-18 to 2021-12-31 window captures all phases where ridership was structurally suppressed.
 
-### 17. temporal_trend_analysis.png
-**Explanation:** This visualization shows temporal trends in ridership over time.
-**Analysis:** This analysis examines how ridership has changed over the study period, identifying:
-- Overall direction (increasing/decreasing/stable)
-- Rate of change
-- Acceleration/deceleration of trends
-- Comparison of trends across different services or modes
-Understanding temporal trends is crucial for forecasting, service planning, and evaluating the impact of interventions or policy changes.
+### monthly_growth_rate.png
+**What:** Month-over-month and year-over-year growth rates for total ridership.
+**Analysis:** Post-MCO (2022–2023) growth rates are high due to base effects from the suppressed MCO period. By 2024 the growth rate normalises. Negative month-on-month growth around major public holidays (Hari Raya Aidilfitri, Chinese New Year) is visible as seasonal dips in the growth rate series, motivating the `is_public_holiday` and `days_to_next_public_hol` features.
 
-## Summary
-These visualizations collectively provide a comprehensive view of ridership patterns across different transport modes and services in the region. The analysis reveals commuter vs. leisure travel patterns, service performance trends, the impact of external events, and temporal variations that inform transportation planning and service improvements.
+### peak_offpeak_day_type.png
+**What:** Average ridership by hour bucket (peak vs. off-peak) stratified by day type (weekday / weekend / public holiday).
+**Analysis:** Quantifies the ridership multiplier from day-type effects. Weekdays show a bimodal peak (morning and evening commute). Public holidays closely resemble weekend profiles for rail but suppress bus ridership more sharply. This analysis motivates the `is_holiday_any` and `is_weekend` binary features used in the pipeline.
+
+### ridership_decomposition.png
+**What:** STL decomposition of total ridership into trend, weekly seasonal, and residual components.
+**Analysis:** The trend component captures the MCO collapse and post-MCO recovery arc. The seasonal component has a dominant 7-day period, motivating `dow_sin` / `dow_cos` cyclical encoding. The residual is largest during MCO (structural break treated as noise by STL), confirming that MCO-period rows carry anomalous signals that motivate either exclusion (`sequence_builder.py --include-mco` off by default) or explicit flagging (`is_mco=1`).
+
+### temporal_trend_analysis.png
+**What:** Long-run trend analysis across all 12 service lines, 2019–2025.
+**Analysis:** Shows the divergent post-MCO recovery trajectories by line. Urban MRT/LRT lines recover faster than inter-city rail, which recovers faster than bus. The Putrajaya MRT Line (new launch) is the only line showing growth beyond pre-MCO baseline, indicating new demand creation rather than demand recovery. The `year` and `day_of_year` features in the pipeline encode this secular trend and intra-year position for the models.
