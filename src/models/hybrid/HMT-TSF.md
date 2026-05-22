@@ -137,8 +137,8 @@ Output: (B, T_out=7)  [MinMax-scaled]
 ## Training Strategy
 
 ### Phase 1 — Optuna HPO (optional, `--tune-trials N`)
-- Run N trials, 40 epochs each with patience=10
-- Median pruner: prune underperforming trials early (warmup 15 epochs)
+- Run N trials, up to 40 epochs each with per-trial early stopping (patience=10)
+- Median pruner also prunes underperforming trials after warmup (15 epochs)
 - Search space covers architecture + regularisation simultaneously
 - Transfer best hyperparameters to Phase 2
 

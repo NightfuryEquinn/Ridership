@@ -58,11 +58,8 @@ Hardware:
 import os
 import sys
 import json
-import math
-import time
 import argparse
 from datetime import datetime
-from copy import deepcopy
 
 # ── third-party ──────────────────────────────────────────────────────────────
 import numpy as np
@@ -358,17 +355,19 @@ class MultiScaleTCN(nn.Module):
 def build_feature_adj(X_train_np: np.ndarray,
                       threshold: float = 0.1) -> np.ndarray:
     """
-    Pearson-correlation adjacency over feature nodes — identical strategy
-    to STGCN/ASTGCN in this project.  Returns sym-normalised (F, F) float32.
+    Pearson-correlation adjacency over feature nodes.
+    Edges with |corr| < threshold are zeroed; surviving edges retain their
+    correlation magnitude as weight (matching the strategy used by STGCN/ASTGCN
+    in this project).  Returns sym-normalised (F, F) float32.
     """
     N, T, F = X_train_np.shape
     flat = X_train_np.reshape(N * T, F).astype(np.float64)
     flat -= flat.mean(0)
     std   = flat.std(0) + 1e-8
     flat /= std
-    corr  = np.abs(np.corrcoef(flat.T))   # (F, F)
+    corr  = np.abs(np.corrcoef(flat.T))   # (F, F) — correlation magnitudes
     np.fill_diagonal(corr, 0.0)
-    adj   = (corr >= threshold).astype(np.float32)
+    adj   = np.where(corr >= threshold, corr, 0.0).astype(np.float32)  # soft weights
     # Symmetric normalisation: D^{-1/2} A D^{-1/2}
     deg         = adj.sum(1) + 1e-8
     d_inv_sqrt  = np.diag(1.0 / np.sqrt(deg))
@@ -818,7 +817,19 @@ def run_shap_analysis(model: nn.Module,
     model.eval()
     subset = X_test[:n_samples]
 
-    explainer = shap.GradientExplainer(model, subset)
+    # Wrap model so SHAP forward passes respect AMP when enabled
+    class _AMPWrapper(nn.Module):
+        def __init__(self, m, amp):
+            super().__init__()
+            self.m = m
+            self.amp = amp
+
+        def forward(self, x):
+            with autocast(enabled=self.amp):
+                return self.m(x)
+
+    wrapped = _AMPWrapper(model, use_amp)
+    explainer = shap.GradientExplainer(wrapped, subset)
     shap_vals  = explainer.shap_values(subset)   # list[T_out] or (N, T, F)
 
     if isinstance(shap_vals, list):
@@ -881,15 +892,22 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
         sreg = TemporalSmoothnessReg(weight=smooth_wt)
         gs   = GradScaler(enabled=use_amp)
 
-        best_va = float("inf")
+        best_va      = float("inf")
+        patience_cnt = 0
+        patience_hp  = 10
         for ep in range(1, 41):
             train_one_epoch(m, tr_loader, opt, crit, sreg, gs, use_amp)
             va_loss = evaluate(m, va_loader, crit, sreg, use_amp)
             if va_loss < best_va:
-                best_va = va_loss
+                best_va      = va_loss
+                patience_cnt = 0
+            else:
+                patience_cnt += 1
             trial.report(va_loss, ep)
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
+            if patience_cnt >= patience_hp:
+                break   # per-trial early stopping
 
         return best_va
 
@@ -1076,7 +1094,7 @@ def parse_args():
     p.add_argument("--shap-samples",type=int, default=100,
                    help="Number of test samples for SHAP analysis")
 
-    # Comparison chain (all 16 prior models)
+    # Comparison chain (all 15 prior models → 16-way comparison with HMT-TSF)
     p.add_argument("--lstm-results",       default=None)
     p.add_argument("--bilstm-results",     default=None)
     p.add_argument("--tpalstm-results",    default=None)
@@ -1265,8 +1283,12 @@ def main():
     boost_corrector = None
     if not args.no_boost:
         print("\nFitting residual booster …")
-        # Get neural predictions on training set for residual estimation
-        tr_pred_s, tr_true_s = collect_predictions(model, train_loader, use_amp)
+        # Collect training predictions in original dataset order (no shuffle)
+        # so that residuals align with X_tr row-for-row when fitting the booster.
+        train_ordered_loader = DataLoader(
+            TensorDataset(X_tr, y_tr), batch_size=args.batch_size, shuffle=False
+        )
+        tr_pred_s, tr_true_s = collect_predictions(model, train_ordered_loader, use_amp)
         if os.path.exists(scaler_y_path):
             N_tr, T_tr = tr_pred_s.shape
             tr_pred = scaler_y.inverse_transform(tr_pred_s.reshape(-1, 1)).reshape(N_tr, T_tr)
