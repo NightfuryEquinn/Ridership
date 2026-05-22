@@ -218,7 +218,7 @@ def build_sequences(cfg: dict) -> None:
 
     T_in_val = cfg["T_in"]
     out = ("data/sequences/lstm" if T_in_val == 14
-           else f"data/sequences/lookback_{T_in_val}")
+           else f"data/sequences/lookback_{T_in_val}")  # e.g. lookback_7, lookback_28, lookback_56, lookback_84
     os.makedirs(out, exist_ok=True)
     ext = ".npz" if compress else ".npy"
     _save(f"{out}/X_train", X_tr, compress, dtype)
@@ -262,9 +262,9 @@ def parse_args():
                    help="Path to features_aligned.csv from feature_align.py "
                         "(all 8 spatio-temporal sources)")
     p.add_argument("--T-in",    type=int,   default=DEFAULTS["T_in"],
-                   choices=[14, 28, 56],
+                   choices=[7, 14, 28, 56, 84],
                    help="Look-back window in days (14 → data/sequences/lstm/, "
-                        "28 or 56 → data/sequences/lookback_{N}/)")
+                        "other values → data/sequences/lookback_{N}/)")
     p.add_argument("--T-out",   type=int,   default=DEFAULTS["T_out"])
     p.add_argument("--target",  default=DEFAULTS["target_col"])
     p.add_argument("--train-frac", type=float, default=DEFAULTS["train_frac"])
