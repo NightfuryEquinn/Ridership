@@ -1,5 +1,7 @@
 # Bivariate Analysis Report
 
+> Last updated: 2026-05-22
+
 Pairwise relationship analyses between the feature sources and the ridership targets in this Malaysian transit forecasting project. All analyses use the post-MCO data window (2022-01-01 – 2025-12-31) unless otherwise noted.
 
 ---

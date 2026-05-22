@@ -1,5 +1,7 @@
 # Holiday EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of Malaysian public and school holidays from `school_public_holiday.csv`, processed by `holiday.py` into a daily feature calendar covering 2019–2026.
 
 ---

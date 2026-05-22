@@ -1,5 +1,7 @@
 # GTFS EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of Malaysian public transit GTFS feeds for four operators: Rapid Rail KL, RapidBus KL, RapidBus Penang, and KTMB. The `gtfs.py` cleaning script was run once per operator and exported stop-node and stop-edge tables consumed downstream by `population.py`, `osm.py`, and `feature_align.py`.
 
 ---

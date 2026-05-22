@@ -949,12 +949,16 @@ def run_shap_analysis(model: nn.Module,
     else:
         shap_arr = np.abs(shap_vals)
 
-    mean_importance = shap_arr.mean(axis=(0, 1))   # (F,)
-    top_k = 20
+    # Reduce all axes except the feature axis (axis=2, matching input (N, T_in, F)).
+    # SHAP may return (N, T_in, F) or (N, T_in, F, T_out); averaging over every
+    # non-feature axis handles both and produces a 1-D (F,) importance vector.
+    axes_to_reduce = tuple(i for i in range(shap_arr.ndim) if i != 2)
+    mean_importance = shap_arr.mean(axis=axes_to_reduce)   # (F,)
+    top_k = min(20, len(mean_importance))
     top_idx = np.argsort(mean_importance)[-top_k:][::-1]
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.barh(range(top_k), mean_importance[top_idx][::-1], color="#2563eb", alpha=0.85)
+    ax.barh(range(top_k), mean_importance[top_idx[::-1]], color="#2563eb", alpha=0.85)
     ax.set_yticks(range(top_k))
     ax.set_yticklabels([f"feat_{i}" for i in top_idx[::-1]], fontsize=8)
     ax.set_xlabel("Mean |SHAP value|")

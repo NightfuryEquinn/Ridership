@@ -1,5 +1,7 @@
 # Population Density EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of the Malaysian population density raster (`malaysia_population_density_2020.csv`, WorldPop-style grid at ~100 m resolution), processed by `population.py`.
 
 ---

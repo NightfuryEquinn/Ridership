@@ -1,5 +1,7 @@
 # Model Descriptions
 
+> Last updated: 2026-05-22
+
 This document describes all 16 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 15 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
 
 **Shared training optimizations (all 15 models):** AdamW optimiser (decoupled weight decay), HuberLoss (default, selectable via `--loss {mse,huber,mae}`), and a 5-epoch linear LR warm-up before ReduceLROnPlateau (configurable via `--warmup-epochs`). Architecture and hyperparameter values are unchanged.

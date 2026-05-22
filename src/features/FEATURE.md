@@ -1,5 +1,7 @@
 # Feature Engineering & EDA Analysis
 
+> Last updated: 2026-05-22
+
 Detailed account of all exploratory data analysis (EDA) and engineering decisions made across the eight spatio-temporal feature sources that feed the forecasting pipeline. The output of this pipeline is `data/features/features_aligned.csv` — a daily matrix of **79 features × 1,461 days** (2022-01-01 → 2025-12-31) consumed by all 15 models.
 
 ---

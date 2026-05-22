@@ -1,5 +1,7 @@
 # GADM EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of Malaysia's Level-1 administrative boundaries from the GADM dataset (`gadm_mys_l1.json`), covering all 16 states and federal territories (13 states + KL + Labuan + Putrajaya).
 
 ---

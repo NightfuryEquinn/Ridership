@@ -1,5 +1,7 @@
 # Ridership EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of daily Malaysian public transit ridership from the `ridership_headline.csv` source, covering 12 service lines from 2019 to 2025.
 
 ---

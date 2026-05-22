@@ -1,5 +1,7 @@
 # DATA.md
 
+> Last updated: 2026-05-22
+
 This document describes the layout, contents, and conventions of every directory under `data/`. The pipeline that produces these artefacts is documented in `src/features/PIPELINE.md`.
 
 ---

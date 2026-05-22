@@ -1,5 +1,7 @@
 # Fuel Price EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of Malaysian retail fuel prices from `fuelprice.csv`, covering RON95, RON97, diesel, East Malaysia diesel, and subsidy-programme variants (BUDI Madani RON95, SKPS RON95) from 2019 onwards.
 
 ---

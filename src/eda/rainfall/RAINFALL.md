@@ -1,5 +1,7 @@
 # Rainfall EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of Malaysian sub-national rainfall data from `mys_rainfall_subnat_2019_2026.csv` (OCHA HDX / FEWS NET source), processed by `rainfall.py` into a wide-format daily matrix of per-state rainfall in mm.
 
 ---

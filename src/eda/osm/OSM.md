@@ -1,5 +1,7 @@
 # OSM EDA Results
 
+> Last updated: 2026-05-22
+
 Exploratory data analysis of OpenStreetMap Points of Interest (POIs) from `osm_pois.json` (Overpass API export covering Malaysia), processed by `osm.py` into per-stop catchment counts.
 
 ---

@@ -1,5 +1,7 @@
 # Malaysian Transit Ridership Forecasting Research
 
+> Last updated: 2026-05-22
+
 Masters Final Year Project comparing 15 deep-learning models for Malaysian public transit ridership forecasting across three model series using 8 spatio-temporal feature sources.
 
 ## Overview

@@ -1,5 +1,7 @@
 # HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 
+> Last updated: 2026-05-22
+
 ## Architecture Diagram
 
 ```

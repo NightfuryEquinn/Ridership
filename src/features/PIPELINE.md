@@ -1,5 +1,7 @@
 # Feature Engineering Pipeline
 
+> Last updated: 2026-05-22
+
 End-to-end guide for generating cleaned data and building model-ready sequences
 from all 8 spatio-temporal feature sources. All commands are run from the
 **repository root**.

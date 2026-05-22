@@ -1,5 +1,7 @@
 # Multivariate EDA Results
 
+> Last updated: 2026-05-22
+
 Multi-source analyses combining two or more of the eight feature groups to understand higher-order interactions relevant to Malaysian transit ridership forecasting. All analyses use the 79-feature aligned matrix (`features_aligned.csv`, 2022-01-01 – 2025-12-31) unless noted.
 
 ---

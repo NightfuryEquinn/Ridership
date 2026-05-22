@@ -1,5 +1,7 @@
 # Thematic EDA Results
 
+> Last updated: 2026-05-22
+
 Cross-source thematic visualisations synthesising ridership with the spatial and contextual feature sources in this project.
 
 ---
