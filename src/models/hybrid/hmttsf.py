@@ -46,7 +46,7 @@ Feature Groups (from CLAUDE.md / split_dates.json):
   Indices 62–78  : static (17: population, GTFS, OSM POI, GADM)
 
 Optimisation targets:
-  Combined% ≥ 80,  R² ≥ 0.78
+  Combined% ≥ 85,  R² ≥ 0.78
 
 Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
@@ -66,7 +66,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
+from torch.amp import autocast
 from torch.utils.data import DataLoader, TensorDataset
 import joblib
 import matplotlib
@@ -242,6 +243,68 @@ class FeatureGroupFusion(nn.Module):
 # 3. Multi-Scale TCN Encoder
 # ══════════════════════════════════════════════════════════════════════════════
 
+class DropPath(nn.Module):
+    """
+    Stochastic depth: randomly drop the residual path of a block during
+    training.  Acts as a structured regulariser that prevents co-adaptation
+    between consecutive TCN blocks.
+    """
+
+    def __init__(self, drop_prob: float = 0.0):
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return x
+        keep_prob = 1.0 - self.drop_prob
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        # floor_(val) takes no args — add keep_prob first, then floor in-place
+        noise = (torch.rand(shape, dtype=x.dtype, device=x.device) + keep_prob).floor_()
+        return x * noise / keep_prob
+
+
+class TemporalTransformerBlock(nn.Module):
+    """
+    Single Transformer encoder block injected between FeatureGroupFusion and
+    the multi-scale TCN.
+
+    Purpose: the TCN captures LOCAL temporal patterns via dilated convolutions,
+    but cannot attend across the full lookback window.  This block adds GLOBAL
+    temporal self-attention so the model can weight which time steps matter most
+    before local feature extraction.
+
+    Learnable positional embeddings are added so the attention is aware of
+    recency (position 0 = oldest, T_in−1 = most recent).
+    """
+
+    def __init__(self, d_model: int, n_heads: int = 4, dropout: float = 0.1,
+                 max_len: int = 128):
+        super().__init__()
+        self.pos_emb = nn.Embedding(max_len, d_model)
+        self.attn    = nn.MultiheadAttention(d_model, n_heads, dropout=dropout,
+                                             batch_first=True)
+        self.norm1   = nn.LayerNorm(d_model)
+        self.norm2   = nn.LayerNorm(d_model)
+        self.ffn     = nn.Sequential(
+            nn.Linear(d_model, d_model * 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 2, d_model),
+        )
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, T, d_model)
+        T   = x.size(1)
+        pos = torch.arange(T, device=x.device)
+        x   = x + self.pos_emb(pos)               # inject positional info
+        h, _ = self.attn(x, x, x)
+        x     = self.norm1(x + self.drop(h))
+        x     = self.norm2(x + self.drop(self.ffn(x)))
+        return x
+
+
 class CausalConv1d(nn.Module):
     """Left-padded dilated causal convolution (no future leakage)."""
 
@@ -261,13 +324,15 @@ class TCNResBlock(nn.Module):
     """WaveNet-style gated residual block with layer norm."""
 
     def __init__(self, channels: int, kernel_size: int = 3,
-                 dilation: int = 1, dropout: float = 0.1):
+                 dilation: int = 1, dropout: float = 0.1,
+                 drop_path: float = 0.0):
         super().__init__()
-        self.conv1 = CausalConv1d(channels, channels * 2, kernel_size, dilation)
-        self.conv2 = CausalConv1d(channels * 2, channels, kernel_size, dilation)
-        self.norm1 = nn.GroupNorm(1, channels * 2)
-        self.norm2 = nn.GroupNorm(1, channels)
-        self.drop  = nn.Dropout(dropout)
+        self.conv1     = CausalConv1d(channels, channels * 2, kernel_size, dilation)
+        self.conv2     = CausalConv1d(channels, channels, kernel_size, dilation)
+        self.norm1     = nn.GroupNorm(1, channels * 2)
+        self.norm2     = nn.GroupNorm(1, channels)
+        self.drop      = nn.Dropout(dropout)
+        self.drop_path = DropPath(drop_path)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T)
@@ -277,17 +342,21 @@ class TCNResBlock(nn.Module):
         h = torch.tanh(h1) * torch.sigmoid(h2)  # (B, C, T)
         h = self.drop(h)
         h = self.norm2(self.conv2(h))  # (B, C, T)
-        return h + x                   # residual
+        return self.drop_path(h) + x   # stochastic-depth residual
 
 
 class TCNStack(nn.Module):
     """Stack of TCNResBlocks with exponentially growing dilation."""
 
     def __init__(self, d_model: int, n_blocks: int,
-                 kernel_size: int = 3, dropout: float = 0.1):
+                 kernel_size: int = 3, dropout: float = 0.1,
+                 drop_path: float = 0.0):
         super().__init__()
+        # Linearly scale drop_path rate from 0 to drop_path across blocks
+        dp_rates = [drop_path * i / max(n_blocks - 1, 1) for i in range(n_blocks)]
         self.blocks = nn.ModuleList([
-            TCNResBlock(d_model, kernel_size, dilation=2 ** i, dropout=dropout)
+            TCNResBlock(d_model, kernel_size, dilation=2 ** i,
+                        dropout=dropout, drop_path=dp_rates[i])
             for i in range(n_blocks)
         ])
 
@@ -309,18 +378,19 @@ class MultiScaleTCN(nn.Module):
     """
 
     def __init__(self, d_model: int, T_in: int, n_blocks: int = 3,
-                 kernel_size: int = 3, dropout: float = 0.1):
+                 kernel_size: int = 3, dropout: float = 0.1,
+                 drop_path: float = 0.0):
         super().__init__()
         self.T_in    = T_in
         self.d_model = d_model
         self.use_half    = (T_in >= 28)
         self.use_quarter = (T_in >= 56)
 
-        self.tcn_full = TCNStack(d_model, n_blocks, kernel_size, dropout)
+        self.tcn_full = TCNStack(d_model, n_blocks, kernel_size, dropout, drop_path)
         if self.use_half:
-            self.tcn_half = TCNStack(d_model, max(1, n_blocks - 1), kernel_size, dropout)
+            self.tcn_half = TCNStack(d_model, max(1, n_blocks - 1), kernel_size, dropout, drop_path)
         if self.use_quarter:
-            self.tcn_quarter = TCNStack(d_model, max(1, n_blocks - 2), kernel_size, dropout)
+            self.tcn_quarter = TCNStack(d_model, max(1, n_blocks - 2), kernel_size, dropout, drop_path)
 
         n_scales = 1 + int(self.use_half) + int(self.use_quarter)
         self.scale_attn = nn.Parameter(torch.ones(n_scales) / n_scales)
@@ -366,6 +436,7 @@ def build_feature_adj(X_train_np: np.ndarray,
     std   = flat.std(0) + 1e-8
     flat /= std
     corr  = np.abs(np.corrcoef(flat.T))   # (F, F) — correlation magnitudes
+    corr  = np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)  # zero-variance features → no edges
     np.fill_diagonal(corr, 0.0)
     adj   = np.where(corr >= threshold, corr, 0.0).astype(np.float32)  # soft weights
     # Symmetric normalisation: D^{-1/2} A D^{-1/2}
@@ -392,22 +463,29 @@ class FeatureGraphEncoder(nn.Module):
     Treats the F=79 features as graph nodes.
     Input: raw feature sequence (B, T, F).
     Aggregates over T → node signals → 2-layer GCN → global mean pool → (B, d_model).
+
+    Temporal aggregation uses a learned attention vector over the T dimension
+    rather than naive mean-pooling.  This lets the graph branch weight recent
+    time steps (or peak-demand days) more heavily than distant ones.
     """
 
     def __init__(self, n_features: int, d_model: int,
                  graph_hidden: int = 64, dropout: float = 0.1):
         super().__init__()
+        # Scalar attention score per time step: (B, T, F) → (B, T, 1)
+        self.time_attn  = nn.Linear(n_features, 1)
         self.input_proj = nn.Linear(1, graph_hidden)   # per-node scalar → embedding
         self.gcn1       = GraphConvLayer(graph_hidden, graph_hidden, dropout)
         self.gcn2       = GraphConvLayer(graph_hidden, d_model, dropout)
 
     def forward(self, x: torch.Tensor, adj: torch.Tensor) -> torch.Tensor:
         # x: (B, T, F),  adj: (F, F)
-        h = x.mean(dim=1).unsqueeze(-1)       # (B, F, 1)
-        h = self.input_proj(h)                 # (B, F, graph_hidden)
-        h = self.gcn1(h, adj)                  # (B, F, graph_hidden)
-        h = self.gcn2(h, adj)                  # (B, F, d_model)
-        return h.mean(dim=1)                   # (B, d_model) — global pool
+        attn_w = F.softmax(self.time_attn(x), dim=1)   # (B, T, 1)
+        h = (x * attn_w).sum(dim=1).unsqueeze(-1)       # (B, F, 1)
+        h = self.input_proj(h)                           # (B, F, graph_hidden)
+        h = self.gcn1(h, adj)                            # (B, F, graph_hidden)
+        h = self.gcn2(h, adj)                            # (B, F, d_model)
+        return h.mean(dim=1)                             # (B, d_model) — global pool
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -454,7 +532,13 @@ class GatedFusion(nn.Module):
                  d_out: int, dropout: float = 0.1):
         super().__init__()
         d_cat = d_temporal + d_spatial + d_regime
-        self.gate = nn.Sequential(nn.Linear(d_cat, d_cat), nn.Sigmoid())
+        # Bottleneck SE-style gate: d_cat → d_cat//4 → d_cat avoids a massive
+        # square weight matrix (768×768 at d_model=256) that overfits easily.
+        d_gate = max(d_cat // 4, 64)
+        self.gate = nn.Sequential(
+            nn.Linear(d_cat, d_gate), nn.ReLU(),
+            nn.Linear(d_gate, d_cat), nn.Sigmoid(),
+        )
         self.proj = nn.Sequential(
             nn.Linear(d_cat, d_out * 2),
             nn.GELU(),
@@ -480,8 +564,11 @@ class NeuralForecastHead(nn.Module):
 
     def __init__(self, d_model: int, T_out: int, dropout: float = 0.1):
         super().__init__()
-        self.fc1  = nn.Linear(d_model, d_model * 2)
-        self.fc2  = nn.Linear(d_model * 2, d_model)
+        # Single d_model → d_model projection (no 2× expansion): the expansion
+        # adds parameters without benefit and is a leading cause of overfitting
+        # in the head at large d_model values.
+        self.fc1  = nn.Linear(d_model, d_model)
+        self.fc2  = nn.Linear(d_model, d_model)
         self.fc3  = nn.Linear(d_model, T_out)
         self.drop = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(d_model)
@@ -525,11 +612,9 @@ class HMTTSFForecaster(nn.Module):
     Output: (B, T_out)              — also in MinMax-scaled space; scaler_y
                                       handles the final inverse transform.
 
-    RevIN is applied as INPUT-ONLY instance normalisation on top of the
-    global MinMax scaling.  It reduces per-sample distribution shift without
-    altering the prediction space — the output head always predicts in the
-    same MinMax-scaled space so that scaler_y.inverse_transform() works
-    correctly.
+    RevIN normalises each input sample to zero-mean over the look-back window;
+    the output is denormalised back to MinMax-scaled space inside forward() so
+    that scaler_y.inverse_transform() in main() works correctly.
 
     adj: (n_features, n_features) — pre-computed Pearson adjacency on GPU.
     """
@@ -545,7 +630,9 @@ class HMTTSFForecaster(nn.Module):
         tcn_kernel:    int   = 3,
         graph_hidden:  int   = 64,
         n_regimes:     int   = 3,
+        n_attn_heads:  int   = 4,
         dropout:       float = 0.1,
+        drop_path:     float = 0.1,
         target_idx:    int   = 12,
         use_revin:     bool  = True,
     ):
@@ -560,8 +647,14 @@ class HMTTSFForecaster(nn.Module):
         # Feature group fusion: (B, T, F) → (B, T, d_model)
         self.feat_fusion = FeatureGroupFusion(n_features, d_model, dropout)
 
+        # Global temporal self-attention: (B, T, d_model) → (B, T, d_model)
+        # Allows the model to weight which time steps matter before local TCN.
+        self.temporal_attn = TemporalTransformerBlock(
+            d_model, n_heads=n_attn_heads, dropout=dropout, max_len=T_in + 4
+        )
+
         # Multi-scale TCN: (B, T, d_model) → (B, d_model)
-        self.tcn = MultiScaleTCN(d_model, T_in, n_tcn_blocks, tcn_kernel, dropout)
+        self.tcn = MultiScaleTCN(d_model, T_in, n_tcn_blocks, tcn_kernel, dropout, drop_path)
 
         # Graph encoder: (B, T, F) → (B, d_model)
         self.graph_enc = FeatureGraphEncoder(n_features, d_model, graph_hidden, dropout)
@@ -577,32 +670,46 @@ class HMTTSFForecaster(nn.Module):
         self.boosting_head = BoostingHead(d_model, T_out, dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # ── 1. Instance normalisation (input only) ───────────────────────────
-        # RevIN reduces per-sample distribution shift.  We do NOT denormalise
-        # the output here — the head predicts in MinMax-scaled space so that
-        # scaler_y.inverse_transform() in main() works without modification.
+        # ── 1. Instance normalisation ────────────────────────────────────────
+        # RevIN normalises each sample to zero-mean / unit-variance over the
+        # look-back window (per feature).  The stored _mean/_std are then used
+        # in denormalize() to map the output BACK to MinMax-scaled space before
+        # the loss is computed.  Without denormalization the model would receive
+        # zero-mean inputs but be trained against absolute MinMax targets —
+        # unable to distinguish absolute ridership levels → poor R².
         if self.use_revin:
             x = self.revin.normalize(x)
 
         # ── 2. Feature group fusion ──────────────────────────────────────────
-        h_feat = self.feat_fusion(x)        # (B, T_in, d_model)
+        h_feat = self.feat_fusion(x)            # (B, T_in, d_model)
 
-        # ── 3. Multi-scale TCN ───────────────────────────────────────────────
-        h_t = self.tcn(h_feat)              # (B, d_model)
+        # ── 3. Global temporal self-attention ────────────────────────────────
+        h_feat = self.temporal_attn(h_feat)     # (B, T_in, d_model)
 
-        # ── 4. Graph spatial encoding ────────────────────────────────────────
+        # ── 4. Multi-scale TCN ───────────────────────────────────────────────
+        h_t = self.tcn(h_feat)                  # (B, d_model)
+
+        # ── 5. Graph spatial encoding ────────────────────────────────────────
         h_s = self.graph_enc(x, self.adj)   # (B, d_model)
 
-        # ── 5. Regime embedding ──────────────────────────────────────────────
+        # ── 6. Regime embedding ──────────────────────────────────────────────
         h_r, _ = self.regime_emb(x)         # (B, d_model)
 
-        # ── 6. Gated fusion ──────────────────────────────────────────────────
+        # ── 7. Gated fusion ──────────────────────────────────────────────────
         h_fused = self.fusion(h_t, h_s, h_r)  # (B, d_model)
 
-        # ── 7. Primary + boosting heads ──────────────────────────────────────
+        # ── 8. Primary + boosting heads ──────────────────────────────────────
         y_primary = self.primary_head(h_fused)   # (B, T_out)
         y_boost   = self.boosting_head(h_fused)  # (B, T_out)
-        return y_primary + y_boost               # (B, T_out)
+        y = y_primary + y_boost                  # (B, T_out)
+
+        # ── 9. Reverse RevIN: map output back to MinMax-scaled space ─────────
+        # The heads predict in the RevIN-normalised space; denormalize() undoes
+        # the per-sample shift/scale so scaler_y.inverse_transform() sees the
+        # same MinMax-scaled space it was fitted on.
+        if self.use_revin:
+            y = self.revin.denormalize(y, self.target_idx)
+        return y
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -692,7 +799,7 @@ def train_one_epoch(model, loader, optimiser, criterion, smooth_reg,
     total = 0.0
     for X_b, y_b in loader:
         optimiser.zero_grad()
-        with autocast(enabled=use_amp):
+        with autocast('cuda', enabled=use_amp):
             y_hat = model(X_b)
             loss  = criterion(y_hat, y_b) + smooth_reg(y_hat)
         grad_scaler.scale(loss).backward()
@@ -709,7 +816,7 @@ def evaluate(model, loader, criterion, smooth_reg, use_amp) -> float:
     model.eval()
     total = 0.0
     for X_b, y_b in loader:
-        with autocast(enabled=use_amp):
+        with autocast('cuda', enabled=use_amp):
             y_hat = model(X_b)
             total += (criterion(y_hat, y_b) + smooth_reg(y_hat)).item() * X_b.size(0)
     return total / len(loader.dataset)
@@ -717,12 +824,17 @@ def evaluate(model, loader, criterion, smooth_reg, use_amp) -> float:
 
 @torch.no_grad()
 def collect_predictions(model, loader, use_amp) -> tuple:
+    """
+    Always runs in float32.  Training uses AMP (fp16) for speed, but inference
+    must be fp32: LayerNorm inside autocast returns fp32, meaning subsequent
+    Linear ops also output fp32 — values can far exceed fp16's max (~65504)
+    and overflow sklearn's MinMaxScaler inverse-transform.
+    """
     model.eval()
     preds, trues = [], []
     for X_b, y_b in loader:
-        with autocast(enabled=use_amp):
-            preds.append(model(X_b).cpu().numpy())
-        trues.append(y_b.cpu().numpy())
+        preds.append(model(X_b).float().cpu().numpy())
+        trues.append(y_b.float().cpu().numpy())
     return np.concatenate(preds), np.concatenate(trues)
 
 
@@ -825,7 +937,7 @@ def run_shap_analysis(model: nn.Module,
             self.amp = amp
 
         def forward(self, x):
-            with autocast(enabled=self.amp):
+            with autocast('cuda', enabled=self.amp):
                 return self.m(x)
 
     wrapped = _AMPWrapper(model, use_amp)
@@ -888,8 +1000,8 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
 
         opt = torch.optim.AdamW(m.parameters(), lr=lr,
                                 weight_decay=args.weight_decay)
-        crit = WeightedHuberLoss(T_out, delta=1.0, decay=args.loss_decay)
-        sreg = TemporalSmoothnessReg(weight=smooth_wt)
+        crit = WeightedHuberLoss(T_out, delta=1.0, decay=args.loss_decay).to(device)
+        sreg = TemporalSmoothnessReg(weight=smooth_wt).to(device)
         gs   = GradScaler(enabled=use_amp)
 
         best_va      = float("inf")
@@ -1002,7 +1114,9 @@ def plot_per_step_metrics(per_step, out_path: str) -> None:
     ax2.plot(steps, r2, marker="o", color="#6366f1", linewidth=1.8, markersize=5)
     ax2.axhline(0, color="#9ca3af", linewidth=0.8, linestyle="--")
     ax2.axhline(1, color="#16a34a", linewidth=0.8, linestyle=":")
-    ax2.set_ylim(min(min(r2) - 0.05, -0.1), 1.08)
+    finite_r2 = [v for v in r2 if np.isfinite(v)]
+    r2_min = min(finite_r2) if finite_r2 else -0.1
+    ax2.set_ylim(min(r2_min - 0.05, -0.1), 1.08)
     ax2.set_ylabel("R²"); ax2.set_title("HMT-TSF — R² per Horizon", fontweight="bold")
     ax2.grid(alpha=0.3)
     fig.savefig(out_path, dpi=150, bbox_inches="tight"); plt.close(fig)
@@ -1055,6 +1169,10 @@ def parse_args():
                    help="Number of structural regime embeddings")
     p.add_argument("--adj-threshold",type=float, default=0.1,
                    help="Pearson correlation threshold for graph adjacency edges")
+    p.add_argument("--drop-path",    type=float, default=0.1,
+                   help="Stochastic depth drop-path rate for TCN blocks (0 = disabled)")
+    p.add_argument("--n-attn-heads", type=int,   default=4,
+                   help="Attention heads in the temporal Transformer block")
     p.add_argument("--no-revin",     action="store_true",
                    help="Disable RevIN instance normalisation")
 
@@ -1062,7 +1180,7 @@ def parse_args():
     p.add_argument("--batch-size",    type=int,   default=32)
     p.add_argument("--epochs",        type=int,   default=150)
     p.add_argument("--lr",            type=float, default=1e-3)
-    p.add_argument("--weight-decay",  type=float, default=1e-4)
+    p.add_argument("--weight-decay",  type=float, default=5e-4)
     p.add_argument("--patience",      type=int,   default=15)
     p.add_argument("--warmup-epochs", type=int,   default=5)
     p.add_argument("--dropout",       type=float, default=0.1)
@@ -1169,6 +1287,9 @@ def main():
     print("\nBuilding feature adjacency matrix …")
     X_tr_np   = X_tr.cpu().numpy()
     adj_np    = build_feature_adj(X_tr_np, threshold=args.adj_threshold)
+    n_nan_adj = np.isnan(adj_np).sum()
+    if n_nan_adj:
+        print(f"  [WARN] Adjacency had {n_nan_adj} NaN entries (zero-variance features) — zeroed out.")
     adj_tensor = torch.from_numpy(adj_np).to(device)
     n_edges   = int((adj_np > 0).sum()) // 2
     density   = n_edges / max(1, n_features * (n_features - 1) // 2)
@@ -1199,7 +1320,9 @@ def main():
         tcn_kernel    = args.tcn_kernel,
         graph_hidden  = args.graph_hidden,
         n_regimes     = args.n_regimes,
+        n_attn_heads  = args.n_attn_heads,
         dropout       = args.dropout,
+        drop_path     = args.drop_path,
         target_idx    = args.target_idx,
         use_revin     = not args.no_revin,
     ).to(device)
@@ -1211,18 +1334,22 @@ def main():
     print(f"  Scales      : full{' + half' if T_in >= 28 else ''}{' + quarter' if T_in >= 56 else ''}")
     print(f"  Graph hidden: {args.graph_hidden}")
     print(f"  Regimes     : {args.n_regimes}")
+    print(f"  Attn heads  : {args.n_attn_heads}")
     print(f"  RevIN       : {'on' if not args.no_revin else 'off'}")
+    print(f"  DropPath    : {args.drop_path}")
     print(f"  In          : (batch, {T_in}, {n_features})")
     print(f"  Out         : (batch, {T_out})")
     print(f"  Params      : {n_params:,}")
 
     # ── optimiser / loss ──────────────────────────────────────────────────────
     criterion, smooth_reg = build_criterion(args, T_out)
+    criterion  = criterion.to(device)
+    smooth_reg = smooth_reg.to(device)
     optimiser = torch.optim.AdamW(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimiser, mode="min", factor=0.5, patience=5
+        optimiser, mode="min", factor=0.5, patience=8
     )
 
     # ── training loop ─────────────────────────────────────────────────────────
@@ -1268,6 +1395,16 @@ def main():
     # ── test predictions ──────────────────────────────────────────────────────
     y_pred_s, y_true_s = collect_predictions(model, test_loader, use_amp)
 
+    finite_mask = np.isfinite(y_pred_s)
+    n_bad = (~finite_mask).sum()
+    print(f"  [Predictions] scaled range: [{y_pred_s[finite_mask].min():.4f}, "
+          f"{y_pred_s[finite_mask].max():.4f}]  "
+          f"mean={y_pred_s[finite_mask].mean():.4f}  non-finite={n_bad}")
+    if n_bad:
+        print(f"  [ERROR] {n_bad} non-finite values (NaN/Inf) in scaled predictions — "
+              f"replacing with 0 for diagnostic output.")
+        np.nan_to_num(y_pred_s, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+
     # ── inverse-transform ─────────────────────────────────────────────────────
     scaler_y_path = os.path.join(args.seq_dir, "scaler_y.pkl")
     if os.path.exists(scaler_y_path):
@@ -1278,6 +1415,14 @@ def main():
     else:
         print("[WARN] scaler_y.pkl not found — metrics in scaled units.")
         y_pred, y_true = y_pred_s, y_true_s
+
+    # ── NaN / Inf guard ───────────────────────────────────────────────────────
+    for arr, tag in [(y_pred, "y_pred"), (y_true, "y_true")]:
+        n_bad = (~np.isfinite(arr)).sum()
+        if n_bad:
+            print(f"[WARN] {tag} contains {n_bad} non-finite values "
+                  f"(NaN/Inf) after inverse-transform — replacing with 0.")
+            np.nan_to_num(arr, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
     # ── residual boosting stage ───────────────────────────────────────────────
     boost_corrector = None
@@ -1367,9 +1512,11 @@ def main():
             "tcn_kernel":   args.tcn_kernel,
             "graph_hidden": args.graph_hidden,
             "n_regimes":    args.n_regimes,
+            "n_attn_heads": args.n_attn_heads,
             "adj_threshold":args.adj_threshold,
             "use_revin":    not args.no_revin,
             "dropout":      args.dropout,
+            "drop_path":    args.drop_path,
             "T_in":         T_in,
             "T_out":        T_out,
             "n_features":   n_features,
