@@ -760,7 +760,7 @@ class TemporalSmoothnessReg(nn.Module):
 
 def build_criterion(args, T_out: int):
     if args.loss == "huber":
-        base = WeightedHuberLoss(T_out, delta=1.0, decay=args.loss_decay)
+        base = WeightedHuberLoss(T_out, delta=args.huber_delta, decay=args.loss_decay)
     elif args.loss == "mae":
         base = nn.L1Loss()
     else:
@@ -992,8 +992,10 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
         n_tcn_blocks = trial.suggest_int("n_tcn_blocks",          2, 5)
         graph_hidden = trial.suggest_categorical("graph_hidden",  [32, 64, 128])
         dropout      = trial.suggest_float("dropout",             0.05, 0.35, step=0.05)
-        lr           = trial.suggest_float("lr", 5e-4, 5e-3, log=True)
+        lr           = trial.suggest_float("lr",                  5e-4, 5e-3, log=True)
         smooth_wt    = trial.suggest_float("smooth_weight",       0.0, 0.05, step=0.005)
+        loss_decay   = trial.suggest_float("loss_decay",          0.7, 1.0,  step=0.05)
+        huber_delta  = trial.suggest_float("huber_delta",         0.5, 3.0,  step=0.5)
 
         m = HMTTSFForecaster(
             n_features=n_features, T_in=T_in, T_out=T_out,
@@ -1004,7 +1006,7 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
 
         opt = torch.optim.AdamW(m.parameters(), lr=lr,
                                 weight_decay=args.weight_decay)
-        crit = WeightedHuberLoss(T_out, delta=1.0, decay=args.loss_decay).to(device)
+        crit = WeightedHuberLoss(T_out, delta=huber_delta, decay=loss_decay).to(device)
         sreg = TemporalSmoothnessReg(weight=smooth_wt).to(device)
         gs   = GradScaler(enabled=use_amp)
 
@@ -1029,7 +1031,7 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
 
     pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=15)
     study  = optuna.create_study(direction="minimize", pruner=pruner)
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=1)
     best = study.best_params
     print(f"\n[Optuna] Best trial: val_loss={study.best_value:.6f}")
     for k, v in best.items():
@@ -1197,6 +1199,8 @@ def parse_args():
                    help="Base training loss")
     p.add_argument("--loss-decay",    type=float, default=0.9,
                    help="Per-step geometric decay for WeightedHuberLoss")
+    p.add_argument("--huber-delta",   type=float, default=1.0,
+                   help="Huber loss transition point (Optuna-searchable)")
     p.add_argument("--smooth-weight", type=float, default=0.01,
                    help="Weight of temporal-smoothness regularisation")
 
