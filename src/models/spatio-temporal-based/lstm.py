@@ -16,6 +16,12 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Prater, R., Hanne, T., & Dornberger, R. (2024). Generalized performance of LSTM in
+time-series forecasting. Applied Artificial Intelligence, 38(1).
+DOI: https://doi.org/10.1080/08839514.2024.2377510
 """
 
 import os

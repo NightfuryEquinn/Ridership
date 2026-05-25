@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> Last updated: 2026-05-22
+> Last updated: 2026-05-25
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -71,6 +71,8 @@ python src/models/attention-based/tft.py
 
 Each model script accepts `--seq-dir`, `--epochs`, `--batch-size`, `--lr`, `--patience`, `--device`, `--seed`, and model-specific hyperparameter flags. See the docstring at the top of each file. `--device auto` selects CUDA → MPS → CPU automatically.
 
+Each model script docstring includes a `References` section citing one Scopus-indexed journal article (2022–2027) that discusses the architecture. Full citations are also listed in `src/models/MODEL.md` under the **Journal References** section.
+
 ## Running the Hybrid SOTA Model
 
 HMT-TSF is in `src/models/hybrid/`. Run from the repo root:
@@ -96,7 +98,7 @@ python src/models/hybrid/hmttsf.py \
   --lookback 84 --d-model 256 --n-tcn-blocks 5 \
   --graph-hidden 128 --dropout 0.15 \
   --tune-trials 50 --use-catboost --shap \
-  --epochs 150 --patience 20 --warmup-epochs 8
+  --epochs 150
 ```
 
 HMT-TSF-specific flags (in addition to the shared flags below):
@@ -271,7 +273,7 @@ All models use the following improved training setup (structural changes only �
 |-----------|--------|-------|-----------|
 | Optimiser | `Adam` | `AdamW` | Decoupled weight decay (Loshchilov & Hutter 2019) |
 | Loss | `MSELoss` | `HuberLoss(delta=1.0)` (default) | Robust to ridership outliers; selectable via `--loss` |
-| LR schedule | `ReduceLROnPlateau` only | Linear warmup (5 epochs) → `ReduceLROnPlateau` | Avoids unstable early updates; warmup via `--warmup-epochs` |
+| LR schedule | `ReduceLROnPlateau` only | Linear warmup → `ReduceLROnPlateau` | Avoids unstable early updates; warmup via `--warmup-epochs` (default 5 for 15 base models, 8 for HMT-TSF) |
 
 ### Standardised Initial-Run (No Fine-Tuning) Hyperparameters
 
@@ -282,7 +284,7 @@ All 15 models share the same training schedule for the initial baseline comparis
 | `epochs` | 150 | all models |
 | `batch_size` | 32 | all models |
 | `lr` | 1e-3 | all models |
-| `patience` | 15 | all models |
+| `patience` | 15 | all 15 base/tuned models (HMT-TSF uses 20) |
 | `dropout` | 0.1 | all models |
 | `weight_decay` | 1e-4 | all models |
 

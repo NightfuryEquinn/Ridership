@@ -23,6 +23,14 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term
+passenger flow of subway stations based on the temporal pattern attention mechanism
+and the long short-term memory network. ISPRS International Journal of
+Geo-Information, 12(1), 25.
+DOI: https://doi.org/10.3390/ijgi12010025
 """
 
 import os

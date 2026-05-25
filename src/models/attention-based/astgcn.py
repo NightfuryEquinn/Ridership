@@ -21,6 +21,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : AMP fp16 (GradScaler enabled)
+
+References
+----------
+Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive
+deeper spatio-temporal graph convolutional network for multi-step traffic forecasting.
+Sensors, 23(15), 6950.
+DOI: https://doi.org/10.3390/s23156950
 """
 
 import os

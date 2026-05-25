@@ -1,6 +1,6 @@
 # Model Descriptions
 
-> Last updated: 2026-05-22
+> Last updated: 2026-05-25
 
 This document describes all 16 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 15 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
 
@@ -629,3 +629,39 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 | 14 | Autoformer | Attention | No | Auto-Corr (FFT) | Yes | Decomposition + FFT-based periodic autocorrelation |
 | 15 | Informer | Attention | No | ProbSparse | Yes | Sparse attention + distilling for efficiency |
 | 16 | HMT-TSF | Hybrid | Static Pearson (GCN) | — | Yes | Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction |
+
+---
+
+## Journal References
+
+Scopus-indexed journal articles (2022–2027) cited in each model script's docstring, one per architecture.
+
+### Series 1 — Spatio-Temporal (LSTM-Family)
+
+| Model | Citation |
+|-------|----------|
+| LSTM | Prater, R., Hanne, T., & Dornberger, R. (2024). Generalized performance of LSTM in time-series forecasting. *Applied Artificial Intelligence*, 38(1). https://doi.org/10.1080/08839514.2024.2377510 |
+| BiLSTM | Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, 15. https://doi.org/10.1038/s41598-025-02933-9 |
+| TPA-LSTM | Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, 12(1), 25. https://doi.org/10.3390/ijgi12010025 |
+| CNN-LSTM | Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, 8(5), 148. https://doi.org/10.3390/smartcities8050148 |
+| CNN-BiLSTM | Méndez, M., Merayo, M. G., & Núñez, M. (2023). Long-term traffic flow forecasting using a hybrid CNN-BiLSTM model. *Engineering Applications of Artificial Intelligence*, 121, 106041. https://doi.org/10.1016/j.engappai.2023.106041 |
+| ST-LSTM | Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, 20(1), e0333094. https://doi.org/10.1371/journal.pone.0333094 |
+
+### Series 2 — Graph-Based
+
+| Model | Citation |
+|-------|----------|
+| STGCN | Zhang, X., Chen, X., Tang, H., Wu, Y., Shen, H., & Li, J. (2024). AdpSTGCN: Adaptive spatial–temporal graph convolutional network for traffic forecasting. *Knowledge-Based Systems*, 301, 112187. https://doi.org/10.1016/j.knosys.2024.112187 |
+| MTGNN | Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, 15, 16734. https://doi.org/10.1038/s41598-025-01157-1 |
+| STSGCN | Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, 18(4), e0283898. https://doi.org/10.1371/journal.pone.0283898 |
+| STFGNN | Li, G., Knoop, V. L., & van Lint, H. (2024). STFGCN: Spatial–temporal fusion graph convolutional network for traffic prediction. *Expert Systems with Applications*, 255, 124876. https://doi.org/10.1016/j.eswa.2024.124876 |
+| PDR-STGCN | (2026). PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. *Systems*, 14(1), 102. https://doi.org/10.3390/systems14010102 |
+
+### Series 3 — Attention-Based
+
+| Model | Citation |
+|-------|----------|
+| ASTGCN | Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, 23(15), 6950. https://doi.org/10.3390/s23156950 |
+| TFT | Arnob, S. S., Shuvro, A. A., Rahman, S., & Islam, M. Z. (2025). Time-series multivariate multistep traffic flow forecasting using temporal fusion transformers. *International Journal of Intelligent Transportation Systems Research*, 23, 622–628. https://doi.org/10.1007/s13177-025-00480-1 |
+| Autoformer | Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, 15(7), 3768. https://doi.org/10.3390/app15073768 |
+| Informer | Xu, C., Chen, Y., Zeng, Q., & Yang, S. (2025). Informer–SVR: Traffic volume prediction hybrid model considering residual autoregression correction. *Journal of Transportation Engineering, Part A: Systems*, 151(4). https://doi.org/10.1061/JTEPBS.TEENG-8715 |

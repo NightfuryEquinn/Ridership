@@ -27,6 +27,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Zhang, X., Chen, X., Tang, H., Wu, Y., Shen, H., & Li, J. (2024). AdpSTGCN: Adaptive
+spatial–temporal graph convolutional network for traffic forecasting. Knowledge-Based
+Systems, 301, 112187.
+DOI: https://doi.org/10.1016/j.knosys.2024.112187
 """
 
 import os

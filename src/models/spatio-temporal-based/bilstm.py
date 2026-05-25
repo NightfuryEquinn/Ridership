@@ -19,6 +19,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting
+using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation.
+Scientific Reports, 15.
+DOI: https://doi.org/10.1038/s41598-025-02933-9
 """
 
 import os

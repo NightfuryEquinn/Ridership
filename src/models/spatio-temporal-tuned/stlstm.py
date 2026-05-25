@@ -21,6 +21,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow
+prediction for urban rail systems: A deep learning approach utilizing multi-source big
+data. PLOS ONE, 20(1), e0333094.
+DOI: https://doi.org/10.1371/journal.pone.0333094
 """
 
 import os

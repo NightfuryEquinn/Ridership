@@ -26,6 +26,12 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+(2026). PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic
+relational graph for traffic forecasting. Systems, 14(1), 102.
+DOI: https://doi.org/10.3390/systems14010102
 """
 
 import os

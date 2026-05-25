@@ -1,6 +1,6 @@
 # HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 
-> Last updated: 2026-05-25
+> Last updated: 2026-05-25 (synced with hmttsf.py)
 
 ## Architecture Diagram
 
@@ -176,9 +176,9 @@ Output: (B, T_out=7)  [MinMax-scaled]
 Epochs:        150 (default)
 Batch size:    32
 Optimiser:     AdamW (lr=1e-3, weight_decay=5e-4)
-LR schedule:   Linear warmup (5 ep) → ReduceLROnPlateau (factor=0.5, patience=8)
+LR schedule:   Linear warmup (8 ep) → ReduceLROnPlateau (factor=0.5, patience=8)
 Gradient clip: max_norm=1.0
-Early stopping: patience=15 (raw val loss)
+Early stopping: patience=20 (raw val loss)
 Mixed precision: AMP fp16 on CUDA (GradScaler)
 Loss:          WeightedHuber + TemporalSmoothness
 ```
@@ -207,8 +207,6 @@ Loss:          WeightedHuber + TemporalSmoothness
 | `dropout`       | Float [0.05, 0.35] step 0.05    | 0.1     |
 | `lr`            | Log-uniform [5e-4, 5e-3]        | 1e-3    |
 | `smooth_weight` | Float [0.0, 0.05] step 0.005    | 0.01    |
-| `loss_decay`    | Float [0.7, 1.0] step 0.05      | 0.9     |
-| `huber_delta`   | Float [0.5, 3.0] step 0.5       | 1.0     |
 
 Recommended N trials:
 - Quick validation: 20 trials (~40 min on A100)
@@ -272,8 +270,8 @@ python src/features/sequence_builder.py --T-in 84
 | `--batch-size N` | `32` | Batch size |
 | `--lr F` | `1e-3` | Initial learning rate |
 | `--weight-decay F` | `5e-4` | AdamW weight decay |
-| `--patience N` | `15` | Early-stopping patience (raw val loss) |
-| `--warmup-epochs N` | `5` | Linear LR warm-up before ReduceLROnPlateau |
+| `--patience N` | `20` | Early-stopping patience (raw val loss) |
+| `--warmup-epochs N` | `8` | Linear LR warm-up before ReduceLROnPlateau |
 | `--dropout F` | `0.1` | Dropout rate |
 
 ### Loss flags
@@ -330,7 +328,7 @@ python src/models/hybrid/hmttsf.py \
   --lookback 84 --d-model 256 --n-tcn-blocks 5 \
   --graph-hidden 128 --dropout 0.15 \
   --tune-trials 50 --use-catboost --shap \
-  --epochs 150 --patience 20 --warmup-epochs 8
+  --epochs 150
 ```
 
 ### 17-way comparison with all prior models

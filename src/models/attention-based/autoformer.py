@@ -21,6 +21,12 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : AMP fp16 (GradScaler enabled; FFT ops cast to float32 for stability)
+
+References
+----------
+Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale
+feature fusion and Autoformer. Applied Sciences, 15(7), 3768.
+DOI: https://doi.org/10.3390/app15073768
 """
 
 import os

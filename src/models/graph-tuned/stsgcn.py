@@ -25,6 +25,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre:
+Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic
+flow prediction. PLOS ONE, 18(4), e0283898.
+DOI: https://doi.org/10.1371/journal.pone.0283898
 """
 
 import os

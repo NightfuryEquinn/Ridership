@@ -24,6 +24,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Li, G., Knoop, V. L., & van Lint, H. (2024). STFGCN: Spatial–temporal fusion graph
+convolutional network for traffic prediction. Expert Systems with Applications, 255,
+124876.
+DOI: https://doi.org/10.1016/j.eswa.2024.124876
 """
 
 import os

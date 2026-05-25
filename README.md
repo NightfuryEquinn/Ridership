@@ -1,6 +1,6 @@
 # Malaysian Transit Ridership Forecasting Research
 
-> Last updated: 2026-05-22
+> Last updated: 2026-05-25
 
 Masters Final Year Project comparing 15 deep-learning models for Malaysian public transit ridership forecasting across three model series using 8 spatio-temporal feature sources.
 
@@ -163,7 +163,7 @@ python src/models/hybrid/hmttsf.py \
   --lookback 84 --d-model 256 --n-tcn-blocks 5 \
   --graph-hidden 128 --dropout 0.15 \
   --tune-trials 50 --use-catboost --shap \
-  --epochs 150 --patience 20 --warmup-epochs 8
+  --epochs 150
 ```
 
 See `src/models/hybrid/HMT-TSF.md` for the full architecture diagram, component rationale, hyperparameter search space, and scaling recommendations.
@@ -209,11 +209,11 @@ All models accept these arguments:
 - `--seq-dir`: Override sequence directory (if not set, resolved from `--lookback`)
 - `--lookback {14,28,56}`: Look-back window for the 15 base models; auto-selects the matching `data/sequences/` directory (default: `14`). HMT-TSF additionally supports `7` and `84`.
 - `--loss {mse,huber,mae}`: Training loss function (default: `huber`)
-- `--warmup-epochs N`: Linear LR warm-up epochs before ReduceLROnPlateau (default: `5`)
+- `--warmup-epochs N`: Linear LR warm-up epochs before ReduceLROnPlateau (default: `5` for the 15 base models; `8` for HMT-TSF)
 - `--epochs`: Number of training epochs
 - `--batch-size`: Training batch size
 - `--lr`: Learning rate
-- `--patience`: Early stopping patience
+- `--patience`: Early stopping patience (default: `15` for the 15 base models; `20` for HMT-TSF)
 - `--device`: Computation device (`auto`, `cuda`, `cpu`, or `mps`)
 - `--seed`: Random seed for reproducibility
 - Model-specific hyperparameters (see each script's docstring)
@@ -272,7 +272,7 @@ The comparison system automatically:
 ### Training Optimizations (all models)
 - **Optimiser**: AdamW (decoupled weight decay)
 - **Loss**: HuberLoss (delta=1.0, default) — robust to ridership outliers; selectable via `--loss`
-- **LR schedule**: 5-epoch linear warm-up → ReduceLROnPlateau; configurable via `--warmup-epochs`
+- **LR schedule**: Linear warm-up → ReduceLROnPlateau; configurable via `--warmup-epochs` (default 5 epochs for the 15 base models, 8 for HMT-TSF)
 
 ### HMT-TSF Specific
 - **Loss**: WeightedHuber (step-decayed, γ=0.9) + TemporalSmoothness regularisation (λ=0.01)
@@ -323,7 +323,9 @@ As outlined in `CLAUDE.md`:
 
 ## References
 
-See `journal_articles/` directory for supporting research papers that informed this work.
+Each model script docstring includes a `References` section citing one Scopus-indexed journal article (2022–2027) for its architecture. The full citation list is consolidated in `src/models/MODEL.md` under the **Journal References** section, grouped by model series.
+
+See `journal_articles/` directory for additional supporting research papers that informed this work.
 
 ## License
 

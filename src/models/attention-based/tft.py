@@ -19,6 +19,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : AMP fp16 (GradScaler enabled)
+
+References
+----------
+Arnob, S. S., Shuvro, A. A., Rahman, S., & Islam, M. Z. (2025). Time-series
+multivariate multistep traffic flow forecasting using temporal fusion transformers.
+International Journal of Intelligent Transportation Systems Research, 23, 622–628.
+DOI: https://doi.org/10.1007/s13177-025-00480-1
 """
 
 import os

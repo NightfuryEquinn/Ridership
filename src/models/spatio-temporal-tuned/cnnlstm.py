@@ -33,6 +33,12 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction
+via a hybrid CPO-CNN-LSTM-attention architecture. Smart Cities, 8(5), 148.
+DOI: https://doi.org/10.3390/smartcities8050148
 """
 
 import os

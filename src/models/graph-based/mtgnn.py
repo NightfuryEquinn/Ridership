@@ -17,6 +17,12 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph
+convolutional network for traffic flow prediction. Scientific Reports, 15, 16734.
+DOI: https://doi.org/10.1038/s41598-025-01157-1
 """
 
 import os

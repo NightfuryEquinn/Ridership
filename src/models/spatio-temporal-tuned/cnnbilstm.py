@@ -22,6 +22,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : float32
+
+References
+----------
+Méndez, M., Merayo, M. G., & Núñez, M. (2023). Long-term traffic flow forecasting
+using a hybrid CNN-BiLSTM model. Engineering Applications of Artificial Intelligence,
+121, 106041.
+DOI: https://doi.org/10.1016/j.engappai.2023.106041
 """
 
 import os

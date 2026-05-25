@@ -19,6 +19,13 @@ Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
   RAM  : 32 GB
   Precision : AMP fp16 (GradScaler enabled)
+
+References
+----------
+Xu, C., Chen, Y., Zeng, Q., & Yang, S. (2025). Informer–SVR: Traffic volume
+prediction hybrid model considering residual autoregression correction. Journal of
+Transportation Engineering, Part A: Systems, 151(4).
+DOI: https://doi.org/10.1061/JTEPBS.TEENG-8715
 """
 
 import os
