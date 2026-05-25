@@ -26,10 +26,10 @@ Hardware:
 
 References
 ----------
-Xu, C., Chen, Y., Zeng, Q., & Yang, S. (2025). Informer–SVR: Traffic volume
-prediction hybrid model considering residual autoregression correction. Journal of
-Transportation Engineering, Part A: Systems, 151(4).
-DOI: https://doi.org/10.1061/JTEPBS.TEENG-8715
+Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer
+for long-term traffic flow prediction under the impact of sports events. Sensors,
+24(15), 4796.
+DOI: https://doi.org/10.3390/s24154796
 """
 
 import os

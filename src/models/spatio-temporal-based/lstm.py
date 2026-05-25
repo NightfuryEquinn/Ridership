@@ -19,9 +19,9 @@ Hardware:
 
 References
 ----------
-Prater, R., Hanne, T., & Dornberger, R. (2024). Generalized performance of LSTM in
-time-series forecasting. Applied Artificial Intelligence, 38(1).
-DOI: https://doi.org/10.1080/08839514.2024.2377510
+Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM
+performance on diverse time series. Mathematics, 14(5), 838.
+DOI: https://doi.org/10.3390/math14050838
 """
 
 import os

@@ -25,10 +25,9 @@ Hardware:
 
 References
 ----------
-Méndez, M., Merayo, M. G., & Núñez, M. (2023). Long-term traffic flow forecasting
-using a hybrid CNN-BiLSTM model. Engineering Applications of Artificial Intelligence,
-121, 106041.
-DOI: https://doi.org/10.1016/j.engappai.2023.106041
+Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction
+based on CNN-BiLSTM with multicomponent information. Applied Sciences, 12(17), 8714.
+DOI: https://doi.org/10.3390/app12178714
 """
 
 import os

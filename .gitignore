@@ -1,8 +1,7 @@
-gtfs_reports
-journal_articles
-timeline_submission_research_project.pdf
 src/outputs/**/*.pt
 *.npy
+journal_articles/
+timeline_submission_research_project.pdf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

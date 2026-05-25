@@ -22,10 +22,10 @@ Hardware:
 
 References
 ----------
-Arnob, S. S., Shuvro, A. A., Rahman, S., & Islam, M. Z. (2025). Time-series
-multivariate multistep traffic flow forecasting using temporal fusion transformers.
-International Journal of Intelligent Transportation Systems Research, 23, 622–628.
-DOI: https://doi.org/10.1007/s13177-025-00480-1
+Lee, J. & Kang, Y. (2025). PGTFT: A lightweight graph-attention temporal fusion
+transformer for predicting pedestrian congestion in shadow areas. ISPRS International
+Journal of Geo-Information, 14(10), 381.
+DOI: https://doi.org/10.3390/ijgi14100381
 """
 
 import os

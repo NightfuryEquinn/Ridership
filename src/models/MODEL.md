@@ -640,21 +640,21 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 
 | Model | Citation |
 |-------|----------|
-| LSTM | Prater, R., Hanne, T., & Dornberger, R. (2024). Generalized performance of LSTM in time-series forecasting. *Applied Artificial Intelligence*, 38(1). https://doi.org/10.1080/08839514.2024.2377510 |
+| LSTM | Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM performance on diverse time series. *Mathematics*, 14(5), 838. https://doi.org/10.3390/math14050838 |
 | BiLSTM | Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, 15. https://doi.org/10.1038/s41598-025-02933-9 |
 | TPA-LSTM | Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, 12(1), 25. https://doi.org/10.3390/ijgi12010025 |
 | CNN-LSTM | Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, 8(5), 148. https://doi.org/10.3390/smartcities8050148 |
-| CNN-BiLSTM | Méndez, M., Merayo, M. G., & Núñez, M. (2023). Long-term traffic flow forecasting using a hybrid CNN-BiLSTM model. *Engineering Applications of Artificial Intelligence*, 121, 106041. https://doi.org/10.1016/j.engappai.2023.106041 |
+| CNN-BiLSTM | Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction based on CNN-BiLSTM with multicomponent information. *Applied Sciences*, 12(17), 8714. https://doi.org/10.3390/app12178714 |
 | ST-LSTM | Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, 20(1), e0333094. https://doi.org/10.1371/journal.pone.0333094 |
 
 ### Series 2 — Graph-Based
 
 | Model | Citation |
 |-------|----------|
-| STGCN | Zhang, X., Chen, X., Tang, H., Wu, Y., Shen, H., & Li, J. (2024). AdpSTGCN: Adaptive spatial–temporal graph convolutional network for traffic forecasting. *Knowledge-Based Systems*, 301, 112187. https://doi.org/10.1016/j.knosys.2024.112187 |
+| STGCN | Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. *Electronics*, 14(7), 1410. https://doi.org/10.3390/electronics14071410 |
 | MTGNN | Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, 15, 16734. https://doi.org/10.1038/s41598-025-01157-1 |
 | STSGCN | Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, 18(4), e0283898. https://doi.org/10.1371/journal.pone.0283898 |
-| STFGNN | Li, G., Knoop, V. L., & van Lint, H. (2024). STFGCN: Spatial–temporal fusion graph convolutional network for traffic prediction. *Expert Systems with Applications*, 255, 124876. https://doi.org/10.1016/j.eswa.2024.124876 |
+| STFGNN | Chang, J., Yin, J., Hao, Y., & Gao, C. (2025). STFDSGCN: Spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. *Sensors*, 25(11), 3446. https://doi.org/10.3390/s25113446 |
 | PDR-STGCN | (2026). PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. *Systems*, 14(1), 102. https://doi.org/10.3390/systems14010102 |
 
 ### Series 3 — Attention-Based
@@ -662,6 +662,6 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 | Model | Citation |
 |-------|----------|
 | ASTGCN | Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, 23(15), 6950. https://doi.org/10.3390/s23156950 |
-| TFT | Arnob, S. S., Shuvro, A. A., Rahman, S., & Islam, M. Z. (2025). Time-series multivariate multistep traffic flow forecasting using temporal fusion transformers. *International Journal of Intelligent Transportation Systems Research*, 23, 622–628. https://doi.org/10.1007/s13177-025-00480-1 |
+| TFT | Lee, J. & Kang, Y. (2025). PGTFT: A lightweight graph-attention temporal fusion transformer for predicting pedestrian congestion in shadow areas. *ISPRS International Journal of Geo-Information*, 14(10), 381. https://doi.org/10.3390/ijgi14100381 |
 | Autoformer | Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, 15(7), 3768. https://doi.org/10.3390/app15073768 |
-| Informer | Xu, C., Chen, Y., Zeng, Q., & Yang, S. (2025). Informer–SVR: Traffic volume prediction hybrid model considering residual autoregression correction. *Journal of Transportation Engineering, Part A: Systems*, 151(4). https://doi.org/10.1061/JTEPBS.TEENG-8715 |
+| Informer | Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, 24(15), 4796. https://doi.org/10.3390/s24154796 |

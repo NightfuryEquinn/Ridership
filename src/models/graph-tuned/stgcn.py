@@ -30,10 +30,9 @@ Hardware:
 
 References
 ----------
-Zhang, X., Chen, X., Tang, H., Wu, Y., Shen, H., & Li, J. (2024). AdpSTGCN: Adaptive
-spatial–temporal graph convolutional network for traffic forecasting. Knowledge-Based
-Systems, 301, 112187.
-DOI: https://doi.org/10.1016/j.knosys.2024.112187
+Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. Electronics,
+14(7), 1410.
+DOI: https://doi.org/10.3390/electronics14071410
 """
 
 import os
