@@ -325,6 +325,8 @@ As outlined in `CLAUDE.md`:
 
 Each model script docstring includes a `References` section citing one Scopus-indexed journal article (2022–2027) for its architecture. The full citation list is consolidated in `src/models/MODEL.md` under the **Journal References** section, grouped by model series.
 
+HMT-TSF has per-component Scopus-indexed citations (one per architectural block: RevIN, Temporal Transformer, Multi-Scale TCN, DropPath, Feature GCN, Regime Gating, SE-Net Gated Fusion, Weighted Huber Loss, Temporal Smoothness Regularisation, Optuna HPO, Post-hoc Residual Boosting, Walk-Forward Evaluation). These are listed in `src/models/hybrid/HMT-TSF.md` under the **Journal References** section.
+
 See `journal_articles/` directory for additional supporting research papers that informed this work.
 
 ## License

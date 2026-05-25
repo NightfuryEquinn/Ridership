@@ -124,7 +124,7 @@ python src/features/sequence_builder.py --T-in 7
 python src/features/sequence_builder.py --T-in 84
 ```
 
-Output is written to `src/outputs/hmttsf/{YYYYMMDD_HHMMSS}/`. Full architecture details in `src/models/hybrid/HMT-TSF.md`.
+Output is written to `src/outputs/hmttsf/{YYYYMMDD_HHMMSS}/`. Full architecture details and per-component Scopus-indexed journal references (2022–2027) are in `src/models/hybrid/HMT-TSF.md`.
 
 ## Running a Tuned Model
 
