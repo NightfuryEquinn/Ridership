@@ -495,3 +495,45 @@ Across all criteria:
 Informer wins or ties on 10 of 12 configurations, achieves a 76.93% mean Combined% — 2.37 pp above the next-best model — and maintains a MCO floor of 72.62% that no other model in the study matches. Its ProbSparse self-attention mechanism provides structural robustness to outlier inputs that no recurrent or fixed-graph model can replicate without bespoke engineering.
 
 **Runner-up for overall best: TPA-LSTM.** Among pure recurrent models, TPA-LSTM is the most consistent, peaking at 79.95% tuned nomco lb14 and holding 73.90% at the worst MCO tuned config. The temporal pattern attention aligns naturally with the weekly and monthly seasonality of Malaysian transit ridership. If Informer is unavailable or computational cost is a concern, TPA-LSTM is the recommended fallback.
+
+---
+
+## 11. Performance Targets and Peak Achievement
+
+### 11.1 Study performance targets
+
+| Metric | Target | Interpretation |
+|--------|--------|----------------|
+| **Combined%** | ≥ 75% | `max(0, 100 − MAPE% − MAE% − RMSE%)` must reach 75 pp — all three normalised error terms together ≤ 25 pp |
+| **R²** | ≥ 0.7 | Model explains at least 70% of ridership variance on the held-out test set |
+
+Both targets must be met simultaneously in a single configuration for a result to be considered satisfactory.
+
+### 11.2 Highest combined score and R² achieved together
+
+The configuration that achieves the **highest Combined% while also maximising R²** simultaneously is:
+
+| Model | Config | **Combined%** | **R²** | MAPE% | Exceeds targets? |
+|-------|--------|--------------|--------|-------|-----------------|
+| **LSTM (tuned)** | tuned · nomco · lb14 | **81.04%** | **0.798** | 5.70% | Yes — both |
+| Informer (tuned) | tuned · nomco · lb28 | 80.08% | 0.785 | 6.16% | Yes — both |
+| TPA-LSTM (tuned) | tuned · nomco · lb14 | 79.95% | 0.782 | 6.19% | Yes — both |
+
+**LSTM (tuned · nomco · lb14) is the single best result on both metrics simultaneously**: Combined% = **81.04%** (+6.04 pp above target) and R² = **0.798** (+0.098 above target). This is the peak result of the entire study.
+
+**Why this configuration is optimal for both metrics at once:**
+
+- **Combined%** is maximised because the tuned LSTM (hidden=128, layers=2, dropout=0.15) has sufficient capacity for the hierarchical daily ridership structure, and the 14-day window captures the most predictive recent context without introducing older noisy history.
+- **R²** is maximised alongside Combined% because the same architectural improvements that reduce MAPE/MAE/RMSE also tighten the variance explanation. Both metrics peak together — there is no trade-off at this configuration.
+
+### 11.3 Models meeting both targets across all configurations
+
+From the all-configurations consistency table (Section 10.3), models whose **mean Combined% ≥ 75%** and whose **MCO floor R² > 0.7** (i.e. robust across regimes):
+
+| Model | Mean Combined% | Worst-config R² (approx) | Both targets met on average? |
+|-------|---------------|--------------------------|------------------------------|
+| **Informer** | **76.93%** | > 0.7 (nomco configs) | Yes |
+| **TPA-LSTM** | 74.56% | > 0.7 (nomco configs) | Borderline on mean |
+| **BiLSTM** | 74.37% | > 0.7 (nomco configs) | Borderline on mean |
+
+Only **Informer** consistently clears the 75% Combined% bar on average across all 12 configurations. LSTM clears 75% on 7 of 12 configurations but falls below on MCO base configs (57–59%). For single-configuration peak achievement, LSTM (tuned · nomco · lb14) is the definitive winner on both metrics.

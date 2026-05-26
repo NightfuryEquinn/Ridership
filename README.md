@@ -4,6 +4,22 @@
 
 Masters Final Year Project comparing 15 deep-learning models for Malaysian public transit ridership forecasting across three model series using 8 spatio-temporal feature sources.
 
+## Key Results
+
+Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7** (both must be met simultaneously).
+
+**Peak result — highest Combined% and R² achieved together:**
+
+| Model | Config | Combined% | R² | Exceeds targets? |
+|-------|--------|-----------|----|-----------------|
+| **LSTM (tuned)** | tuned · nomco · lb14 | **81.04%** | **0.798** | Yes — both |
+| Informer (tuned) | tuned · nomco · lb28 | 80.08% | 0.785 | Yes — both |
+| TPA-LSTM (tuned) | tuned · nomco · lb14 | 79.95% | 0.782 | Yes — both |
+
+**LSTM (tuned · nomco · lb14) is the single best result on both metrics simultaneously** — Combined% = 81.04% and R² = 0.798. Among all 12 configurations, **Informer** is the most consistent overall (mean Combined% = 76.93%, lowest std dev = 2.45 pp), winning 8 of 12 configuration matchups and maintaining a MCO-regime floor of 72.62%. Full analysis is in [`src/outputs/RESULTS.md`](src/outputs/RESULTS.md).
+
+---
+
 ## Overview
 
 This repository contains the implementation and evaluation of 15 deep learning models plus one hybrid SOTA model for forecasting Malaysian public transit ridership. The models are organized into three baseline series and one hybrid series:
