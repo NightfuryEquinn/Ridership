@@ -980,12 +980,15 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
                       n_features, adj_tensor, device, use_amp, n_trials):
     if not OPTUNA_AVAILABLE:
         print("[Optuna] optuna not installed — skipping HPO.")
-        return {}
+        return {}, None
 
     (X_tr, y_tr), (X_va, y_va) = train_data, val_data
     tr_loader = DataLoader(TensorDataset(X_tr, y_tr),
                            batch_size=args.batch_size, shuffle=True)
     va_loader = DataLoader(TensorDataset(X_va, y_va), batch_size=args.batch_size)
+
+    # Mutable container so the closure can update it across trials
+    best_state_container = {"state_dict": None, "val_loss": float("inf")}
 
     def objective(trial):
         d_model      = trial.suggest_categorical("d_model",      [64, 128, 192, 256])
@@ -1009,14 +1012,16 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
         gs   = GradScaler(enabled=use_amp)
 
         best_va      = float("inf")
+        best_sd_local = None
         patience_cnt = 0
         patience_hp  = 10
         for ep in range(1, 41):
             train_one_epoch(m, tr_loader, opt, crit, sreg, gs, use_amp)
             va_loss = evaluate(m, va_loader, crit, sreg, use_amp)
             if va_loss < best_va:
-                best_va      = va_loss
-                patience_cnt = 0
+                best_va       = va_loss
+                best_sd_local = {k: v.cpu().clone() for k, v in m.state_dict().items()}
+                patience_cnt  = 0
             else:
                 patience_cnt += 1
             trial.report(va_loss, ep)
@@ -1024,6 +1029,11 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
                 raise optuna.exceptions.TrialPruned()
             if patience_cnt >= patience_hp:
                 break   # per-trial early stopping
+
+        # Keep the globally best state dict across all trials
+        if best_va < best_state_container["val_loss"]:
+            best_state_container["val_loss"]   = best_va
+            best_state_container["state_dict"] = best_sd_local
 
         return best_va
 
@@ -1034,7 +1044,7 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
     print(f"\n[Optuna] Best trial: val_loss={study.best_value:.6f}")
     for k, v in best.items():
         print(f"  {k}: {v}")
-    return best
+    return best, best_state_container["state_dict"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1300,9 +1310,10 @@ def main():
     print(f"  Nodes: {n_features}   Edges: {n_edges}   Density: {density:.3f}")
 
     # ── Optuna HPO ────────────────────────────────────────────────────────────
+    optuna_warm_state = None
     if args.tune_trials > 0:
         print(f"\n[Optuna] Running {args.tune_trials} trials …")
-        best_params = run_optuna_study(
+        best_params, optuna_warm_state = run_optuna_study(
             args, (X_tr, y_tr), (X_va, y_va),
             T_in, T_out, n_features, adj_tensor,
             device, use_amp, args.tune_trials,
@@ -1330,6 +1341,18 @@ def main():
         target_idx    = args.target_idx,
         use_revin     = not args.no_revin,
     ).to(device)
+
+    # Warm-start from the best Optuna trial weights when available.
+    # This avoids re-discovering the same optimum from a random init.
+    if optuna_warm_state is not None:
+        try:
+            model.load_state_dict(
+                {k: v.to(device) for k, v in optuna_warm_state.items()}
+            )
+            print("[Optuna] Warm-started final model from best trial weights.")
+        except RuntimeError:
+            # Architecture mismatch (shouldn't happen, but safe to skip)
+            print("[Optuna] Warm-start skipped — state dict shape mismatch.")
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"\nModel         : HMTTSFForecaster")

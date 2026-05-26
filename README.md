@@ -1,6 +1,6 @@
 # Malaysian Transit Ridership Forecasting Research
 
-> Last updated: 2026-05-25
+> Last updated: 2026-05-27
 
 Masters Final Year Project comparing 15 deep-learning models for Malaysian public transit ridership forecasting across three model series using 8 spatio-temporal feature sources.
 
@@ -14,9 +14,12 @@ Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7**
 |-------|--------|-----------|----|-----------------|
 | **LSTM (tuned)** | tuned · nomco · lb14 | **81.04%** | **0.798** | Yes — both |
 | Informer (tuned) | tuned · nomco · lb28 | 80.08% | 0.785 | Yes — both |
+| **HMT-TSF** | nomco · lb14 | **80.04%** | **0.783** | Yes — both |
 | TPA-LSTM (tuned) | tuned · nomco · lb14 | 79.95% | 0.782 | Yes — both |
 
-**LSTM (tuned · nomco · lb14) is the single best result on both metrics simultaneously** — Combined% = 81.04% and R² = 0.798. Among all 12 configurations, **Informer** is the most consistent overall (mean Combined% = 76.93%, lowest std dev = 2.45 pp), winning 8 of 12 configuration matchups and maintaining a MCO-regime floor of 72.62%. Full analysis is in [`src/outputs/RESULTS.md`](src/outputs/RESULTS.md).
+**LSTM (tuned · nomco · lb14) is the single best result on both metrics simultaneously** — Combined% = 81.04% and R² = 0.798. Among the 17 baseline models, **Informer** is the most consistent (mean Combined% = 76.93%, std dev = 2.45 pp), winning 8 of 12 configuration matchups and maintaining a MCO-regime floor of 72.62%. Full analysis is in [`src/outputs/RESULTS.md`](src/outputs/RESULTS.md).
+
+**HMT-TSF (Hybrid SOTA)** achieves the best overall consistency across both nomco and MCO conditions: 10-config mean **77.30%**, std dev **1.55 pp**, and 9/10 configurations clearing both study targets. It is the top model for MCO-inclusive deployment (best at mco·lb14 and mco·lb28, surpassing Informer tuned) and the only model with a nomco→mco degradation below 2 pp. Full analysis is in [`src/outputs/HMT-TSF-RESULTS.md`](src/outputs/HMT-TSF-RESULTS.md).
 
 ---
 

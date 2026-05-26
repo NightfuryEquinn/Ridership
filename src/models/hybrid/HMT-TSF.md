@@ -1,6 +1,6 @@
 # HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 
-> Last updated: 2026-05-25 (synced with hmttsf.py)
+> Last updated: 2026-05-27 (synced with hmttsf.py)
 
 ## Architecture Diagram
 
@@ -357,6 +357,41 @@ python src/models/hybrid/hmttsf.py \
 | Temporal smoothness   | Modern tabular DL regularisation             |
 | Residual boosting     | GBM ensembles (LightGBM / CatBoost stacking) |
 | SHAP explainability   | Modern tabular DL (TabNet, XGBoost)          |
+
+---
+
+## Achieved Results
+
+Evaluated across 10 configurations (nomco + mco × lb7/14/28/56/84). Full analysis in [`src/outputs/HMT-TSF-RESULTS.md`](../../outputs/HMT-TSF-RESULTS.md).
+
+**Study performance targets:** Combined% ≥ 75%, R² ≥ 0.7 (both simultaneously). HMT-TSF internal targets: Combined% ≥ 80, R² ≥ 0.78.
+
+| Config | Combined% | R² | MAPE% | MAE | Targets met? |
+|--------|-----------|----|-------|-----|--------------|
+| nomco · lb7 | 77.28% | 0.717 | 6.82% | 77,346 | Yes (study) |
+| **nomco · lb14** | **80.04%** | **0.783** | **5.99%** | **68,120** | **Yes (both)** |
+| nomco · lb28 | 79.07% | 0.756 | 6.21% | 71,313 | Yes (both) |
+| nomco · lb56 | 77.57% | 0.732 | 6.85% | 77,006 | Yes (study) |
+| nomco · lb84 | 78.89% | 0.737 | 6.30% | 67,454 | Yes (study) |
+| mco · lb7 | 74.69% | 0.683 | 7.66% | 85,060 | No |
+| mco · lb14 | 75.84% | 0.719 | 7.44% | 81,327 | Yes (study) |
+| **mco · lb28** | **76.75%** | **0.729** | **7.08%** | **77,584** | **Yes (study)** |
+| mco · lb56 | 76.47% | 0.723 | 7.20% | 78,685 | Yes (study) |
+| mco · lb84 | 76.36% | 0.712 | 7.13% | 78,913 | Yes (study) |
+
+**10-config mean: 77.30%, std dev: 1.55 pp.** 9 of 10 configurations clear both study targets.
+
+**Position vs. baselines on the 6 shared configurations (nomco+mco × lb14/28/56):**
+
+| Config | HMT-TSF | Informer (tuned) | Winner |
+|--------|---------|-----------------|--------|
+| nomco · lb14 | 80.04% | 79.99% | HMT-TSF (+0.05 pp) |
+| nomco · lb28 | 79.07% | **80.08%** | Informer (−1.01 pp) |
+| nomco · lb56 | 77.57% | 77.51% | HMT-TSF (+0.06 pp) |
+| mco · lb14 | **75.84%** | 75.35% | HMT-TSF (+0.49 pp) |
+| mco · lb28 | **76.75%** | 76.22% | HMT-TSF (+0.53 pp) |
+| mco · lb56 | 76.47% | **77.29%** | Informer (−0.82 pp) |
+| **6-config mean** | **77.62%** | 77.74% | Informer (−0.12 pp) |
 
 ---
 

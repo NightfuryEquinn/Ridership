@@ -1,7 +1,7 @@
 # Model Performance Analysis — Aggregate Results
 
 > Source: `src/outputs/aggregate_results.csv`
-> Date: 2026-05-25
+> Date: 2026-05-27
 
 ---
 
@@ -490,11 +490,13 @@ Across all criteria:
 | **Best nomco without tuning** | Informer (base · nomco · lb14) | **79.13%** |
 | **Most configurations won** | Informer | **8 / 12** |
 
-**The overall best model across the full evaluation is Informer.** While LSTM achieves the highest peak score (81.04%) in its ideal setting (tuned, MCO-excluded, 14-day lookback), it degrades to 57–59% Combined% on MCO base configurations — a 20+ pp swing that makes it unreliable for real-world deployment where the training window may overlap with ridership disruptions.
+**The overall best model across the 17-model baseline evaluation is Informer.** While LSTM achieves the highest peak score (81.04%) in its ideal setting (tuned, MCO-excluded, 14-day lookback), it degrades to 57–59% Combined% on MCO base configurations — a 20+ pp swing that makes it unreliable for real-world deployment where the training window may overlap with ridership disruptions.
 
 Informer wins or ties on 10 of 12 configurations, achieves a 76.93% mean Combined% — 2.37 pp above the next-best model — and maintains a MCO floor of 72.62% that no other model in the study matches. Its ProbSparse self-attention mechanism provides structural robustness to outlier inputs that no recurrent or fixed-graph model can replicate without bespoke engineering.
 
 **Runner-up for overall best: TPA-LSTM.** Among pure recurrent models, TPA-LSTM is the most consistent, peaking at 79.95% tuned nomco lb14 and holding 73.90% at the worst MCO tuned config. The temporal pattern attention aligns naturally with the weekly and monthly seasonality of Malaysian transit ridership. If Informer is unavailable or computational cost is a concern, TPA-LSTM is the recommended fallback.
+
+> **Note — HMT-TSF (Hybrid SOTA):** The purpose-built HMT-TSF model, evaluated separately across 10 configurations (nomco+mco × lb7/14/28/56/84), achieves a 10-config mean of **77.30%** with std dev **1.55 pp** — surpassing Informer's 76.93% mean and lower standard deviation. It wins the mco·lb14 and mco·lb28 configurations outright (+0.49 and +0.53 pp over Informer tuned), meets both study targets in 9/10 configs, and has the smallest nomco→mco degradation of any model (−1.10 pp at lb56). Full analysis in [`src/outputs/HMT-TSF-RESULTS.md`](HMT-TSF-RESULTS.md).
 
 ---
 

@@ -1,6 +1,6 @@
 # Model Descriptions
 
-> Last updated: 2026-05-25
+> Last updated: 2026-05-27
 
 This document describes all 16 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 15 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
 
@@ -589,23 +589,23 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 
 | Model | Variant / lookback | Key Changes (base → tuned) | Dropout rationale |
 |-------|-------------------|---------------------------|-------------------|
-| LSTM | — / 14 | hidden 64→512, layers 1→2, dropout 0.10→0.20 | 2-layer regularisation |
-| BiLSTM | — / 14 | hidden 64→256, layers 1→3 | unchanged (0.10) |
+| LSTM | — / 14 | hidden 64→128, layers 1→2, dropout 0.10→0.15 | 2-layer regularisation |
+| BiLSTM | — / 14 | hidden 64→128, layers 1→2, dropout 0.10→0.15 | expanded recurrent capacity |
 | CNN-LSTM | sequential / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
 | CNN-LSTM | parallel / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
 | CNN-LSTM | augmented / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| CNN-BiLSTM | — / 14 | hidden 64→128, cnn_filters 32→64, cnn_layers 2→1, dropout 0.10→0.25 | HIGH variance across lookbacks |
-| ST-LSTM | — / 14 | hidden 64→128, spatial_hidden 32→128, dropout 0.10→0.30 | MED-HIGH variance across lookbacks |
-| STGCN | — / 14 | hidden 128→512, n_blocks 2→4, kt 3→2 ¹ | unchanged (0.10) |
-| MTGNN | — / 14 | hidden 32→64, skip_ch 64→128, dropout 0.10→0.25 | HIGH variance across lookbacks |
-| STSGCN | — / 14 | hidden 64→256, n_layers 2→4 | unchanged (0.10) |
-| STFGNN | — / 14 | hidden 64→256, n_layers 3→5, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| PDR-STGCN | — / 14 | hidden 128→256, n_blocks 2→3, kt 3→2 ¹, dk 32→128, period 7→14, dropout 0.10→0.20 | MED variance across lookbacks |
-| TPA-LSTM | — / 14 | hidden 64→256, filters 32→128, dropout 0.10→0.15 | moderate variance across lookbacks |
+| CNN-BiLSTM | — / 14 | hidden 64→128, cnn_filters 32→64, dropout 0.10→0.25 | HIGH variance across lookbacks |
+| ST-LSTM | — / 14 | hidden 64→128, spatial_hidden 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
+| STGCN | — / 14 | hidden 128→256, n_blocks 2→3, kt 3→2 ¹, dropout 0.10→0.15 | LOW variance, stable with more filters |
+| MTGNN | — / 14 | hidden 32→64, skip_ch 64→128, n_layers 3→4, dropout 0.10→0.15 | HIGH variance across lookbacks |
+| STSGCN | — / 14 | hidden 64→128, n_layers 2→3, dropout 0.10→0.20 | LOW variance, synchronous graph benefits |
+| STFGNN | — / 14 | hidden 64→128, n_layers 3→4, dropout 0.10→0.30 | MED-HIGH variance across lookbacks |
+| PDR-STGCN | — / 14 | hidden 128→256, n_blocks 2→3, kt 3→2 ¹, dk 32→64, dropout 0.10→0.20 | MED variance across lookbacks |
+| TPA-LSTM | — / 14 | hidden 64→128, filters 32→64, dropout 0.10→0.15 | moderate variance across lookbacks |
 | ASTGCN | — / 14 | d_model 64→128, n_heads 4→8, n_blocks 2→3, dropout 0.10→0.20 | moderate variance across lookbacks |
-| TFT | — / 14 | d_model 64→256, n_heads 4→16, n_lstm_layers 1→2, n_attn_layers 2→4, dropout 0.10→0.15 | HIGH variance across lookbacks |
-| Autoformer | — / 14 | d_model 64→256, n_heads 4→16, e_layers 2→4, d_ff 128→512, dropout 0.10→0.20 | moderate variance across lookbacks |
-| Informer | — / 14 | d_model 64→256, n_heads 4→16, e_layers 2→3, d_ff 128→512 | unchanged (0.10) |
+| TFT | — / 14 | d_model 64→128, n_heads 4→8, n_lstm_layers 1→2, n_attn_layers 2→3, dropout 0.10→0.25 | HIGH variance across lookbacks |
+| Autoformer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.20 | moderate variance across lookbacks |
+| Informer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.15 | LOW variance, sparse attention stable |
 
 > ¹ `kt` reduction is required for correctness: with deeper `n_blocks` stacking on T_in=14, `kt=3` shrinks the temporal dimension to zero before the output layer. `kt=2` restores validity while maintaining the increased depth.
 
