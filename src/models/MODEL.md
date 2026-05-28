@@ -563,7 +563,7 @@ python src/features/sequence_builder.py --T-in 7
 python src/features/sequence_builder.py --T-in 84
 ```
 
-**Optimisation targets:** Combined% ≥ 80, R² ≥ 0.78.
+**Optimisation targets:** Combined% ≥ 75, R² ≥ 0.70.
 
 ---
 

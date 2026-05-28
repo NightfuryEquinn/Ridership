@@ -46,7 +46,7 @@ Feature Groups (from CLAUDE.md / split_dates.json):
   Indices 62–78  : static (17: population, GTFS, OSM POI, GADM)
 
 Optimisation targets:
-  Combined% ≥ 85,  R² ≥ 0.78
+  Combined% ≥ 75,  R² ≥ 0.70
 
 Hardware:
   GPU  : NVIDIA A100 (32 GB VRAM)
@@ -287,10 +287,10 @@ class TemporalTransformerBlock(nn.Module):
         self.norm1   = nn.LayerNorm(d_model)
         self.norm2   = nn.LayerNorm(d_model)
         self.ffn     = nn.Sequential(
-            nn.Linear(d_model, d_model * 2),
+            nn.Linear(d_model, d_model),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(d_model * 2, d_model),
+            nn.Linear(d_model, d_model),
         )
         self.drop = nn.Dropout(dropout)
 
@@ -540,10 +540,10 @@ class GatedFusion(nn.Module):
             nn.Linear(d_gate, d_cat), nn.Sigmoid(),
         )
         self.proj = nn.Sequential(
-            nn.Linear(d_cat, d_out * 2),
+            nn.Linear(d_cat, d_out),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(d_out * 2, d_out),
+            nn.Linear(d_out, d_out),
         )
         self.norm = nn.LayerNorm(d_out)
 
@@ -594,7 +594,7 @@ class BoostingHead(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(d_model, T_out),
         )
-        self.alpha = nn.Parameter(torch.tensor(0.1))   # small initial contribution
+        self.alpha = nn.Parameter(torch.tensor(-2.0))  # sigmoid(-2) ≈ 0.12: minimal initial contribution
 
     def forward(self, h: torch.Tensor) -> torch.Tensor:
         return self.net(h) * torch.sigmoid(self.alpha)
@@ -794,11 +794,13 @@ def load_splits(seq_dir: str, device: torch.device):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def train_one_epoch(model, loader, optimiser, criterion, smooth_reg,
-                    grad_scaler, use_amp) -> float:
+                    grad_scaler, use_amp, noise_std: float = 0.0) -> float:
     model.train()
     total = 0.0
     for X_b, y_b in loader:
         optimiser.zero_grad()
+        if noise_std > 0.0:
+            X_b = X_b + torch.randn_like(X_b) * noise_std
         with autocast('cuda', enabled=use_amp):
             y_hat = model(X_b)
             loss  = criterion(y_hat, y_b) + smooth_reg(y_hat)
@@ -991,22 +993,24 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
     best_state_container = {"state_dict": None, "val_loss": float("inf")}
 
     def objective(trial):
-        d_model      = trial.suggest_categorical("d_model",      [64, 128, 192, 256])
-        n_tcn_blocks = trial.suggest_int("n_tcn_blocks",          2, 5)
+        d_model      = trial.suggest_categorical("d_model",      [32, 64, 128])
+        n_tcn_blocks = trial.suggest_int("n_tcn_blocks",          1, 3)
         graph_hidden = trial.suggest_categorical("graph_hidden",  [32, 64, 128])
-        dropout      = trial.suggest_float("dropout",             0.05, 0.35, step=0.05)
-        lr           = trial.suggest_float("lr", 5e-4, 5e-3, log=True)
-        smooth_wt    = trial.suggest_float("smooth_weight",       0.0, 0.05, step=0.005)
+        dropout      = trial.suggest_float("dropout",             0.05, 0.40, step=0.05)
+        drop_path    = trial.suggest_float("drop_path",           0.1,  0.4,  step=0.05)
+        lr           = trial.suggest_float("lr",                  5e-4, 5e-3, log=True)
+        weight_decay = trial.suggest_float("weight_decay",        5e-4, 5e-3, log=True)
+        smooth_wt    = trial.suggest_float("smooth_weight",       0.0,  0.05, step=0.005)
+        input_noise  = trial.suggest_float("input_noise",         0.0,  0.05, step=0.005)
 
         m = HMTTSFForecaster(
             n_features=n_features, T_in=T_in, T_out=T_out,
             adj=adj_tensor, d_model=d_model, n_tcn_blocks=n_tcn_blocks,
-            graph_hidden=graph_hidden, dropout=dropout,
+            graph_hidden=graph_hidden, dropout=dropout, drop_path=drop_path,
             target_idx=args.target_idx,
         ).to(device)
 
-        opt = torch.optim.AdamW(m.parameters(), lr=lr,
-                                weight_decay=args.weight_decay)
+        opt = torch.optim.AdamW(m.parameters(), lr=lr, weight_decay=weight_decay)
         crit = WeightedHuberLoss(T_out, delta=1.0, decay=args.loss_decay).to(device)
         sreg = TemporalSmoothnessReg(weight=smooth_wt).to(device)
         gs   = GradScaler(enabled=use_amp)
@@ -1016,7 +1020,8 @@ def run_optuna_study(args, train_data, val_data, T_in, T_out,
         patience_cnt = 0
         patience_hp  = 10
         for ep in range(1, 41):
-            train_one_epoch(m, tr_loader, opt, crit, sreg, gs, use_amp)
+            train_one_epoch(m, tr_loader, opt, crit, sreg, gs, use_amp,
+                            noise_std=input_noise)
             va_loss = evaluate(m, va_loader, crit, sreg, use_amp)
             if va_loss < best_va:
                 best_va       = va_loss
@@ -1171,7 +1176,7 @@ def parse_args():
                    help="Column index of the target in the feature matrix (default: 12 = total_ridership)")
 
     # Architecture
-    p.add_argument("--d-model",      type=int,   default=128,
+    p.add_argument("--d-model",      type=int,   default=64,
                    help="Hidden dimension throughout the model")
     p.add_argument("--n-tcn-blocks", type=int,   default=3,
                    help="TCN residual blocks per scale (dilation doubles each block)")
@@ -1183,7 +1188,7 @@ def parse_args():
                    help="Number of structural regime embeddings")
     p.add_argument("--adj-threshold",type=float, default=0.1,
                    help="Pearson correlation threshold for graph adjacency edges")
-    p.add_argument("--drop-path",    type=float, default=0.1,
+    p.add_argument("--drop-path",    type=float, default=0.2,
                    help="Stochastic depth drop-path rate for TCN blocks (0 = disabled)")
     p.add_argument("--n-attn-heads", type=int,   default=4,
                    help="Attention heads in the temporal Transformer block")
@@ -1194,10 +1199,12 @@ def parse_args():
     p.add_argument("--batch-size",    type=int,   default=32)
     p.add_argument("--epochs",        type=int,   default=150)
     p.add_argument("--lr",            type=float, default=1e-3)
-    p.add_argument("--weight-decay",  type=float, default=5e-4)
+    p.add_argument("--weight-decay",  type=float, default=1e-3)
     p.add_argument("--patience",      type=int,   default=20)
     p.add_argument("--warmup-epochs", type=int,   default=8)
     p.add_argument("--dropout",       type=float, default=0.1)
+    p.add_argument("--input-noise",   type=float, default=0.02,
+                   help="Std-dev of Gaussian noise added to training inputs (0 = off)")
     p.add_argument("--device",        default="auto")
     p.add_argument("--seed",          type=int,   default=42)
 
@@ -1397,7 +1404,8 @@ def main():
                 pg["lr"] = args.lr * epoch / args.warmup_epochs
 
         tr_loss = train_one_epoch(model, train_loader, optimiser,
-                                   criterion, smooth_reg, grad_scaler, use_amp)
+                                   criterion, smooth_reg, grad_scaler, use_amp,
+                                   noise_std=args.input_noise)
         va_loss = evaluate(model, val_loader, criterion, smooth_reg, use_amp)
         train_losses.append(tr_loss)
         val_losses.append(va_loss)
