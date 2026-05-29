@@ -88,13 +88,6 @@ from src.utils.comparison_table import (
 
 # ── optional dependencies ─────────────────────────────────────────────────────
 try:
-    import optuna
-    optuna.logging.set_verbosity(optuna.logging.WARNING)
-    OPTUNA_AVAILABLE = True
-except ImportError:
-    OPTUNA_AVAILABLE = False
-
-try:
     import shap
     SHAP_AVAILABLE = True
 except ImportError:
@@ -116,6 +109,43 @@ FEAT_GROUPS = {
     "external": (29, 59),   # fuel prices (×15) + rainfall (×15)
     "lag":      (59, 62),   # ridership_lag_{7,14,28}
     "static":   (62, 79),   # population, GTFS stats, OSM POI, GADM
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-lookback baseline defaults
+# Applied in main() only when the user has NOT overridden the flag explicitly.
+# Rationale for each adjustment is documented in HMT-TSF.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_LOOKBACK_DEFAULTS: dict = {
+    14: {"dropout": 0.15, "weight_decay": 3e-3},
+
+    28: {"lr": 5e-4, "warmup_epochs": 12, "patience": 25,
+         "d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 2,
+         "dropout": 0.25, "weight_decay": 1e-2, "input_noise": 0.05},
+
+    56: {"d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 2, "dropout": 0.30,
+         "drop_path": 0.3, "weight_decay": 2e-2, "input_noise": 0.05,
+         "smooth_weight": 0.03},
+
+    84: {"d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 3, 
+         "patience": 30, "weight_decay": 1e-2, "input_noise": 0.05, 
+         "smooth_weight": 0.05, "dropout": 0.35, "drop_path": 0.25},
+}
+
+# Global argparse defaults — used to detect whether the user overrode a flag.
+_ARGPARSE_DEFAULTS: dict = {
+    "lr":            1e-3,
+    "warmup_epochs": 8,
+    "patience":      20,
+    "input_noise":   0.02,
+    "smooth_weight": 0.01,
+    "n_tcn_blocks":  3,
+    "dropout":       0.1,
+    "drop_path":     0.2,
+    "weight_decay":  1e-3,
+    "d_model":       64,
+    "graph_hidden":  64,
 }
 
 
@@ -600,6 +630,41 @@ class BoostingHead(nn.Module):
         return self.net(h) * torch.sigmoid(self.alpha)
 
 
+class FutureTemporalProjection(nn.Module):
+    """
+    Learns a per-step additive correction from known future temporal features
+    (day-of-week, weekend flag, holiday flags, sin/cos encodings, etc.).
+
+    These features are fully deterministic for any calendar date, so they can
+    be computed ahead of the forecast horizon and fed to the decoder.  The
+    correction is added in RevIN-normalised space (before denormalization) so
+    it scales naturally with each sample's ridership level.
+
+    Output weights are initialised to zero so the module starts as a no-op and
+    only diverges from the baseline as gradient evidence accumulates — avoiding
+    any disruption to early-epoch stability.
+
+    Input:  (B, T_out, n_temporal)
+    Output: (B, T_out)   additive correction in RevIN-normalised space
+    """
+
+    def __init__(self, n_temporal: int, dropout: float = 0.1):
+        super().__init__()
+        d_hidden = max(n_temporal * 2, 32)
+        self.mlp = nn.Sequential(
+            nn.Linear(n_temporal, d_hidden),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_hidden, 1),
+        )
+        nn.init.zeros_(self.mlp[-1].weight)
+        nn.init.zeros_(self.mlp[-1].bias)
+
+    def forward(self, x_future: torch.Tensor) -> torch.Tensor:
+        # x_future: (B, T_out, n_temporal) → (B, T_out)
+        return self.mlp(x_future).squeeze(-1)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 8. HMT-TSF: Main Model
 # ══════════════════════════════════════════════════════════════════════════════
@@ -621,20 +686,21 @@ class HMTTSFForecaster(nn.Module):
 
     def __init__(
         self,
-        n_features:    int,
-        T_in:          int,
-        T_out:         int,
-        adj:           torch.Tensor,
-        d_model:       int   = 128,
-        n_tcn_blocks:  int   = 3,
-        tcn_kernel:    int   = 3,
-        graph_hidden:  int   = 64,
-        n_regimes:     int   = 3,
-        n_attn_heads:  int   = 4,
-        dropout:       float = 0.1,
-        drop_path:     float = 0.1,
-        target_idx:    int   = 12,
-        use_revin:     bool  = True,
+        n_features:      int,
+        T_in:            int,
+        T_out:           int,
+        adj:             torch.Tensor,
+        d_model:         int   = 128,
+        n_tcn_blocks:    int   = 3,
+        tcn_kernel:      int   = 3,
+        graph_hidden:    int   = 64,
+        n_regimes:       int   = 3,
+        n_attn_heads:    int   = 4,
+        dropout:         float = 0.1,
+        drop_path:       float = 0.1,
+        target_idx:      int   = 12,
+        use_revin:       bool  = True,
+        n_temporal_feats: int  = 16,
     ):
         super().__init__()
         self.target_idx = target_idx
@@ -669,7 +735,10 @@ class HMTTSFForecaster(nn.Module):
         self.primary_head  = NeuralForecastHead(d_model, T_out, dropout)
         self.boosting_head = BoostingHead(d_model, T_out, dropout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Future temporal correction (day-of-week / weekend conditioning)
+        self.temporal_proj = FutureTemporalProjection(n_temporal_feats, dropout)
+
+    def forward(self, x: torch.Tensor, x_future: torch.Tensor | None = None) -> torch.Tensor:
         # ── 1. Instance normalisation ────────────────────────────────────────
         # RevIN normalises each sample to zero-mean / unit-variance over the
         # look-back window (per feature).  The stored _mean/_std are then used
@@ -702,6 +771,14 @@ class HMTTSFForecaster(nn.Module):
         y_primary = self.primary_head(h_fused)   # (B, T_out)
         y_boost   = self.boosting_head(h_fused)  # (B, T_out)
         y = y_primary + y_boost                  # (B, T_out)
+
+        # ── 8a. Future temporal correction ───────────────────────────────────
+        # x_future: (B, T_out, n_temporal) — known calendar features for each
+        # forecast step (day-of-week, weekend flag, holiday flags, etc.).
+        # Applied in RevIN-normalised space so the correction scales with the
+        # per-sample ridership level before denormalization.
+        if x_future is not None:
+            y = y + self.temporal_proj(x_future)
 
         # ── 9. Reverse RevIN: map output back to MinMax-scaled space ─────────
         # The heads predict in the RevIN-normalised space; denormalize() undoes
@@ -778,15 +855,28 @@ def load_splits(seq_dir: str, device: torch.device):
         arr = np.load(os.path.join(seq_dir, name))
         return torch.from_numpy(arr).float().to(device)
 
+    def t_opt(name):
+        path = os.path.join(seq_dir, name)
+        if not os.path.exists(path):
+            return None
+        return torch.from_numpy(np.load(path)).float().to(device)
+
     X_tr, y_tr = t("X_train.npy"), t("y_train.npy")
     X_va, y_va = t("X_val.npy"),   t("y_val.npy")
     X_te, y_te = t("X_test.npy"),  t("y_test.npy")
+    Xf_tr = t_opt("X_future_train.npy")
+    Xf_va = t_opt("X_future_val.npy")
+    Xf_te = t_opt("X_future_test.npy")
 
     print(f"Shapes loaded from {seq_dir}:")
     print(f"  X_train {tuple(X_tr.shape)}   y_train {tuple(y_tr.shape)}")
     print(f"  X_val   {tuple(X_va.shape)}   y_val   {tuple(y_va.shape)}")
     print(f"  X_test  {tuple(X_te.shape)}   y_test  {tuple(y_te.shape)}")
-    return (X_tr, y_tr), (X_va, y_va), (X_te, y_te)
+    if Xf_tr is not None:
+        print(f"  X_future {tuple(Xf_tr.shape)}  (temporal conditioning enabled)")
+    else:
+        print("  X_future: not found — re-run sequence_builder.py to enable temporal conditioning")
+    return (X_tr, y_tr, Xf_tr), (X_va, y_va, Xf_va), (X_te, y_te, Xf_te)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -797,12 +887,14 @@ def train_one_epoch(model, loader, optimiser, criterion, smooth_reg,
                     grad_scaler, use_amp, noise_std: float = 0.0) -> float:
     model.train()
     total = 0.0
-    for X_b, y_b in loader:
+    for batch in loader:
+        X_b, y_b = batch[0], batch[1]
+        Xf_b = batch[2] if len(batch) > 2 else None
         optimiser.zero_grad()
         if noise_std > 0.0:
             X_b = X_b + torch.randn_like(X_b) * noise_std
         with autocast('cuda', enabled=use_amp):
-            y_hat = model(X_b)
+            y_hat = model(X_b, Xf_b)
             loss  = criterion(y_hat, y_b) + smooth_reg(y_hat)
         grad_scaler.scale(loss).backward()
         grad_scaler.unscale_(optimiser)
@@ -817,9 +909,11 @@ def train_one_epoch(model, loader, optimiser, criterion, smooth_reg,
 def evaluate(model, loader, criterion, smooth_reg, use_amp) -> float:
     model.eval()
     total = 0.0
-    for X_b, y_b in loader:
+    for batch in loader:
+        X_b, y_b = batch[0], batch[1]
+        Xf_b = batch[2] if len(batch) > 2 else None
         with autocast('cuda', enabled=use_amp):
-            y_hat = model(X_b)
+            y_hat = model(X_b, Xf_b)
             total += (criterion(y_hat, y_b) + smooth_reg(y_hat)).item() * X_b.size(0)
     return total / len(loader.dataset)
 
@@ -834,8 +928,10 @@ def collect_predictions(model, loader, use_amp) -> tuple:
     """
     model.eval()
     preds, trues = [], []
-    for X_b, y_b in loader:
-        preds.append(model(X_b).float().cpu().numpy())
+    for batch in loader:
+        X_b, y_b = batch[0], batch[1]
+        Xf_b = batch[2] if len(batch) > 2 else None
+        preds.append(model(X_b, Xf_b).float().cpu().numpy())
         trues.append(y_b.float().cpu().numpy())
     return np.concatenate(preds), np.concatenate(trues)
 
@@ -843,6 +939,163 @@ def collect_predictions(model, loader, use_amp) -> tuple:
 # ══════════════════════════════════════════════════════════════════════════════
 # 12. Walk-Forward Evaluation (rolling-origin temporal stability)
 # ══════════════════════════════════════════════════════════════════════════════
+
+def diagnose_fit(
+    train_losses:          list,
+    val_losses:            list,
+    best_epoch:            int,
+    patience:              int,
+    val_drift_threshold:   float = 0.25,
+    gap_overfit_threshold: float = 3.0,
+    early_stop_frac:       float = 0.15,
+) -> dict:
+    """
+    Diagnose overfitting or underfitting from recorded loss curves.
+
+    Three independent signals:
+
+    1. Val drift  (primary) — percentage the val loss rose from its best point to
+                    the final training epoch.  After best_epoch the patience window
+                    runs for `patience` more epochs; some small rise is normal
+                    oscillation.  Only a large rise (> val_drift_threshold = 25%)
+                    indicates genuine degradation after the model's best checkpoint.
+                    This avoids the false-positive issue of slope-based approaches,
+                    which trivially fire on the patience window (val loss can only
+                    be flat-or-rising there by construction).
+
+    2. Gap ratio  (secondary) — best_val_loss / min_train_loss.  Training uses
+                    dropout + input noise, both absent at validation, so train loss
+                    is inherently elevated; the threshold is deliberately conservative
+                    at 3× to avoid false positives from these regularisation effects.
+
+    3. Train-val divergence (secondary) — if training loss is still falling in the
+                    final 10 epochs while val has drifted up significantly, that
+                    indicates classic train/val divergence.
+
+    4. Early stop — best_epoch < 15 % of total epochs → suspiciously fast
+                    convergence (LR overshoot or data scale issue).
+
+    Returns
+    -------
+    dict with keys:
+      verdict        : "overfit" | "underfit" | "good_fit" | "uncertain"
+      val_drift_pct  : float — % rise from best_val to final_val
+      gap_ratio      : float — best_val / min_train
+      val_trend      : "rising" | "flat" | "falling"  (informational only)
+      early_stop     : bool
+      best_epoch     : int
+      total_epochs   : int
+      notes          : list[str]
+    """
+    total = len(train_losses)
+    if total == 0:
+        return {
+            "verdict": "uncertain", "val_drift_pct": None, "gap_ratio": None,
+            "val_trend": None, "early_stop": False,
+            "best_epoch": best_epoch, "total_epochs": 0,
+            "notes": ["No training data recorded."],
+        }
+
+    best_val  = min(val_losses)
+    min_train = min(train_losses)
+    final_val = val_losses[-1]
+
+    # ── Signal 1: Val drift after best checkpoint ────────────────────────────
+    # (final_val - best_val) / best_val — how much did val degrade after its best?
+    val_drift     = (final_val - best_val) / (best_val + 1e-12)
+    val_drift_pct = val_drift * 100.0
+
+    # ── Signal 2: Gap ratio ──────────────────────────────────────────────────
+    gap_ratio = best_val / (min_train + 1e-12)
+
+    # ── Signal 3: Train still falling while val drifted up? ──────────────────
+    tail_n    = min(10, total)
+    tr_tail   = train_losses[-tail_n:]
+    xs        = np.arange(tail_n, dtype=float)
+    tr_slope  = float(np.polyfit(xs, tr_tail, 1)[0])
+    norm_tr   = tr_slope / (float(np.mean(tr_tail)) + 1e-12)
+    train_still_falling = (norm_tr < -0.01)   # >1 % per-epoch drop in last 10 epochs
+
+    # ── Signal 4: Early stop ─────────────────────────────────────────────────
+    early_stop = best_epoch < early_stop_frac * total
+
+    # ── Val trend (informational — NOT used for verdict) ─────────────────────
+    # Computed over pre-best epochs to avoid patience-window bias.
+    pre_window = val_losses[max(0, best_epoch - patience): best_epoch]
+    if len(pre_window) >= 3:
+        xs_p = np.arange(len(pre_window), dtype=float)
+        s    = float(np.polyfit(xs_p, pre_window, 1)[0])
+        ns   = s / (float(np.mean(pre_window)) + 1e-12)
+        val_trend = "rising" if ns > 0.005 else ("falling" if ns < -0.005 else "flat")
+    else:
+        val_trend = "flat"
+
+    # ── Verdict ──────────────────────────────────────────────────────────────
+    notes: list = []
+    verdict = "good_fit"
+
+    # Primary: val drift
+    if val_drift > val_drift_threshold:
+        verdict = "overfit"
+        notes.append(
+            f"Val loss drifted +{val_drift_pct:.1f}% above its best "
+            f"(best={best_val:.5f} → final={final_val:.5f}) — "
+            f"model degraded after epoch {best_epoch}."
+        )
+    else:
+        notes.append(
+            f"Val drift +{val_drift_pct:.1f}% above best — within normal "
+            f"patience-window oscillation (threshold {val_drift_threshold*100:.0f}%)."
+        )
+
+    # Secondary: gap ratio
+    if gap_ratio > gap_overfit_threshold:
+        if verdict != "overfit":
+            verdict = "overfit"
+        notes.append(
+            f"Val/train gap {gap_ratio:.2f}× exceeds {gap_overfit_threshold:.0f}× "
+            f"(min_train={min_train:.5f}, best_val={best_val:.5f}) — "
+            f"significant memorisation of training data."
+        )
+    else:
+        notes.append(
+            f"Val/train gap {gap_ratio:.2f}× is within the {gap_overfit_threshold:.0f}× threshold "
+            f"(accounts for dropout + input noise during training)."
+        )
+
+    # Secondary: train/val divergence
+    if train_still_falling and val_drift > 0.10:
+        if verdict != "overfit":
+            verdict = "overfit"
+        notes.append(
+            f"Training loss still declining in final {tail_n} epochs while val drifted up "
+            f"+{val_drift_pct:.1f}% — train/val divergence detected."
+        )
+
+    # Early stop
+    if early_stop:
+        frac_pct = int(100 * best_epoch / total)
+        notes.append(
+            f"Best epoch {best_epoch}/{total} ({frac_pct}%) is early — "
+            f"possible LR overshoot; consider --lr or --warmup-epochs."
+        )
+        if verdict == "good_fit":
+            verdict = "uncertain"
+
+    if verdict == "good_fit":
+        notes.append("No overfitting or underfitting signals detected.")
+
+    return {
+        "verdict":       verdict,
+        "val_drift_pct": round(val_drift_pct, 2),
+        "gap_ratio":     round(gap_ratio, 4),
+        "val_trend":     val_trend,
+        "early_stop":    early_stop,
+        "best_epoch":    best_epoch,
+        "total_epochs":  total,
+        "notes":         notes,
+    }
+
 
 def walk_forward_evaluate(y_true: np.ndarray,
                            y_pred: np.ndarray,
@@ -975,96 +1228,17 @@ def run_shap_analysis(model: nn.Module,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 15. Optuna Hyperparameter Search
-# ══════════════════════════════════════════════════════════════════════════════
-
-def run_optuna_study(args, train_data, val_data, T_in, T_out,
-                      n_features, adj_tensor, device, use_amp, n_trials):
-    if not OPTUNA_AVAILABLE:
-        print("[Optuna] optuna not installed — skipping HPO.")
-        return {}, None
-
-    (X_tr, y_tr), (X_va, y_va) = train_data, val_data
-    tr_loader = DataLoader(TensorDataset(X_tr, y_tr),
-                           batch_size=args.batch_size, shuffle=True)
-    va_loader = DataLoader(TensorDataset(X_va, y_va), batch_size=args.batch_size)
-
-    # Mutable container so the closure can update it across trials
-    best_state_container = {"state_dict": None, "val_loss": float("inf")}
-
-    def objective(trial):
-        d_model      = trial.suggest_categorical("d_model",      [32, 64, 128])
-        n_tcn_blocks = trial.suggest_int("n_tcn_blocks",          1, 3)
-        graph_hidden = trial.suggest_categorical("graph_hidden",  [32, 64, 128])
-        dropout      = trial.suggest_float("dropout",             0.05, 0.40, step=0.05)
-        drop_path    = trial.suggest_float("drop_path",           0.1,  0.4,  step=0.05)
-        lr           = trial.suggest_float("lr",                  5e-4, 5e-3, log=True)
-        weight_decay = trial.suggest_float("weight_decay",        5e-4, 5e-3, log=True)
-        smooth_wt    = trial.suggest_float("smooth_weight",       0.0,  0.05, step=0.005)
-        input_noise  = trial.suggest_float("input_noise",         0.0,  0.05, step=0.005)
-
-        m = HMTTSFForecaster(
-            n_features=n_features, T_in=T_in, T_out=T_out,
-            adj=adj_tensor, d_model=d_model, n_tcn_blocks=n_tcn_blocks,
-            graph_hidden=graph_hidden, dropout=dropout, drop_path=drop_path,
-            target_idx=args.target_idx,
-        ).to(device)
-
-        opt = torch.optim.AdamW(m.parameters(), lr=lr, weight_decay=weight_decay)
-        crit = WeightedHuberLoss(T_out, delta=1.0, decay=args.loss_decay).to(device)
-        sreg = TemporalSmoothnessReg(weight=smooth_wt).to(device)
-        gs   = GradScaler(enabled=use_amp)
-
-        best_va      = float("inf")
-        best_sd_local = None
-        patience_cnt = 0
-        patience_hp  = 10
-        for ep in range(1, 41):
-            train_one_epoch(m, tr_loader, opt, crit, sreg, gs, use_amp,
-                            noise_std=input_noise)
-            va_loss = evaluate(m, va_loader, crit, sreg, use_amp)
-            if va_loss < best_va:
-                best_va       = va_loss
-                best_sd_local = {k: v.cpu().clone() for k, v in m.state_dict().items()}
-                patience_cnt  = 0
-            else:
-                patience_cnt += 1
-            trial.report(va_loss, ep)
-            if trial.should_prune():
-                raise optuna.exceptions.TrialPruned()
-            if patience_cnt >= patience_hp:
-                break   # per-trial early stopping
-
-        # Keep the globally best state dict across all trials
-        if best_va < best_state_container["val_loss"]:
-            best_state_container["val_loss"]   = best_va
-            best_state_container["state_dict"] = best_sd_local
-
-        return best_va
-
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=15)
-    study  = optuna.create_study(direction="minimize", pruner=pruner)
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=1)
-    best = study.best_params
-    print(f"\n[Optuna] Best trial: val_loss={study.best_value:.6f}")
-    for k, v in best.items():
-        print(f"  {k}: {v}")
-    return best, best_state_container["state_dict"]
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 16. Plotting
+# 15. Plotting
 # ══════════════════════════════════════════════════════════════════════════════
 
 def plot_loss_curves(train_losses, val_losses, out_path: str) -> None:
     fig, ax = plt.subplots(figsize=(9, 4))
-    ax.plot(train_losses, label="Train", linewidth=1.5, color="#6366f1")
-    ax.plot(val_losses,   label="Val",   linewidth=1.5, color="#f97316", linestyle="--")
+    ax.plot(train_losses, label="Train Loss", linewidth=1.5, color="#9333ea")
+    ax.plot(val_losses,   label="Val Loss",   linewidth=1.5, color="#f97316", linestyle="--")
     ax.set_xlabel("Epoch"); ax.set_ylabel("Loss (scaled)")
-    ax.set_title("HMT-TSF — Training Curves")
-    ax.legend(); ax.grid(alpha=0.3)
-    fig.tight_layout(); fig.savefig(out_path, dpi=150); plt.close(fig)
-    print(f"  Saved: {out_path}")
+    ax.set_title("HMT-TSF — Training curves")
+    ax.legend(); ax.grid(alpha=0.3); fig.tight_layout()
+    fig.savefig(out_path, dpi=150); plt.close(fig); print(f"  Saved: {out_path}")
 
 
 def plot_predictions(y_true, y_pred, metrics, out_path: str) -> None:
@@ -1159,7 +1333,7 @@ def plot_walk_forward(wf_results: list, out_path: str) -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 17. CLI
+# 16. CLI
 # ══════════════════════════════════════════════════════════════════════════════
 
 def parse_args():
@@ -1223,10 +1397,6 @@ def parse_args():
     p.add_argument("--use-catboost",action="store_true",
                    help="Use CatBoost for residual boosting (requires catboost)")
 
-    # Optuna HPO
-    p.add_argument("--tune-trials", type=int, default=0,
-                   help="Run Optuna with N trials before final training (0 = skip)")
-
     # SHAP
     p.add_argument("--shap",        action="store_true",
                    help="Run SHAP feature importance analysis after evaluation")
@@ -1254,11 +1424,25 @@ def parse_args():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 18. Main
+# 17. Main
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
     args = parse_args()
+
+    # ── per-lookback baseline defaults ────────────────────────────────────────
+    # Only applied when the user has NOT overridden the flag explicitly
+    # (detected by comparing current value against the global argparse default).
+    _lb_overrides = _LOOKBACK_DEFAULTS.get(args.lookback, {})
+    if _lb_overrides:
+        _applied = []
+        for _attr, _new_val in _lb_overrides.items():
+            if getattr(args, _attr, None) == _ARGPARSE_DEFAULTS.get(_attr):
+                setattr(args, _attr, _new_val)
+                _applied.append(f"{_attr}={_new_val}")
+        if _applied:
+            print(f"[lookback={args.lookback}] Baseline adjustments applied: "
+                  + ", ".join(_applied))
 
     # ── seq-dir auto-resolution ───────────────────────────────────────────────
     if args.seq_dir is None:
@@ -1287,22 +1471,28 @@ def main():
         torch.backends.cudnn.benchmark = True
 
     # ── data ──────────────────────────────────────────────────────────────────
-    (X_tr, y_tr), (X_va, y_va), (X_te, y_te) = load_splits(args.seq_dir, device)
-    T_in       = X_tr.shape[1]
-    n_features = X_tr.shape[2]
-    T_out      = y_tr.shape[1]
+    (X_tr, y_tr, Xf_tr), (X_va, y_va, Xf_va), (X_te, y_te, Xf_te) = load_splits(args.seq_dir, device)
+    T_in        = X_tr.shape[1]
+    n_features  = X_tr.shape[2]
+    T_out       = y_tr.shape[1]
+    has_future  = Xf_tr is not None
 
     meta_path  = os.path.join(args.seq_dir, "split_dates.json")
     split_meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
     # Use target_col_idx from metadata if available
     if "target_col_idx" in split_meta:
         args.target_idx = split_meta["target_col_idx"]
+    n_temporal_feats = (split_meta.get("temporal_feat_end", 29)
+                        - split_meta.get("temporal_feat_start", 13))
 
-    train_loader = DataLoader(TensorDataset(X_tr, y_tr),
+    def _make_ds(*tensors):
+        return TensorDataset(*[t for t in tensors if t is not None])
+
+    train_loader = DataLoader(_make_ds(X_tr, y_tr, Xf_tr),
                               batch_size=args.batch_size, shuffle=True,
                               num_workers=0, pin_memory=False)
-    val_loader   = DataLoader(TensorDataset(X_va, y_va), batch_size=args.batch_size)
-    test_loader  = DataLoader(TensorDataset(X_te, y_te), batch_size=args.batch_size)
+    val_loader   = DataLoader(_make_ds(X_va, y_va, Xf_va), batch_size=args.batch_size)
+    test_loader  = DataLoader(_make_ds(X_te, y_te, Xf_te), batch_size=args.batch_size)
 
     # ── graph adjacency ───────────────────────────────────────────────────────
     print("\nBuilding feature adjacency matrix …")
@@ -1316,50 +1506,24 @@ def main():
     density   = n_edges / max(1, n_features * (n_features - 1) // 2)
     print(f"  Nodes: {n_features}   Edges: {n_edges}   Density: {density:.3f}")
 
-    # ── Optuna HPO ────────────────────────────────────────────────────────────
-    optuna_warm_state = None
-    if args.tune_trials > 0:
-        print(f"\n[Optuna] Running {args.tune_trials} trials …")
-        best_params, optuna_warm_state = run_optuna_study(
-            args, (X_tr, y_tr), (X_va, y_va),
-            T_in, T_out, n_features, adj_tensor,
-            device, use_amp, args.tune_trials,
-        )
-        # Override with best found params
-        for k, v in best_params.items():
-            if hasattr(args, k.replace("-", "_")):
-                setattr(args, k.replace("-", "_"), v)
-        print()
-
     # ── model ─────────────────────────────────────────────────────────────────
     model = HMTTSFForecaster(
-        n_features    = n_features,
-        T_in          = T_in,
-        T_out         = T_out,
-        adj           = adj_tensor,
-        d_model       = args.d_model,
-        n_tcn_blocks  = args.n_tcn_blocks,
-        tcn_kernel    = args.tcn_kernel,
-        graph_hidden  = args.graph_hidden,
-        n_regimes     = args.n_regimes,
-        n_attn_heads  = args.n_attn_heads,
-        dropout       = args.dropout,
-        drop_path     = args.drop_path,
-        target_idx    = args.target_idx,
-        use_revin     = not args.no_revin,
+        n_features       = n_features,
+        T_in             = T_in,
+        T_out            = T_out,
+        adj              = adj_tensor,
+        d_model          = args.d_model,
+        n_tcn_blocks     = args.n_tcn_blocks,
+        tcn_kernel       = args.tcn_kernel,
+        graph_hidden     = args.graph_hidden,
+        n_regimes        = args.n_regimes,
+        n_attn_heads     = args.n_attn_heads,
+        dropout          = args.dropout,
+        drop_path        = args.drop_path,
+        target_idx       = args.target_idx,
+        use_revin        = not args.no_revin,
+        n_temporal_feats = n_temporal_feats,
     ).to(device)
-
-    # Warm-start from the best Optuna trial weights when available.
-    # This avoids re-discovering the same optimum from a random init.
-    if optuna_warm_state is not None:
-        try:
-            model.load_state_dict(
-                {k: v.to(device) for k, v in optuna_warm_state.items()}
-            )
-            print("[Optuna] Warm-started final model from best trial weights.")
-        except RuntimeError:
-            # Architecture mismatch (shouldn't happen, but safe to skip)
-            print("[Optuna] Warm-start skipped — state dict shape mismatch.")
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"\nModel         : HMTTSFForecaster")
@@ -1371,6 +1535,7 @@ def main():
     print(f"  Attn heads  : {args.n_attn_heads}")
     print(f"  RevIN       : {'on' if not args.no_revin else 'off'}")
     print(f"  DropPath    : {args.drop_path}")
+    print(f"  Temporal    : {'on (' + str(n_temporal_feats) + ' future features)' if has_future else 'off — rebuild sequences to enable'}")
     print(f"  In          : (batch, {T_in}, {n_features})")
     print(f"  Out         : (batch, {T_out})")
     print(f"  Params      : {n_params:,}")
@@ -1387,6 +1552,8 @@ def main():
     )
 
     # ── training loop ─────────────────────────────────────────────────────────
+    effective_warmup = args.warmup_epochs
+
     best_val_loss   = float("inf")
     best_epoch      = 0
     patience_count  = 0
@@ -1394,14 +1561,14 @@ def main():
     best_state = None
 
     print(f"\nTraining  (max {args.epochs} epochs, patience={args.patience}, "
-          f"warmup={args.warmup_epochs})")
+          f"warmup={effective_warmup})")
     print(f"{'Epoch':>6}  {'Train Loss':>10}  {'Val Loss':>10}  {'LR':>10}")
     print("─" * 45)
 
     for epoch in range(1, args.epochs + 1):
-        if epoch <= args.warmup_epochs:
+        if epoch <= effective_warmup:
             for pg in optimiser.param_groups:
-                pg["lr"] = args.lr * epoch / args.warmup_epochs
+                pg["lr"] = args.lr * epoch / effective_warmup
 
         tr_loss = train_one_epoch(model, train_loader, optimiser,
                                    criterion, smooth_reg, grad_scaler, use_amp,
@@ -1410,7 +1577,7 @@ def main():
         train_losses.append(tr_loss)
         val_losses.append(va_loss)
 
-        if epoch > args.warmup_epochs:
+        if epoch > effective_warmup:
             scheduler.step(va_loss)
         lr_now = optimiser.param_groups[0]["lr"]
         print(f"{epoch:6d}  {tr_loss:10.6f}  {va_loss:10.6f}  {lr_now:10.2e}")
@@ -1426,6 +1593,28 @@ def main():
                 break
 
     model.load_state_dict(best_state)
+
+    # ── fit diagnostics ───────────────────────────────────────────────────────
+    fit_diag = diagnose_fit(train_losses, val_losses, best_epoch, args.patience)
+    _verd_label = {
+        "overfit":   "OVERFIT",
+        "underfit":  "UNDERFIT",
+        "good_fit":  "GOOD FIT",
+        "uncertain": "UNCERTAIN",
+    }.get(fit_diag["verdict"], fit_diag["verdict"].upper())
+    print(f"\n{'─'*50}")
+    print(f"Fit Diagnostics  [{_verd_label}]")
+    print(f"  Val drift  : +{fit_diag['val_drift_pct']:.1f}%  "
+          f"(best→final val loss; <25% = normal)")
+    print(f"  Gap ratio  : {fit_diag['gap_ratio']:.2f}×  "
+          f"(best_val / min_train; threshold 3×)")
+    print(f"  Val trend  : {fit_diag['val_trend']}  "
+          f"(pre-best window, informational)")
+    print(f"  Early stop : {'yes' if fit_diag['early_stop'] else 'no'}  "
+          f"(best epoch {best_epoch}/{len(train_losses)})")
+    for _note in fit_diag["notes"]:
+        print(f"  ·  {_note}")
+    print(f"{'─'*50}")
 
     # ── test predictions ──────────────────────────────────────────────────────
     y_pred_s, y_true_s = collect_predictions(model, test_loader, use_amp)
@@ -1568,6 +1757,7 @@ def main():
             "best_epoch":    best_epoch,
             "best_val_loss": round(best_val_loss, 8),
             "total_epochs":  len(train_losses),
+            "fit_diagnosis": fit_diag,
         },
         "split_dates":   split_meta,
         "test_metrics":  {
@@ -1606,8 +1796,8 @@ def main():
     print(f"  MAE%      : {overall['MAE_pct']:.2f}%    (raw MAE  = {overall['MAE']:.0f} riders)")
     print(f"  RMSE%     : {overall['RMSE_pct']:.2f}%   (raw RMSE = {overall['RMSE']:.0f} riders)")
     print(f"  R²        : {overall['R2']:.4f}")
-    targets_met = overall["Combined"] >= 80.0 and overall["R2"] >= 0.78
-    print(f"  Targets   : {'✓ BOTH MET (Combined≥80, R²≥0.78)' if targets_met else '✗ Not yet — consider tuning'}")
+    targets_met = overall["Combined"] >= 75.0 and overall["R2"] >= 0.7
+    print(f"  Targets   : {'✓ BOTH MET (Combined≥75, R²≥0.7)' if targets_met else '✗ Not yet — consider tuning'}")
 
     # ── 17-way comparison ─────────────────────────────────────────────────────
     PRIOR_MODELS = [

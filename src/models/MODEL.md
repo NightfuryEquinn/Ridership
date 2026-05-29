@@ -1,6 +1,6 @@
 # Model Descriptions
 
-> Last updated: 2026-05-27
+> Last updated: 2026-05-29
 
 This document describes all 16 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 15 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
 
@@ -629,6 +629,181 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 | 14 | Autoformer | Attention | No | Auto-Corr (FFT) | Yes | Decomposition + FFT-based periodic autocorrelation |
 | 15 | Informer | Attention | No | ProbSparse | Yes | Sparse attention + distilling for efficiency |
 | 16 | HMT-TSF | Hybrid | Static Pearson (GCN) | — | Yes | Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction |
+
+---
+
+## Experimental Results
+
+All 15 baseline models were trained and evaluated across four experimental conditions: MCO-excluded (no-MCO) and MCO-inclusive, at look-back windows of 14, 28, and 56 days. Each model was then fine-tuned with revised architecture hyperparameters under the same conditions. Aggregate results are stored in `src/outputs/aggregate_results.csv`. HMT-TSF results are in `src/outputs/aggregate_hmttsf.csv`.
+
+**Metric definitions:** Combined% = max(0, 100 − MAPE − MAE% − RMSE%); all percentage terms use mean-demand normalisation. Higher Combined%, R² and lower MAE/RMSE are better. Targets: Combined% ≥ 75%, R² ≥ 0.70.
+
+---
+
+### Baseline Performance (No Tuning) — No-MCO, Lookback 14
+
+Results for all 15 base models on the no-MCO condition at the default look-back of 14 days, sorted by Combined%:
+
+| Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
+|------|-------|-----------|-------|------|-------|-----|-----|------|
+| 1 | Informer | 79.13 | 6.58 | 5.52 | 8.76 | 0.772 | 69,415 | 110,069 |
+| 2 | BiLSTM | 79.04 | 6.52 | 5.77 | 8.67 | 0.776 | 72,460 | 109,007 |
+| 3 | TPA-LSTM | 78.67 | 6.62 | 6.04 | 8.67 | 0.776 | 75,871 | 109,009 |
+| 4 | LSTM | 78.13 | 6.71 | 6.18 | 8.98 | 0.760 | 77,719 | 112,801 |
+| 5 | CNN-BiLSTM | 78.18 | 6.81 | 6.12 | 8.89 | 0.765 | 76,884 | 111,782 |
+| 6 | ST-LSTM | 78.01 | 6.93 | 6.27 | 8.79 | 0.770 | 78,779 | 110,453 |
+| 7 | CNN-LSTM | 77.64 | 6.92 | 6.32 | 9.12 | 0.752 | 79,375 | 114,632 |
+| 8 | MTGNN | 77.62 | 7.02 | 6.47 | 8.90 | 0.764 | 81,289 | 111,802 |
+| 9 | STGCN | 77.44 | 6.99 | 6.46 | 9.11 | 0.753 | 81,203 | 114,496 |
+| 10 | Autoformer | 76.71 | 7.15 | 6.82 | 9.33 | 0.741 | 85,660 | 117,208 |
+| 11 | STFGNN | 75.89 | 7.58 | 6.86 | 9.66 | 0.722 | 86,240 | 121,428 |
+| 12 | TFT | 75.70 | 7.57 | 7.27 | 9.46 | 0.734 | 91,401 | 118,839 |
+| 13 | CNN-LSTM-Augmented | 75.36 | 7.77 | 7.19 | 9.68 | 0.721 | 90,356 | 121,639 |
+| 14 | CNN-LSTM-Parallel | 74.78 | 8.01 | 7.46 | 9.75 | 0.717 | 93,780 | 122,536 |
+| 15 | ASTGCN | 74.34 | 7.98 | 7.54 | 10.14 | 0.694 | 94,737 | 127,449 |
+| 16 | STSGCN | 73.33 | 8.60 | 7.77 | 10.30 | 0.684 | 97,689 | 129,451 |
+| 17 | PDR-STGCN | 67.75 | 10.26 | 9.98 | 12.01 | 0.571 | 125,481 | 150,877 |
+
+**Observations:**
+- LSTM-family models cluster between 75–79%, with simpler recurrent architectures (BiLSTM, TPA-LSTM) outperforming more complex CNN hybrids and graph models.
+- Graph-based models show mixed results: MTGNN (77.62%) and STGCN (77.44%) are competitive via their learned/fixed adjacency, but STSGCN (73.33%) and PDR-STGCN (67.75%) lag — the features-as-nodes graph construction is harder to learn in synchronous or dynamic settings at base capacity.
+- 11 of 15 models exceed the 75% Combined% target at baseline.
+
+---
+
+### Tuned Performance — No-MCO, Lookback 14
+
+Fine-tuned model performance on no-MCO condition at look-back 14, sorted by Combined%. Δ shows the gain/loss versus the corresponding base configuration:
+
+| Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE | Δ Combined% |
+|------|-------|-----------|-------|------|-------|-----|-----|------|-------------|
+| 1 | LSTM | 81.04 | 5.70 | 5.02 | 8.24 | 0.798 | 63,117 | 103,516 | +2.91 |
+| 2 | Informer | 79.99 | 6.16 | 5.20 | 8.64 | 0.778 | 65,360 | 108,628 | +0.86 |
+| 3 | TPA-LSTM | 79.95 | 6.19 | 5.31 | 8.55 | 0.782 | 66,703 | 107,475 | +1.28 |
+| 4 | BiLSTM | 79.44 | 6.39 | 5.85 | 8.33 | 0.794 | 73,516 | 104,667 | +0.40 |
+| 5 | Autoformer | 79.27 | 6.37 | 5.63 | 8.74 | 0.773 | 70,733 | 109,856 | +2.55 |
+| 6 | ST-LSTM | 79.13 | 6.51 | 5.63 | 8.72 | 0.774 | 70,796 | 109,604 | +1.12 |
+| 7 | ASTGCN | 78.82 | 6.35 | 5.73 | 9.09 | 0.754 | 72,053 | 114,259 | +4.48 |
+| 8 | CNN-LSTM-Augmented | 78.57 | 6.57 | 5.85 | 9.01 | 0.758 | 73,464 | 113,271 | +3.21 |
+| 9 | CNN-BiLSTM | 78.53 | 6.78 | 6.01 | 8.68 | 0.776 | 75,520 | 109,064 | +0.35 |
+| 10 | CNN-LSTM | 78.52 | 6.64 | 6.02 | 8.82 | 0.768 | 75,654 | 110,907 | +0.88 |
+| 11 | TFT | 78.47 | 6.56 | 6.03 | 8.95 | 0.762 | 75,788 | 112,444 | +2.77 |
+| 12 | CNN-LSTM-Parallel | 77.52 | 6.89 | 6.14 | 9.45 | 0.734 | 77,128 | 118,805 | +2.74 |
+| 13 | PDR-STGCN | 77.78 | 6.73 | 6.22 | 9.26 | 0.745 | 78,230 | 116,379 | +10.03 |
+| 14 | MTGNN | 77.44 | 7.02 | 6.46 | 9.08 | 0.755 | 81,209 | 114,079 | −0.17 |
+| 15 | STSGCN | 77.14 | 7.04 | 6.33 | 9.49 | 0.732 | 79,494 | 119,266 | +3.81 |
+| 16 | STGCN | 76.33 | 7.39 | 7.02 | 9.26 | 0.745 | 88,235 | 116,410 | −1.11 |
+| 17 | STFGNN | 74.55 | 8.03 | 7.42 | 10.00 | 0.702 | 93,248 | 125,728 | −1.35 |
+
+**Observations:**
+- 14 of 17 configurations improved; three regressed (MTGNN −0.17%, STGCN −1.11%, STFGNN −1.35%). For STGCN and STFGNN the increased dropout and deeper stacking introduce noise into a fixed pre-computed graph that cannot adapt to the changed capacity.
+- PDR-STGCN showed the largest gain (+10.03%), recovering from the worst base performance (67.75%) to mid-tier (77.78%). The expanded hidden size and deeper attention-based dynamic graph combine effectively once provided with sufficient capacity.
+- ASTGCN also benefited substantially (+4.48%) from doubling d_model and n_blocks.
+- Combined% range compresses from 67.75–79.13% (base) to 74.55–81.04% (tuned), indicating tuning reduces inter-model variance.
+- All 17 tuned configurations now exceed the 74% floor; 15 of 17 exceed 77%.
+
+---
+
+### Tuned Performance — MCO-Inclusive, Lookback 14
+
+Including the MCO pandemic period substantially degrades all models, revealing which architectures are robust to distribution shift. Δ shows the regression versus no-MCO tuned at lb14:
+
+| Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE | Δ vs no-MCO |
+|------|-------|-----------|-------|------|-------|-----|-----|------|-------------|
+| 1 | Informer | 75.35 | 7.68 | 7.21 | 9.76 | 0.738 | 88,924 | 120,400 | −4.64 |
+| 2 | ST-LSTM | 75.05 | 7.93 | 7.05 | 9.98 | 0.726 | 86,892 | 123,067 | −4.08 |
+| 3 | TPA-LSTM | 74.36 | 8.13 | 7.38 | 10.14 | 0.718 | 90,972 | 125,010 | −5.59 |
+| 4 | CNN-LSTM-Parallel | 72.00 | 8.76 | 8.17 | 11.06 | 0.664 | 100,763 | 136,434 | −5.52 |
+| 5 | LSTM | 71.84 | 8.96 | 8.55 | 10.66 | 0.688 | 105,421 | 131,404 | −9.20 |
+| 6 | BiLSTM | 70.66 | 9.29 | 9.01 | 11.03 | 0.666 | 111,167 | 135,981 | −8.78 |
+| 7 | Autoformer | 66.40 | 10.75 | 10.40 | 12.45 | 0.574 | 128,254 | 153,503 | −12.87 |
+| 8 | CNN-BiLSTM | 67.53 | 10.22 | 10.20 | 12.05 | 0.601 | 125,837 | 148,570 | −11.00 |
+| 9 | CNN-LSTM-Augmented | 67.30 | 10.26 | 10.26 | 12.18 | 0.593 | 126,532 | 150,165 | −11.27 |
+| 10 | TFT | 64.36 | 11.51 | 11.12 | 13.01 | 0.535 | 137,100 | 160,488 | −14.11 |
+| 11 | STFGNN | 63.62 | 11.53 | 11.23 | 13.62 | 0.490 | 138,496 | 167,971 | −10.93 |
+| 12 | MTGNN | 63.06 | 12.30 | 11.02 | 13.62 | 0.490 | 135,907 | 167,969 | −14.38 |
+| 13 | CNN-LSTM | 61.75 | 12.11 | 12.28 | 13.87 | 0.472 | 151,387 | 170,989 | −16.77 |
+| 14 | ASTGCN | 60.50 | 12.63 | 12.50 | 14.37 | 0.433 | 154,102 | 177,240 | −18.32 |
+| 15 | PDR-STGCN | 59.77 | 13.25 | 12.46 | 14.52 | 0.421 | 153,661 | 179,039 | −18.01 |
+| 16 | STSGCN | 55.18 | 14.29 | 14.36 | 16.17 | 0.281 | 177,109 | 199,452 | −21.96 |
+| 17 | STGCN | 53.79 | 14.42 | 14.96 | 16.84 | 0.221 | 184,451 | 207,637 | −22.54 |
+
+**Observations:**
+- Graph-based models are most vulnerable to MCO-induced distribution shift: STGCN (−22.54%), STSGCN (−21.96%), PDR-STGCN (−18.01%). The static Pearson-correlation adjacency is fitted on non-MCO training data; the COVID-driven ridership collapse invalidates the learned inter-feature correlations at test time.
+- Informer (−4.64%) and ST-LSTM (−4.08%) are the most MCO-resilient baselines, losing less than 5%. Their attention and parallel-stream designs capture structural relationships that partially transfer across the regime boundary.
+- LSTM (−9.20%) and BiLSTM (−8.78%) degrade more than TPA-LSTM (−5.59%), suggesting the temporal pattern attention mechanism provides additional stability under regime shift.
+- Only Informer (75.35%), ST-LSTM (75.05%), and TPA-LSTM (74.36%) maintain Combined% near or above the 75% target under MCO conditions. All graph-based models fall below 64%.
+
+---
+
+### Cross-Lookback Analysis — Tuned No-MCO
+
+Performance across look-back windows 14, 28, and 56 days for tuned models under no-MCO conditions. Best lookback highlighted:
+
+| Model | lb14 Combined% | lb28 Combined% | lb56 Combined% | Best |
+|-------|----------------|----------------|----------------|------|
+| LSTM | 81.04 | 79.79 | 79.24 | **14** |
+| Informer | 79.99 | **80.08** | 77.51 | **28** |
+| TPA-LSTM | 79.95 | 79.41 | 79.33 | **14** |
+| BiLSTM | 79.44 | 78.33 | 75.90 | **14** |
+| Autoformer | 79.27 | 74.65 | 58.59 | **14** |
+| ST-LSTM | 79.13 | 77.85 | 78.51 | **14** |
+| ASTGCN | 78.82 | 68.22 | 73.60 | **14** |
+| CNN-BiLSTM | 78.53 | 75.16 | 55.14 | **14** |
+| CNN-LSTM | 78.52 | 76.60 | 77.83 | **14** |
+| TFT | 78.47 | 51.02 | 37.94 | **14** |
+| PDR-STGCN | 77.78 | 76.10 | 52.13 | **14** |
+| MTGNN | 77.44 | 77.35 | **78.13** | **56** |
+| STSGCN | 77.14 | 73.53 | 50.13 | **14** |
+| STGCN | 76.33 | **77.17** | 74.52 | **28** |
+| STFGNN | 74.55 | 72.59 | 42.19 | **14** |
+
+**Observations:**
+- lb14 is optimal for 12 of 15 models; longer lookbacks generally degrade performance.
+- Autoformer (58.59%), TFT (37.94%), STFGNN (42.19%), and STSGCN (50.13%) collapse at lb56 — FFT autocorrelation, variable selection networks, and synchronous graph operations amplify noise over very long input sequences.
+- MTGNN uniquely prefers lb56 (78.13%). Its learned asymmetric adjacency and multi-scale dilated inception appear to extract additional benefit from quarterly temporal context, unlike models relying on pre-computed static graphs.
+- Informer and STGCN marginally prefer lb28, consistent with ProbSparse attention capturing slightly longer-range dependencies without performance penalty.
+
+---
+
+### Tuning Effectiveness Summary
+
+Absolute Combined% improvement from base→tuned at nomco lb14, sorted by impact:
+
+| Model | Base | Tuned | Δ | Notes |
+|-------|------|-------|---|-------|
+| PDR-STGCN | 67.75 | 77.78 | +10.03 | Dynamic graph benefits strongly from doubled hidden + deeper dk |
+| ASTGCN | 74.34 | 78.82 | +4.48 | Doubled d_model and n_blocks unlock attention capacity |
+| STSGCN | 73.33 | 77.14 | +3.81 | Deeper synchronous graph benefits from larger hidden |
+| CNN-LSTM-Augmented | 75.36 | 78.57 | +3.21 | Richer CNN filters improve skip-connection quality |
+| TFT | 75.70 | 78.47 | +2.77 | Wider d_model + deeper LSTM/attention layers help VSN |
+| CNN-LSTM-Parallel | 74.78 | 77.52 | +2.74 | Deeper CNN filters improve both branches |
+| Autoformer | 76.71 | 79.27 | +2.55 | Larger d_ff and e_layers enhance decomposition quality |
+| LSTM | 78.13 | 81.04 | +2.91 | Doubled hidden/layers extracts more sequential capacity |
+| CNN-LSTM | 77.64 | 78.52 | +0.88 | Moderate gain from increased CNN filters |
+| TPA-LSTM | 78.67 | 79.95 | +1.28 | Larger hidden + filters improve pattern coverage |
+| ST-LSTM | 78.01 | 79.13 | +1.12 | Bigger spatial and temporal streams both contribute |
+| Informer | 79.13 | 79.99 | +0.86 | Already near-optimal at base; sparse attention limits tuning upside |
+| BiLSTM | 79.04 | 79.44 | +0.40 | Already near ceiling for bidirectional recurrence on this dataset |
+| CNN-BiLSTM | 78.18 | 78.53 | +0.35 | Marginal gain; combined architecture already effective at base |
+| MTGNN | 77.62 | 77.44 | −0.17 | Learned adjacency already near-optimal; extra layers add noise |
+| STGCN | 77.44 | 76.33 | −1.11 | Increased dropout and `kt` reduction over-regularise fixed graph |
+| STFGNN | 75.89 | 74.55 | −1.35 | High dropout (0.30) over-regularises gated dual-graph fusion |
+
+---
+
+### HMT-TSF vs Best Tuned Baselines
+
+For a direct cross-model comparison at the canonical lb14 configuration, see `src/models/hybrid/HMT-TSF.md` → Achieved Results. Key summary:
+
+| Condition | Best Baseline | Best Baseline Combined% | HMT-TSF Combined% | Δ |
+|-----------|---------------|------------------------|-------------------|---|
+| No-MCO, lb14 | LSTM (tuned) | 81.04 | 80.99 | −0.05 |
+| MCO, lb14 | Informer (tuned) | 75.35 | 77.17 | +1.82 |
+| No-MCO, lb28 | Informer (tuned) | 80.08 | 79.37 | −0.71 |
+| No-MCO, lb56 | TPA-LSTM (tuned) | 79.33 | 78.93 | −0.40 |
+
+Under no-MCO conditions HMT-TSF is effectively tied with the best baselines (within 0.05–0.71%). Under MCO conditions it leads by 1.82 percentage points at lb14, confirming the regime gating mechanism provides a meaningful advantage during COVID-disruption periods.
 
 ---
 

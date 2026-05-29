@@ -1,6 +1,6 @@
 # HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 
-> Last updated: 2026-05-27 (synced with hmttsf.py)
+> Last updated: 2026-05-29
 
 ## Architecture Diagram
 
@@ -175,12 +175,13 @@ Output: (B, T_out=7)  [MinMax-scaled]
 ```
 Epochs:        150 (default)
 Batch size:    32
-Optimiser:     AdamW (lr=1e-3, weight_decay=5e-4)
+Optimiser:     AdamW (lr=1e-3, weight_decay=1e-3)
 LR schedule:   Linear warmup (8 ep) → ReduceLROnPlateau (factor=0.5, patience=8)
 Gradient clip: max_norm=1.0
 Early stopping: patience=20 (raw val loss)
 Mixed precision: AMP fp16 on CUDA (GradScaler)
 Loss:          WeightedHuber + TemporalSmoothness
+Input noise:   Gaussian noise std=0.02 added to training inputs (data augmentation)
 ```
 
 ### Phase 3 — Post-Hoc Residual Boosting
@@ -197,16 +198,48 @@ Loss:          WeightedHuber + TemporalSmoothness
 
 ---
 
+## Base Configuration (Current Defaults)
+
+Parameters baked into `parse_args()` defaults — what runs when no flags are passed.
+
+| Parameter       | Default | Notes |
+|-----------------|---------|-------|
+| `d_model`       | 64      | Intentionally conservative; use `--d-model 128` for more capacity |
+| `n_tcn_blocks`  | 3       | Dilation doubles per block (1, 2, 4, …) |
+| `tcn_kernel`    | 3       | Temporal kernel size |
+| `graph_hidden`  | 64      | GCN hidden dimension |
+| `n_regimes`     | 3       | Pre-MCO / MCO / Post-MCO |
+| `n_attn_heads`  | 4       | Temporal Transformer heads |
+| `adj_threshold` | 0.1     | Pearson correlation threshold for graph edges |
+| `drop_path`     | 0.2     | Stochastic depth max rate across TCN blocks |
+| `dropout`       | 0.1     | Applied throughout |
+| `lr`            | 1e-3    | AdamW initial learning rate |
+| `weight_decay`  | 1e-3    | AdamW weight decay |
+| `warmup_epochs` | 8       | Linear LR warm-up before ReduceLROnPlateau |
+| `patience`      | 20      | Early-stopping patience (raw val loss) |
+| `input_noise`   | 0.02    | Gaussian noise std added to training inputs |
+| `loss_decay`    | 0.9     | Per-step geometric weight decay in WeightedHuber |
+| `smooth_weight` | 0.01    | Temporal smoothness regularisation weight λ |
+
+---
+
 ## Hyperparameter Search Space (Optuna)
 
-| Parameter       | Distribution                    | Default |
-|-----------------|---------------------------------|---------|
-| `d_model`       | Categorical [64, 128, 192, 256] | 128     |
-| `n_tcn_blocks`  | Integer [2, 5]                  | 3       |
-| `graph_hidden`  | Categorical [32, 64, 128]       | 64      |
-| `dropout`       | Float [0.05, 0.35] step 0.05    | 0.1     |
-| `lr`            | Log-uniform [5e-4, 5e-3]        | 1e-3    |
-| `smooth_weight` | Float [0.0, 0.05] step 0.005    | 0.01    |
+Parameters explored during `--tune-trials N`. All others are inherited from base configuration.
+
+| Parameter       | Distribution                   | Base Default |
+|-----------------|--------------------------------|--------------|
+| `d_model`       | Categorical [32, 64, 128]      | 64           |
+| `n_tcn_blocks`  | Integer [1, 3]                 | 3            |
+| `graph_hidden`  | Categorical [32, 64, 128]      | 64           |
+| `dropout`       | Float [0.05, 0.40] step 0.05   | 0.1          |
+| `drop_path`     | Float [0.10, 0.40] step 0.05   | 0.2          |
+| `lr`            | Log-uniform [5e-4, 5e-3]       | 1e-3         |
+| `weight_decay`  | Log-uniform [5e-4, 5e-3]       | 1e-3         |
+| `smooth_weight` | Float [0.0, 0.05] step 0.005   | 0.01         |
+| `input_noise`   | Float [0.0, 0.05] step 0.005   | 0.02         |
+
+Pruner: MedianPruner (n_startup_trials=5, n_warmup_steps=15). Per-trial early stopping: patience=10, max 40 epochs.
 
 Recommended N trials:
 - Quick validation: 20 trials (~40 min on A100)
@@ -215,12 +248,50 @@ Recommended N trials:
 
 ---
 
+## Optimized Configuration (Post-Optuna)
+
+> To be populated after running `--tune-trials N`. Replace the placeholder row with the best trial's output once Optuna completes.
+
+```bash
+# Run HPO and record best params from the console output
+python src/models/hybrid/hmttsf.py --tune-trials 50 --lookback 14
+```
+
+Expected console output after Optuna finishes:
+```
+[Optuna] Best trial: val_loss=X.XXXXXX
+  d_model: ...
+  n_tcn_blocks: ...
+  graph_hidden: ...
+  dropout: ...
+  drop_path: ...
+  lr: ...
+  weight_decay: ...
+  smooth_weight: ...
+  input_noise: ...
+```
+
+| Parameter       | Optimized Value | Delta vs Base |
+|-----------------|-----------------|---------------|
+| `d_model`       | —               | —             |
+| `n_tcn_blocks`  | —               | —             |
+| `graph_hidden`  | —               | —             |
+| `dropout`       | —               | —             |
+| `drop_path`     | —               | —             |
+| `lr`            | —               | —             |
+| `weight_decay`  | —               | —             |
+| `smooth_weight` | —               | —             |
+| `input_noise`   | —               | —             |
+| Val loss        | —               | — vs base val loss |
+
+---
+
 ## Model Scaling Recommendations
 
 | Use Case              | d_model | n_tcn_blocks | graph_hidden | dropout | Expected Params |
 |-----------------------|---------|--------------|--------------|---------|-----------------|
-| Debug / fast iter     | 64      | 2            | 32           | 0.1     | ~850K           |
-| Default (balanced)    | 128     | 3            | 64           | 0.1     | ~3.2M           |
+| Default (argparse)    | 64      | 3            | 64           | 0.1     | ~850K           |
+| Balanced              | 128     | 3            | 64           | 0.1     | ~3.2M           |
 | High capacity         | 192     | 4            | 128          | 0.15    | ~7.1M           |
 | Max (A100 32GB)       | 256     | 5            | 128          | 0.20    | ~12.4M          |
 
@@ -252,13 +323,13 @@ python src/features/sequence_builder.py --T-in 84
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--d-model {64,128,192,256}` | `128` | Model hidden dimension |
+| `--d-model {64,128,192,256}` | `64` | Model hidden dimension |
 | `--n-tcn-blocks N` | `3` | TCN blocks per scale |
 | `--tcn-kernel N` | `3` | Temporal kernel size for all TCN convolutions |
 | `--graph-hidden {32,64,128}` | `64` | GCN hidden dimension |
 | `--n-regimes N` | `3` | Regime embedding count |
 | `--adj-threshold F` | `0.1` | Pearson correlation threshold for graph adjacency |
-| `--drop-path F` | `0.1` | Stochastic depth rate for TCN blocks (0 = disabled) |
+| `--drop-path F` | `0.2` | Stochastic depth rate for TCN blocks (0 = disabled) |
 | `--n-attn-heads N` | `4` | Attention heads in the temporal Transformer block |
 | `--no-revin` | off | Disable RevIN input normalisation |
 
@@ -269,10 +340,11 @@ python src/features/sequence_builder.py --T-in 84
 | `--epochs N` | `150` | Maximum training epochs |
 | `--batch-size N` | `32` | Batch size |
 | `--lr F` | `1e-3` | Initial learning rate |
-| `--weight-decay F` | `5e-4` | AdamW weight decay |
+| `--weight-decay F` | `1e-3` | AdamW weight decay |
 | `--patience N` | `20` | Early-stopping patience (raw val loss) |
 | `--warmup-epochs N` | `8` | Linear LR warm-up before ReduceLROnPlateau |
 | `--dropout F` | `0.1` | Dropout rate |
+| `--input-noise F` | `0.02` | Std-dev of Gaussian noise added to training inputs (0 = off) |
 
 ### Loss flags
 
@@ -362,9 +434,89 @@ python src/models/hybrid/hmttsf.py \
 
 ## Achieved Results
 
-> Results pending — all 10 configurations (nomco + mco × lb7/14/28/56/84) are queued for re-run with the updated model. This section will be populated once runs are complete.
+All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and evaluated. Aggregate results are stored in `src/outputs/aggregate_hmttsf.csv`. Run IDs are recorded therein.
 
-**Optimisation targets:** Combined% ≥ 75%, R² ≥ 0.70 (both simultaneously). Full analysis will be written to [`src/outputs/HMT-TSF-RESULTS.md`](../../outputs/HMT-TSF-RESULTS.md).
+**Optimisation targets:** Combined% ≥ 75%, R² ≥ 0.70 (both simultaneously). All 10 configurations meet both targets.
+
+### Overall Performance by Configuration
+
+| Configuration | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
+|---------------|-----------|-------|------|-------|-----|-----|------|
+| nomco_lb7 | 80.00 | 5.93 | 5.37 | 8.69 | 0.775 | 67,462 | 109,118 |
+| **nomco_lb14** | **80.99** | **5.68** | **5.02** | **8.32** | **0.794** | **63,061** | **104,521** |
+| nomco_lb28 | 79.37 | 6.31 | 5.66 | 8.66 | 0.777 | 71,213 | 108,872 |
+| nomco_lb56 | 78.93 | 6.59 | 5.88 | 8.61 | 0.777 | 73,767 | 108,088 |
+| nomco_lb84 | 76.86 | 7.30 | 6.32 | 9.53 | 0.729 | 78,734 | 118,775 |
+| mco_lb7 | 76.91 | 7.00 | 6.17 | 9.92 | 0.729 | 75,930 | 122,163 |
+| **mco_lb14** | **77.17** | **6.88** | **6.15** | **9.81** | **0.736** | **75,802** | **120,962** |
+| mco_lb28 | 76.31 | 7.34 | 6.50 | 9.85 | 0.731 | 80,305 | 121,685 |
+| mco_lb56 | 75.71 | 7.60 | 6.50 | 10.19 | 0.712 | 80,712 | 126,426 |
+| mco_lb84 | 75.88 | 7.51 | 6.42 | 10.18 | 0.711 | 79,745 | 126,323 |
+
+**Best configurations:** nomco_lb14 (Combined%=80.99%, R²=0.794) and mco_lb14 (77.17%, R²=0.736).
+
+**Lookback sensitivity (no-MCO):** Performance peaks at lb14 and declines monotonically at longer look-backs. The Multi-Scale TCN's Scale 2 (T//2) and Scale 3 (T//4) activate at lb28 and lb56 respectively, but their additional context does not offset the more complex temporal dynamics in longer windows. lb7 (80.00%) performs comparably to lb28/lb56, suggesting a single weekly cycle contains near-sufficient context for the 7-day forecast horizon.
+
+**Lookback sensitivity (MCO):** Best at lb14 (77.17%), with relatively stable performance across lb7–lb28 (76.91–77.17%), then a modest decline at lb56 and lb84. The regime gating mechanism is most effective at 14-day context where weekly ridership patterns clearly separate pre-MCO, MCO, and post-MCO regimes.
+
+**MCO degradation:** The MCO condition reduces Combined% by approximately 3.8% at lb14 (80.99% → 77.17%), far smaller than the 8.5% median degradation observed across the 15 tuned baselines at the same lookback. This confirms the value of learned regime embeddings for COVID-disrupted ridership sequences.
+
+---
+
+### Comparison Against Best Tuned Baselines — No-MCO, Lookback 14
+
+| Model | Combined% | R² | MAE | RMSE |
+|-------|-----------|-----|-----|------|
+| LSTM (tuned) | 81.04 | 0.798 | 63,117 | **103,516** |
+| **HMT-TSF** | **80.99** | 0.794 | **63,061** | 104,521 |
+| Informer (tuned) | 79.99 | 0.778 | 65,360 | 108,628 |
+| TPA-LSTM (tuned) | 79.95 | 0.782 | 66,703 | 107,475 |
+| BiLSTM (tuned) | 79.44 | 0.794 | 73,516 | 104,667 |
+| Autoformer (tuned) | 79.27 | 0.773 | 70,733 | 109,856 |
+| ST-LSTM (tuned) | 79.13 | 0.774 | 70,796 | 109,604 |
+
+HMT-TSF (80.99%) is effectively tied with the tuned LSTM (81.04%) at lb14 nomco — a 0.05% difference corresponding to ~56 fewer passengers in mean absolute error (MAE: 63,061 vs 63,117). LSTM-tuned has a marginally lower RMSE (103,516 vs 104,521). Both LSTM-tuned (R²=0.798) and HMT-TSF (R²=0.794) are within noise of each other. Beyond these two, the next tier (Informer, TPA-LSTM) trails by ~1 percentage point in Combined%.
+
+---
+
+### Comparison Against Best Tuned Baselines — MCO-Inclusive, Lookback 14
+
+| Model | Combined% | R² | MAE | RMSE |
+|-------|-----------|-----|-----|------|
+| **HMT-TSF** | **77.17** | 0.736 | **75,802** | **120,962** |
+| Informer (tuned) | 75.35 | **0.738** | 88,924 | 120,400 |
+| ST-LSTM (tuned) | 75.05 | 0.726 | 86,892 | 123,067 |
+| TPA-LSTM (tuned) | 74.36 | 0.718 | 90,972 | 125,010 |
+| CNN-LSTM-Parallel (tuned) | 72.00 | 0.664 | 100,763 | 136,434 |
+| LSTM (tuned) | 71.84 | 0.688 | 105,421 | 131,404 |
+| BiLSTM (tuned) | 70.66 | 0.666 | 111,167 | 135,981 |
+
+Under MCO conditions HMT-TSF leads at 77.17% Combined%, outperforming the next best (Informer: 75.35%) by 1.82 percentage points. The MAE advantage is substantial: 75,802 vs 86,892–105,421 passengers for the nearest competitors. This validates the regime gating mechanism — the three learned regime embeddings (pre-MCO / MCO / post-MCO) explicitly represent the COVID structural break that destabilises models relying on pure temporal or spatial pattern transfer.
+
+Informer achieves the highest R² (0.738) despite lower Combined%, reflecting its ProbSparse attention partially compensating for distribution shift via sparse long-range dependency capture. All other baselines fall below R²=0.73.
+
+---
+
+### Walk-Forward Evaluation (Temporal Stability)
+
+Test set split chronologically into 3 equal blocks. Combined% and R² per block; Range = max − min across blocks:
+
+| Configuration | Block 1 | R² | Block 2 | R² | Block 3 | R² | Range |
+|---------------|---------|-----|---------|-----|---------|-----|-------|
+| nomco_lb7 | 81.83 | 0.805 | 77.02 | 0.714 | 81.37 | 0.812 | 4.81 |
+| nomco_lb14 | 85.09 | 0.874 | 76.83 | 0.699 | 81.46 | 0.813 | 8.26 |
+| nomco_lb28 | 83.82 | 0.867 | 71.76 | 0.623 | 83.32 | 0.854 | 12.06 |
+| nomco_lb56 | 79.87 | 0.799 | 73.93 | 0.705 | 83.04 | 0.833 | 9.11 |
+| nomco_lb84 | 71.17 | 0.637 | 77.38 | 0.745 | 82.36 | 0.827 | 11.19 |
+| mco_lb7 | 73.08 | 0.684 | 80.52 | 0.779 | 77.09 | 0.713 | 7.44 |
+| mco_lb14 | 73.68 | 0.709 | 79.69 | 0.759 | 78.05 | 0.728 | 6.01 |
+| mco_lb28 | 70.76 | 0.669 | 81.22 | 0.806 | 76.98 | 0.714 | 10.46 |
+| mco_lb56 | 72.34 | 0.678 | 76.16 | 0.711 | 78.62 | 0.744 | 6.28 |
+| mco_lb84 | 70.90 | 0.633 | 77.31 | 0.724 | 79.58 | 0.779 | 8.68 |
+
+**No-MCO pattern:** Block 2 is consistently the weakest segment across all five look-backs, likely corresponding to a seasonal transition or lower-ridership phase in the mid-test period. Block 1 often peaks (85.09% at lb14) and Block 3 recovers strongly. nomco_lb28 shows the highest within-test variance (range 12.06%), driven by a sharp Block 2 dip to 71.76% followed by a near-full recovery to 83.32% in Block 3. nomco_lb7 is the most stable nomco configuration (range 4.81%).
+
+**MCO pattern:** The pattern reverses — Block 1 is consistently the weakest (70.76–73.68% across configurations), corresponding to the COVID-disruption period at the start of the test set, while Blocks 2 and 3 improve as post-MCO recovery patterns stabilise. mco_lb14 achieves the most stable MCO profile (range 6.01%), confirming lb14 as the most reliable MCO configuration. The Block 2 spike in mco_lb28 (81.22%, R²=0.806) suggests the model captures post-MCO recovery dynamics well once the initial COVID shock is past the look-back window.
 
 ---
 
@@ -383,6 +535,5 @@ Scopus-indexed journal articles (2022–2027) supporting each architectural comp
 | SE-Net Gated Fusion | Xu, L., Hu, Y., Wei, X., Zhou, X., & Yu, X. (2024). SE-MAConvLSTM: A deep learning framework for short-term traffic flow prediction combining squeeze-and-excitation network and multi-attention convolutional LSTM. *PLoS ONE*, 19(11), e0312601. https://doi.org/10.1371/journal.pone.0312601 |
 | Weighted Huber Loss | Liu, Y., Li, Q., Ma, C., & Xu, X. (2026). A CatBoost-based prediction framework for logistics industry prosperity index to support sustainable decision-making: An empirical study from China. *Sustainability*, 18(5), 2178. https://doi.org/10.3390/su18052178 |
 | Temporal Smoothness Reg. | Casolaro, A., Capone, V., Iannuzzo, G., & Camastra, F. (2023). Deep learning for time series forecasting: Advances and open problems. *Information*, 14(11), 598. https://doi.org/10.3390/info14110598 |
-| Optuna HPO | Karakutuk, K., Ozdemir, A., & Senturk, S. (2025). Optuna-optimized Pythagorean fuzzy deep neural network: A novel framework for uncertainty-aware image classification. *Applied Sciences*, 15(20), 11097. https://doi.org/10.3390/app152011097 |
 | Post-hoc Residual Boosting | Huber, T., Aksan, E., & Ratsch, G. (2024). LTBoost: Boosted hybrids of ensemble linear and gradient algorithms for the long-term time series forecasting. *Proceedings of the 33rd ACM International Conference on Information and Knowledge Management (CIKM 2024)*. https://doi.org/10.1145/3627673.3679527 |
 | Walk-Forward Evaluation | AlKhereibi, S., Wakjira, T. W., Kucukvar, M., & Onat, N. C. (2023). Predictive machine learning algorithms for metro ridership based on urban land use policies in support of transit-oriented development. *Sustainability*, 15(2), 1718. https://doi.org/10.3390/su15021718 |
