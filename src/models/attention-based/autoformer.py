@@ -583,6 +583,161 @@ def plot_per_step_metrics(per_step, out_path):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Fit Diagnostics
+# ══════════════════════════════════════════════════════════════════════════════
+
+def diagnose_fit(
+    train_losses:          list,
+    val_losses:            list,
+    best_epoch:            int,
+    patience:              int,
+    val_drift_threshold:   float = 0.25,
+    gap_overfit_threshold: float = 3.0,
+    early_stop_frac:       float = 0.15,
+) -> dict:
+    """
+    Diagnose overfitting or underfitting from recorded loss curves.
+
+    Three independent signals:
+
+    1. Val drift  (primary) — percentage the val loss rose from its best point to
+                    the final training epoch.  After best_epoch the patience window
+                    runs for `patience` more epochs; some small rise is normal
+                    oscillation.  Only a large rise (> val_drift_threshold = 25%)
+                    indicates genuine degradation after the model's best checkpoint.
+                    This avoids the false-positive issue of slope-based approaches,
+                    which trivially fire on the patience window (val loss can only
+                    be flat-or-rising there by construction).
+
+    2. Gap ratio  (secondary) — best_val_loss / min_train_loss.  Training uses
+                    dropout + input noise, both absent at validation, so train loss
+                    is inherently elevated; the threshold is deliberately conservative
+                    at 3× to avoid false positives from these regularisation effects.
+
+    3. Train-val divergence (secondary) — if training loss is still falling in the
+                    final 10 epochs while val has drifted up significantly, that
+                    indicates classic train/val divergence.
+
+    4. Early stop — best_epoch < 15 % of total epochs → suspiciously fast
+                    convergence (LR overshoot or data scale issue).
+
+    Returns
+    -------
+    dict with keys:
+      verdict        : "overfit" | "underfit" | "good_fit" | "uncertain"
+      val_drift_pct  : float — % rise from best_val to final_val
+      gap_ratio      : float — best_val / min_train
+      val_trend      : "rising" | "flat" | "falling"  (informational only)
+      early_stop     : bool
+      best_epoch     : int
+      total_epochs   : int
+      notes          : list[str]
+    """
+    total = len(train_losses)
+    if total == 0:
+        return {
+            "verdict": "uncertain", "val_drift_pct": None, "gap_ratio": None,
+            "val_trend": None, "early_stop": False,
+            "best_epoch": best_epoch, "total_epochs": 0,
+            "notes": ["No training data recorded."],
+        }
+
+    best_val  = min(val_losses)
+    min_train = min(train_losses)
+    final_val = val_losses[-1]
+
+    # ── Signal 1: Val drift after best checkpoint ────────────────────────────
+    val_drift     = (final_val - best_val) / (best_val + 1e-12)
+    val_drift_pct = val_drift * 100.0
+
+    # ── Signal 2: Gap ratio ──────────────────────────────────────────────────
+    gap_ratio = best_val / (min_train + 1e-12)
+
+    # ── Signal 3: Train still falling while val drifted up? ──────────────────
+    tail_n    = min(10, total)
+    tr_tail   = train_losses[-tail_n:]
+    xs        = np.arange(tail_n, dtype=float)
+    tr_slope  = float(np.polyfit(xs, tr_tail, 1)[0])
+    norm_tr   = tr_slope / (float(np.mean(tr_tail)) + 1e-12)
+    train_still_falling = (norm_tr < -0.01)
+
+    # ── Signal 4: Early stop ─────────────────────────────────────────────────
+    early_stop = best_epoch < early_stop_frac * total
+
+    # ── Val trend (informational — NOT used for verdict) ─────────────────────
+    pre_window = val_losses[max(0, best_epoch - patience): best_epoch]
+    if len(pre_window) >= 3:
+        xs_p = np.arange(len(pre_window), dtype=float)
+        s    = float(np.polyfit(xs_p, pre_window, 1)[0])
+        ns   = s / (float(np.mean(pre_window)) + 1e-12)
+        val_trend = "rising" if ns > 0.005 else ("falling" if ns < -0.005 else "flat")
+    else:
+        val_trend = "flat"
+
+    # ── Verdict ──────────────────────────────────────────────────────────────
+    notes: list = []
+    verdict = "good_fit"
+
+    if val_drift > val_drift_threshold:
+        verdict = "overfit"
+        notes.append(
+            f"Val loss drifted +{val_drift_pct:.1f}% above its best "
+            f"(best={best_val:.5f} → final={final_val:.5f}) — "
+            f"model degraded after epoch {best_epoch}."
+        )
+    else:
+        notes.append(
+            f"Val drift +{val_drift_pct:.1f}% above best — within normal "
+            f"patience-window oscillation (threshold {val_drift_threshold*100:.0f}%)."
+        )
+
+    if gap_ratio > gap_overfit_threshold:
+        if verdict != "overfit":
+            verdict = "overfit"
+        notes.append(
+            f"Val/train gap {gap_ratio:.2f}× exceeds {gap_overfit_threshold:.0f}× "
+            f"(min_train={min_train:.5f}, best_val={best_val:.5f}) — "
+            f"significant memorisation of training data."
+        )
+    else:
+        notes.append(
+            f"Val/train gap {gap_ratio:.2f}× is within the {gap_overfit_threshold:.0f}× threshold "
+            f"(accounts for dropout + input noise during training)."
+        )
+
+    if train_still_falling and val_drift > 0.10:
+        if verdict != "overfit":
+            verdict = "overfit"
+        notes.append(
+            f"Training loss still declining in final {tail_n} epochs while val drifted up "
+            f"+{val_drift_pct:.1f}% — train/val divergence detected."
+        )
+
+    if early_stop:
+        frac_pct = int(100 * best_epoch / total)
+        notes.append(
+            f"Best epoch {best_epoch}/{total} ({frac_pct}%) is early — "
+            f"possible LR overshoot; consider --lr or --warmup-epochs."
+        )
+        if verdict == "good_fit":
+            verdict = "uncertain"
+
+    if verdict == "good_fit":
+        notes.append("No overfitting or underfitting signals detected.")
+
+    return {
+        "verdict":       verdict,
+        "val_drift_pct": round(val_drift_pct, 2),
+        "gap_ratio":     round(gap_ratio, 4),
+        "val_trend":     val_trend,
+        "early_stop":    early_stop,
+        "best_epoch":    best_epoch,
+        "total_epochs":  total,
+        "notes":         notes,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Main
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -680,6 +835,29 @@ def main():
                 break
 
     model.load_state_dict(best_state)
+
+    # ── fit diagnostics ───────────────────────────────────────────────────────
+    fit_diag = diagnose_fit(train_losses, val_losses, best_epoch, args.patience)
+    _verd_label = {
+        "overfit":   "OVERFIT",
+        "underfit":  "UNDERFIT",
+        "good_fit":  "GOOD FIT",
+        "uncertain": "UNCERTAIN",
+    }.get(fit_diag["verdict"], fit_diag["verdict"].upper())
+    print(f"\n{'─'*50}")
+    print(f"Fit Diagnostics  [{_verd_label}]")
+    print(f"  Val drift  : +{fit_diag['val_drift_pct']:.1f}%  "
+          f"(best→final val loss; <25% = normal)")
+    print(f"  Gap ratio  : {fit_diag['gap_ratio']:.2f}×  "
+          f"(best_val / min_train; threshold 3×)")
+    print(f"  Val trend  : {fit_diag['val_trend']}  "
+          f"(pre-best window, informational)")
+    print(f"  Early stop : {'yes' if fit_diag['early_stop'] else 'no'}  "
+          f"(best epoch {best_epoch}/{len(train_losses)})")
+    for _note in fit_diag["notes"]:
+        print(f"  ·  {_note}")
+    print(f"{'─'*50}")
+
     model.eval(); preds_s, trues_s = [], []
     with torch.no_grad():
         for X_b, y_b in test_loader:
@@ -727,6 +905,7 @@ def main():
             "best_epoch": best_epoch, "best_val_loss": round(best_val_loss, 8),
             "total_epochs": len(train_losses),
         },
+        "fit_diagnosis": fit_diag,
         "split_dates": split_meta,
         "test_metrics": {
             "overall":  {k: round(v, 4) for k, v in overall.items()},

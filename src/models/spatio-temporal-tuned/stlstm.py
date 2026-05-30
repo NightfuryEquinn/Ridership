@@ -376,6 +376,82 @@ def plot_per_step_metrics(per_step: list, out_path: str) -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Fit Diagnostics
+# ══════════════════════════════════════════════════════════════════════════════
+
+def diagnose_fit(
+    train_losses:          list,
+    val_losses:            list,
+    best_epoch:            int,
+    patience:              int,
+    val_drift_threshold:   float = 0.25,
+    gap_overfit_threshold: float = 3.0,
+    early_stop_frac:       float = 0.15,
+) -> dict:
+    """Return a fit-quality verdict and supporting statistics."""
+    total = len(train_losses)
+    if total == 0:
+        return {
+            "verdict": "uncertain", "val_drift_pct": None, "gap_ratio": None,
+            "val_trend": None, "early_stop": False,
+            "best_epoch": best_epoch, "total_epochs": 0,
+            "notes": ["No training data recorded."],
+        }
+    best_val  = min(val_losses)
+    min_train = min(train_losses)
+    final_val = val_losses[-1]
+    val_drift     = (final_val - best_val) / (best_val + 1e-12)
+    val_drift_pct = val_drift * 100.0
+    gap_ratio = best_val / (min_train + 1e-12)
+    tail_n    = min(10, total)
+    tr_tail   = train_losses[-tail_n:]
+    xs        = np.arange(tail_n, dtype=float)
+    tr_slope  = float(np.polyfit(xs, tr_tail, 1)[0])
+    norm_tr   = tr_slope / (float(np.mean(tr_tail)) + 1e-12)
+    train_still_falling = (norm_tr < -0.01)
+    early_stop = best_epoch < early_stop_frac * total
+    pre_window = val_losses[max(0, best_epoch - patience): best_epoch]
+    if len(pre_window) >= 3:
+        xs_p = np.arange(len(pre_window), dtype=float)
+        s    = float(np.polyfit(xs_p, pre_window, 1)[0])
+        ns   = s / (float(np.mean(pre_window)) + 1e-12)
+        val_trend = "rising" if ns > 0.005 else ("falling" if ns < -0.005 else "flat")
+    else:
+        val_trend = "flat"
+    notes: list = []
+    verdict = "good_fit"
+    if val_drift > val_drift_threshold:
+        verdict = "overfit"
+        notes.append(f"Val loss drifted +{val_drift_pct:.1f}% above its best ...")
+    else:
+        notes.append(f"Val drift +{val_drift_pct:.1f}% above best — within normal ...")
+    if gap_ratio > gap_overfit_threshold:
+        if verdict != "overfit": verdict = "overfit"
+        notes.append(f"Val/train gap {gap_ratio:.2f}× exceeds ...")
+    else:
+        notes.append(f"Val/train gap {gap_ratio:.2f}× is within the {gap_overfit_threshold:.0f}× threshold ...")
+    if train_still_falling and val_drift > 0.10:
+        if verdict != "overfit": verdict = "overfit"
+        notes.append(f"Training loss still declining in final {tail_n} epochs ...")
+    if early_stop:
+        frac_pct = int(100 * best_epoch / total)
+        notes.append(f"Best epoch {best_epoch}/{total} ({frac_pct}%) is early ...")
+        if verdict == "good_fit": verdict = "uncertain"
+    if verdict == "good_fit":
+        notes.append("No overfitting or underfitting signals detected.")
+    return {
+        "verdict":       verdict,
+        "val_drift_pct": round(val_drift_pct, 2),
+        "gap_ratio":     round(gap_ratio, 4),
+        "val_trend":     val_trend,
+        "early_stop":    early_stop,
+        "best_epoch":    best_epoch,
+        "total_epochs":  total,
+        "notes":         notes,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Main
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -486,6 +562,28 @@ def main():
 
     model.load_state_dict(best_state)
 
+    # ── fit diagnostics ───────────────────────────────────────────────────────
+    fit_diag = diagnose_fit(train_losses, val_losses, best_epoch, args.patience)
+    _verd_label = {
+        "overfit":   "OVERFIT",
+        "underfit":  "UNDERFIT",
+        "good_fit":  "GOOD FIT",
+        "uncertain": "UNCERTAIN",
+    }.get(fit_diag["verdict"], fit_diag["verdict"].upper())
+    print(f"\n{'─'*50}")
+    print(f"Fit Diagnostics  [{_verd_label}]")
+    print(f"  Val drift  : +{fit_diag['val_drift_pct']:.1f}%  "
+          f"(best→final val loss; <25% = normal)")
+    print(f"  Gap ratio  : {fit_diag['gap_ratio']:.2f}×  "
+          f"(best_val / min_train; threshold 3×)")
+    print(f"  Val trend  : {fit_diag['val_trend']}  "
+          f"(pre-best window, informational)")
+    print(f"  Early stop : {'yes' if fit_diag['early_stop'] else 'no'}  "
+          f"(best epoch {best_epoch}/{len(train_losses)})")
+    for _note in fit_diag["notes"]:
+        print(f"  ·  {_note}")
+    print(f"{'─'*50}")
+
     # ── Collect predictions ───────────────────────────────────────────────────
     model.eval()
     preds_s, trues_s = [], []
@@ -570,6 +668,7 @@ def main():
             "best_val_loss": round(best_val_loss, 8),
             "total_epochs":  len(train_losses),
         },
+        "fit_diagnosis": fit_diag,
         "split_dates": split_meta,
         "test_metrics": {
             "overall":  {k: round(v, 4) for k, v in overall.items()},
