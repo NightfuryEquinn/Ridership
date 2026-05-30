@@ -181,22 +181,25 @@ def load_model(run: dict, device: torch.device) -> HMTTSFForecaster:
 
     hp = run["hparams"]
     sd = run["split_dates"]
+    n_temporal_feats = (sd.get("temporal_feat_end", 29)
+                        - sd.get("temporal_feat_start", 13))
 
     model = HMTTSFForecaster(
-        n_features   = hp["n_features"],
-        T_in         = hp["T_in"],
-        T_out        = T_OUT,
-        adj          = adj,
-        d_model      = hp["d_model"],
-        n_tcn_blocks = hp["n_tcn_blocks"],
-        tcn_kernel   = hp.get("tcn_kernel", 3),
-        graph_hidden = hp["graph_hidden"],
-        n_regimes    = hp["n_regimes"],
-        n_attn_heads = hp.get("n_attn_heads", 4),
-        dropout      = hp["dropout"],
-        drop_path    = hp.get("drop_path", 0.1),
-        target_idx   = sd.get("target_col_idx", 12),
-        use_revin    = hp.get("use_revin", True),
+        n_features       = hp["n_features"],
+        T_in             = hp["T_in"],
+        T_out            = T_OUT,
+        adj              = adj,
+        d_model          = hp["d_model"],
+        n_tcn_blocks     = hp["n_tcn_blocks"],
+        tcn_kernel       = hp.get("tcn_kernel", 3),
+        graph_hidden     = hp["graph_hidden"],
+        n_regimes        = hp["n_regimes"],
+        n_attn_heads     = hp.get("n_attn_heads", 4),
+        dropout          = hp["dropout"],
+        drop_path        = hp.get("drop_path", 0.1),
+        target_idx       = sd.get("target_col_idx", 12),
+        use_revin        = hp.get("use_revin", True),
+        n_temporal_feats = n_temporal_feats,
     ).to(device)
 
     model.load_state_dict(state)
@@ -242,7 +245,7 @@ _TEMPORAL_UPDATERS: dict[str, object] = {
 def _extend_df(df: pd.DataFrame, up_to: pd.Timestamp) -> pd.DataFrame:
     """
     Extend df beyond its last date up to `up_to` by:
-      - Forward-filling every column from the last available row.
+      - Filling every column with the mean of the last 14 known days.
       - Overwriting deterministic temporal columns with correct values.
 
     Returns a new DataFrame covering df.index.min() through `up_to`.
@@ -252,11 +255,11 @@ def _extend_df(df: pd.DataFrame, up_to: pd.Timestamp) -> pd.DataFrame:
         return df  # nothing to extend
 
     extra_dates = pd.date_range(last_csv + timedelta(days=1), up_to, freq="D")
-    last_row    = df.iloc[-1].copy()
+    base_row    = df.iloc[-14:].mean()
 
     extra_rows = []
     for dt in extra_dates:
-        row = last_row.copy()
+        row = base_row.copy()
         for col, fn in _TEMPORAL_UPDATERS.items():
             if col in row.index:
                 row[col] = fn(dt)
@@ -316,19 +319,61 @@ def get_feature_window(
 # Inference
 # ══════════════════════════════════════════════════════════════════════════════
 
+def build_future_temporal(
+    df: pd.DataFrame,
+    forecast_dates: list,
+    scaler_X,
+    temporal_start: int = 13,
+    temporal_end: int = 29,
+) -> torch.Tensor:
+    """
+    Build the (1, T_out, n_temporal) future temporal conditioning tensor for the
+    forecast dates, applying the same MinMaxScaler used for training.
+
+    For dates within features_aligned.csv the actual calendar values are used.
+    For dates beyond the CSV end, _extend_df recomputes deterministic features
+    (day-of-week, sin/cos, weekend, month). Holiday flags are forward-filled
+    from the last known row (they are unknown for truly future dates).
+
+    Passing this to the model activates FutureTemporalProjection so that the
+    7-step output varies by weekday/weekend rather than being flat.
+    """
+    last_forecast = max(forecast_dates)
+    df_ext = _extend_df(df, last_forecast)
+
+    raw = np.array(
+        [df_ext.loc[dt].values[temporal_start:temporal_end] for dt in forecast_dates],
+        dtype=np.float32,
+    )   # (T_out, n_temporal)
+
+    # Apply the same MinMaxScaler transform: X_scaled = X * scale_ + min_
+    scale = scaler_X.scale_[temporal_start:temporal_end].astype(np.float32)
+    min_  = scaler_X.min_[temporal_start:temporal_end].astype(np.float32)
+    scaled = raw * scale + min_   # (T_out, n_temporal)
+
+    return torch.from_numpy(scaled).unsqueeze(0)   # (1, T_out, n_temporal)
+
+
 def run_inference(
     model: HMTTSFForecaster,
     X: torch.Tensor,
     scaler_y,
     device: torch.device,
+    x_future: torch.Tensor | None = None,
 ) -> np.ndarray:
     """
     Forward pass → inverse-scale → (T_out,) array of total ridership forecasts.
     Negative predictions are clipped to 0 (possible at RevIN distribution tails).
+
+    x_future: (1, T_out, n_temporal) future calendar features built by
+    build_future_temporal(). Activates FutureTemporalProjection so the model
+    produces weekday/weekend-varying predictions rather than a flat sequence.
     """
     X = X.to(device)
+    if x_future is not None:
+        x_future = x_future.to(device)
     with torch.no_grad():
-        y_scaled = model(X)                         # (1, T_out)  MinMax space
+        y_scaled = model(X, x_future)               # (1, T_out)  MinMax space
 
     y_np   = y_scaled.cpu().numpy().flatten()       # (T_out,)
     y_pred = scaler_y.inverse_transform(            # inverse MinMax → ridership
@@ -601,10 +646,10 @@ def main() -> None:
         epilog=__doc__,
     )
     p.add_argument(
-        "--lookback", type=int, default=84, choices=list(SEQ_DIR_MAP),
+        "--lookback", type=int, default=14, choices=list(SEQ_DIR_MAP),
         metavar="{" + ",".join(str(k) for k in SEQ_DIR_MAP) + "}",
         help=f"Look-back window in days. A trained model must exist for this value. "
-             f"(default: 84)",
+             f"(default: 14 — the best-performing HMT-TSF config, nomco Combined%%=81.46)",
     )
     p.add_argument(
         "--start-date", type=str, default=None, metavar="YYYY-MM-DD",
@@ -680,12 +725,20 @@ def main() -> None:
     if n_synth > 0:
         print(
             f"[inference]  WARNING: {n_synth} day(s) beyond CSV end ({csv_end.date()}) "
-            f"were synthesised by forward-filling the last known row.\n"
+            f"were synthesised using the mean of the last 14 known days.\n"
             f"             Temporal features (year/month/day_of_week/sin-cos/is_weekend) "
             f"are exact.\n"
             f"             Ridership, lag, fuel, rainfall, and static features "
-            f"are held at their {csv_end.date()} values."
+            f"are averaged over the 14 days ending {csv_end.date()}."
         )
+
+    # ── build future temporal conditioning ───────────────────────────────
+    sd = run["split_dates"]
+    t_start = sd.get("temporal_feat_start", 13)
+    t_end   = sd.get("temporal_feat_end", 29)
+    x_future = build_future_temporal(df, forecast_dates, scaler_X, t_start, t_end)
+    print(f"[inference]  future temporal conditioning: {tuple(x_future.shape)}  "
+          f"(cols {t_start}–{t_end - 1}, day-of-week/weekend/holiday/sin-cos)")
 
     # ── load model ────────────────────────────────────────────────────────
     print(f"[inference]  loading model from {run['run_dir']} …")
@@ -693,7 +746,7 @@ def main() -> None:
 
     # ── forward pass ──────────────────────────────────────────────────────
     print(f"[inference]  running inference …")
-    total_pred = run_inference(model, X, scaler_y, device)
+    total_pred = run_inference(model, X, scaler_y, device, x_future=x_future)
 
     # ── historical shares ─────────────────────────────────────────────────
     print(f"[inference]  computing {args.hist_year} service shares …")

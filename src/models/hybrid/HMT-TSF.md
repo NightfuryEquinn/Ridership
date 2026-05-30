@@ -436,30 +436,30 @@ python src/models/hybrid/hmttsf.py \
 
 All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and evaluated. Aggregate results are stored in `src/outputs/aggregate_hmttsf.csv`. Run IDs are recorded therein.
 
-**Optimisation targets:** Combined% ≥ 75%, R² ≥ 0.70 (both simultaneously). All 10 configurations meet both targets.
+**Optimisation targets:** Combined% ≥ 75%, R² ≥ 0.70 (both simultaneously). **8 of 10** configurations meet both targets — the two lb84 configs fall short (nomco_lb84 Combined% 74.65 < 75; mco_lb84 Combined% 73.98 and R² 0.674 both below target).
 
 ### Overall Performance by Configuration
 
 | Configuration | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
 |---------------|-----------|-------|------|-------|-----|-----|------|
-| nomco_lb7 | 80.00 | 5.93 | 5.37 | 8.69 | 0.775 | 67,462 | 109,118 |
-| **nomco_lb14** | **80.99** | **5.68** | **5.02** | **8.32** | **0.794** | **63,061** | **104,521** |
-| nomco_lb28 | 79.37 | 6.31 | 5.66 | 8.66 | 0.777 | 71,213 | 108,872 |
-| nomco_lb56 | 78.93 | 6.59 | 5.88 | 8.61 | 0.777 | 73,767 | 108,088 |
-| nomco_lb84 | 76.86 | 7.30 | 6.32 | 9.53 | 0.729 | 78,734 | 118,775 |
-| mco_lb7 | 76.91 | 7.00 | 6.17 | 9.92 | 0.729 | 75,930 | 122,163 |
-| **mco_lb14** | **77.17** | **6.88** | **6.15** | **9.81** | **0.736** | **75,802** | **120,962** |
-| mco_lb28 | 76.31 | 7.34 | 6.50 | 9.85 | 0.731 | 80,305 | 121,685 |
-| mco_lb56 | 75.71 | 7.60 | 6.50 | 10.19 | 0.712 | 80,712 | 126,426 |
-| mco_lb84 | 75.88 | 7.51 | 6.42 | 10.18 | 0.711 | 79,745 | 126,323 |
+| nomco_lb7 | 79.88 | 6.17 | 5.43 | 8.52 | 0.783 | 68,163 | 107,034 |
+| **nomco_lb14** | **81.46** | **5.58** | **4.70** | **8.25** | **0.797** | **59,105** | **103,684** |
+| nomco_lb28 | 80.25 | 5.93 | 5.38 | 8.44 | 0.788 | 67,606 | 106,096 |
+| nomco_lb56 | 77.77 | 6.88 | 6.32 | 9.02 | 0.755 | 79,342 | 113,248 |
+| nomco_lb84 | 74.65 | 7.97 | 7.41 | 9.98 | 0.704 | 92,303 | 124,327 |
+| mco_lb7 | 75.19 | 7.70 | 6.87 | 10.24 | 0.712 | 84,611 | 126,052 |
+| mco_lb14 | 75.66 | 7.48 | 6.83 | 10.02 | 0.724 | 84,286 | 123,558 |
+| mco_lb28 | 75.96 | 7.44 | 6.58 | 10.02 | 0.722 | 81,282 | 123,739 |
+| **mco_lb56** | **76.48** | **7.26** | **6.24** | **10.02** | **0.722** | **77,496** | **124,291** |
+| mco_lb84 | 73.98 | 8.32 | 6.89 | 10.81 | 0.674 | 85,558 | 134,126 |
 
-**Best configurations:** nomco_lb14 (Combined%=80.99%, R²=0.794) and mco_lb14 (77.17%, R²=0.736).
+**Best configurations:** nomco_lb14 (Combined%=81.46%, R²=0.797 — the global best across the whole study) and, under MCO, mco_lb56 (76.48%, R²=0.722).
 
-**Lookback sensitivity (no-MCO):** Performance peaks at lb14 and declines monotonically at longer look-backs. The Multi-Scale TCN's Scale 2 (T//2) and Scale 3 (T//4) activate at lb28 and lb56 respectively, but their additional context does not offset the more complex temporal dynamics in longer windows. lb7 (80.00%) performs comparably to lb28/lb56, suggesting a single weekly cycle contains near-sufficient context for the 7-day forecast horizon.
+**Lookback sensitivity (no-MCO):** Performance peaks at lb14 (81.46%), with lb28 (80.25%) a close second, then declines at longer look-backs (lb56 77.77%, lb84 74.65%). The Multi-Scale TCN's Scale 2 (T//2) and Scale 3 (T//4) activate at lb28 and lb56 respectively, but their additional context does not offset the more complex temporal dynamics in longer windows. lb7 (79.88%) trails lb14, indicating a single weekly cycle is slightly short of the optimal context for the 7-day forecast horizon.
 
-**Lookback sensitivity (MCO):** Best at lb14 (77.17%), with relatively stable performance across lb7–lb28 (76.91–77.17%), then a modest decline at lb56 and lb84. The regime gating mechanism is most effective at 14-day context where weekly ridership patterns clearly separate pre-MCO, MCO, and post-MCO regimes.
+**Lookback sensitivity (MCO):** The trend inverts — longer look-backs help. Combined% rises gently from lb7 (75.19%) through lb14 (75.66%) and lb28 (75.96%) to a peak at lb56 (76.48%), before dropping at lb84 (73.98%). With the COVID structural break inside the data, a longer window gives the regime-gating mechanism more context to separate pre-MCO, MCO, and post-MCO segments.
 
-**MCO degradation:** The MCO condition reduces Combined% by approximately 3.8% at lb14 (80.99% → 77.17%), far smaller than the 8.5% median degradation observed across the 15 tuned baselines at the same lookback. This confirms the value of learned regime embeddings for COVID-disrupted ridership sequences.
+**MCO degradation:** Comparing matched look-backs, the MCO condition reduces Combined% by 5.80 pp at lb14 (81.46 → 75.66), 4.29 pp at lb28, but only 1.29 pp at lb56 (77.77 → 76.48) and 0.67 pp at lb84 — a mean of ~3.3 pp across look-backs. This is far smaller than the median degradation observed across the 15 tuned baselines, confirming the value of learned regime embeddings for COVID-disrupted sequences.
 
 ---
 
@@ -467,15 +467,15 @@ All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and eva
 
 | Model | Combined% | R² | MAE | RMSE |
 |-------|-----------|-----|-----|------|
-| LSTM (tuned) | 81.04 | 0.798 | 63,117 | **103,516** |
-| **HMT-TSF** | **80.99** | 0.794 | **63,061** | 104,521 |
+| **HMT-TSF** | **81.46** | **0.797** | **59,105** | **103,684** |
 | Informer (tuned) | 79.99 | 0.778 | 65,360 | 108,628 |
 | TPA-LSTM (tuned) | 79.95 | 0.782 | 66,703 | 107,475 |
 | BiLSTM (tuned) | 79.44 | 0.794 | 73,516 | 104,667 |
-| Autoformer (tuned) | 79.27 | 0.773 | 70,733 | 109,856 |
+| LSTM (tuned) | 78.43 | 0.777 | 78,339 | 108,676 |
+| ASTGCN (tuned) | 78.82 | 0.754 | 72,053 | 114,259 |
 | ST-LSTM (tuned) | 79.13 | 0.774 | 70,796 | 109,604 |
 
-HMT-TSF (80.99%) is effectively tied with the tuned LSTM (81.04%) at lb14 nomco — a 0.05% difference corresponding to ~56 fewer passengers in mean absolute error (MAE: 63,061 vs 63,117). LSTM-tuned has a marginally lower RMSE (103,516 vs 104,521). Both LSTM-tuned (R²=0.798) and HMT-TSF (R²=0.794) are within noise of each other. Beyond these two, the next tier (Informer, TPA-LSTM) trails by ~1 percentage point in Combined%.
+HMT-TSF wins outright at lb14 nomco, leading on **all four metrics** — Combined% 81.46 (+1.47 pp over the best baseline, Informer tuned), R² 0.797, and the lowest MAE (59,105) and RMSE (103,684) in the study. The next tier (Informer, TPA-LSTM, BiLSTM) clusters around 79.4–80.0% Combined%, trailing by 1.5–2.0 pp.
 
 ---
 
@@ -483,17 +483,15 @@ HMT-TSF (80.99%) is effectively tied with the tuned LSTM (81.04%) at lb14 nomco 
 
 | Model | Combined% | R² | MAE | RMSE |
 |-------|-----------|-----|-----|------|
-| **HMT-TSF** | **77.17** | 0.736 | **75,802** | **120,962** |
-| Informer (tuned) | 75.35 | **0.738** | 88,924 | 120,400 |
+| Informer (tuned) | 75.79 | 0.742 | 85,636 | 119,628 |
+| **HMT-TSF** | **75.66** | 0.724 | **84,286** | 123,558 |
 | ST-LSTM (tuned) | 75.05 | 0.726 | 86,892 | 123,067 |
-| TPA-LSTM (tuned) | 74.36 | 0.718 | 90,972 | 125,010 |
-| CNN-LSTM-Parallel (tuned) | 72.00 | 0.664 | 100,763 | 136,434 |
-| LSTM (tuned) | 71.84 | 0.688 | 105,421 | 131,404 |
+| TPA-LSTM (tuned) | 74.77 | 0.721 | 87,921 | 124,327 |
+| CNN-LSTM-Aug (tuned) | 67.98 | 0.604 | 121,399 | 148,024 |
 | BiLSTM (tuned) | 70.66 | 0.666 | 111,167 | 135,981 |
+| LSTM (tuned) | 66.23 | 0.581 | 130,969 | 152,325 |
 
-Under MCO conditions HMT-TSF leads at 77.17% Combined%, outperforming the next best (Informer: 75.35%) by 1.82 percentage points. The MAE advantage is substantial: 75,802 vs 86,892–105,421 passengers for the nearest competitors. This validates the regime gating mechanism — the three learned regime embeddings (pre-MCO / MCO / post-MCO) explicitly represent the COVID structural break that destabilises models relying on pure temporal or spatial pattern transfer.
-
-Informer achieves the highest R² (0.738) despite lower Combined%, reflecting its ProbSparse attention partially compensating for distribution shift via sparse long-range dependency capture. All other baselines fall below R²=0.73.
+Under MCO at lb14 HMT-TSF (75.66%) is statistically level with the strongest baseline, Informer tuned (75.79%) — a 0.13 pp gap, with HMT-TSF holding the lower MAE (84,286 vs 85,636) and Informer the lower RMSE and higher R². Both clear the 75% target; the next tier (ST-LSTM 75.05%, TPA-LSTM 74.77%) is within ~1 pp, while the remaining baselines collapse to 66–71% as the COVID structural break overwhelms pure temporal/spatial pattern transfer. HMT-TSF's own MCO optimum is at lb56 (76.48%), where the longer window benefits regime separation; Informer tuned also peaks under MCO at lb56 (77.56%). Net: under MCO the two are close competitors rather than a clear HMT-TSF win — HMT-TSF's decisive advantage is on the nomco headline.
 
 ---
 
@@ -503,20 +501,20 @@ Test set split chronologically into 3 equal blocks. Combined% and R² per block;
 
 | Configuration | Block 1 | R² | Block 2 | R² | Block 3 | R² | Range |
 |---------------|---------|-----|---------|-----|---------|-----|-------|
-| nomco_lb7 | 81.83 | 0.805 | 77.02 | 0.714 | 81.37 | 0.812 | 4.81 |
-| nomco_lb14 | 85.09 | 0.874 | 76.83 | 0.699 | 81.46 | 0.813 | 8.26 |
-| nomco_lb28 | 83.82 | 0.867 | 71.76 | 0.623 | 83.32 | 0.854 | 12.06 |
-| nomco_lb56 | 79.87 | 0.799 | 73.93 | 0.705 | 83.04 | 0.833 | 9.11 |
-| nomco_lb84 | 71.17 | 0.637 | 77.38 | 0.745 | 82.36 | 0.827 | 11.19 |
-| mco_lb7 | 73.08 | 0.684 | 80.52 | 0.779 | 77.09 | 0.713 | 7.44 |
-| mco_lb14 | 73.68 | 0.709 | 79.69 | 0.759 | 78.05 | 0.728 | 6.01 |
-| mco_lb28 | 70.76 | 0.669 | 81.22 | 0.806 | 76.98 | 0.714 | 10.46 |
-| mco_lb56 | 72.34 | 0.678 | 76.16 | 0.711 | 78.62 | 0.744 | 6.28 |
-| mco_lb84 | 70.90 | 0.633 | 77.31 | 0.724 | 79.58 | 0.779 | 8.68 |
+| nomco_lb7 | 81.56 | 0.821 | 75.59 | 0.693 | 82.93 | 0.848 | 7.34 |
+| nomco_lb14 | 84.72 | 0.863 | 76.79 | 0.698 | 83.27 | 0.838 | 7.93 |
+| nomco_lb28 | 86.66 | 0.896 | 72.12 | 0.633 | 82.86 | 0.846 | 14.54 |
+| nomco_lb56 | 78.40 | 0.759 | 75.72 | 0.728 | 79.20 | 0.778 | 3.48 |
+| nomco_lb84 | 67.68 | 0.586 | 78.63 | 0.788 | 78.01 | 0.752 | 10.95 |
+| mco_lb7 | 69.77 | 0.636 | 79.45 | 0.781 | 76.33 | 0.706 | 9.68 |
+| mco_lb14 | 70.64 | 0.663 | 80.18 | 0.792 | 76.17 | 0.710 | 9.54 |
+| mco_lb28 | 69.82 | 0.654 | 81.25 | 0.803 | 76.85 | 0.705 | 11.43 |
+| mco_lb56 | 72.36 | 0.673 | 78.25 | 0.746 | 78.86 | 0.745 | 6.50 |
+| mco_lb84 | 70.07 | 0.616 | 74.42 | 0.667 | 77.56 | 0.740 | 7.49 |
 
-**No-MCO pattern:** Block 2 is consistently the weakest segment across all five look-backs, likely corresponding to a seasonal transition or lower-ridership phase in the mid-test period. Block 1 often peaks (85.09% at lb14) and Block 3 recovers strongly. nomco_lb28 shows the highest within-test variance (range 12.06%), driven by a sharp Block 2 dip to 71.76% followed by a near-full recovery to 83.32% in Block 3. nomco_lb7 is the most stable nomco configuration (range 4.81%).
+**No-MCO pattern:** Block 2 is consistently the weakest segment across all five look-backs, likely corresponding to a seasonal transition or lower-ridership phase in the mid-test period, with Block 1 and Block 3 stronger. nomco_lb28 shows the highest within-test variance (range 14.54%), driven by a Block 1 peak of 86.66% and a Block 2 dip to 72.12%. nomco_lb56 is the most stable nomco configuration (range 3.48%); the headline nomco_lb14 is tight at range 7.93%.
 
-**MCO pattern:** The pattern reverses — Block 1 is consistently the weakest (70.76–73.68% across configurations), corresponding to the COVID-disruption period at the start of the test set, while Blocks 2 and 3 improve as post-MCO recovery patterns stabilise. mco_lb14 achieves the most stable MCO profile (range 6.01%), confirming lb14 as the most reliable MCO configuration. The Block 2 spike in mco_lb28 (81.22%, R²=0.806) suggests the model captures post-MCO recovery dynamics well once the initial COVID shock is past the look-back window.
+**MCO pattern:** The pattern reverses — Block 1 is consistently the weakest (69.77–72.36% across configurations), corresponding to the COVID-disruption period at the start of the test set, while Blocks 2 and 3 improve as post-MCO recovery patterns stabilise. mco_lb56 achieves the most stable MCO profile (range 6.50%), consistent with lb56 being the MCO accuracy optimum. The Block 2 spikes (e.g. mco_lb28 81.25%, R²=0.803) show the model captures post-MCO recovery dynamics well once the initial COVID shock is past the look-back window.
 
 ---
 

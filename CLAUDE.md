@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> Last updated: 2026-05-27
+> Last updated: 2026-05-30
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -78,7 +78,7 @@ Each model script docstring includes a `References` section citing one Scopus-in
 HMT-TSF is in `src/models/hybrid/`. Run from the repo root:
 
 ```bash
-# Default (lookback=14, d_model=128, 3 TCN blocks)
+# Default (lookback=14, d_model=64, 3 TCN blocks)
 python src/models/hybrid/hmttsf.py
 
 # Longer lookback with larger model
@@ -105,7 +105,7 @@ HMT-TSF-specific flags (in addition to the shared flags below):
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--d-model {64,128,192,256}` | `128` | Model hidden dimension |
+| `--d-model {64,128,192,256}` | `64` | Model hidden dimension |
 | `--n-tcn-blocks N` | `3` | TCN blocks per scale |
 | `--graph-hidden {32,64,128}` | `64` | GCN hidden dimension |
 | `--n-regimes N` | `3` | Regime embedding count |

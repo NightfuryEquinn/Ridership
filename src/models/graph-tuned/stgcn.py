@@ -8,8 +8,7 @@ Key Features:
 
 Tuned Hyperparameters:
   hidden   : 128 → 256   low Combined% → larger capacity
-  n_blocks : 2   → 3     deeper temporal receptive field
-  kt       : 3   → 2     required: n_blocks=3, T_in=14, kt=3 → T_after=0; kt=2 → T_after=7 ✓
+  kt       : 3   → 2     required: n_blocks=2, T_in=14, kt=3 → T_after=0; kt=2 → T_after=7 ✓
   dropout  : 0.1 → 0.15  low variance → light regularisation increase
 
 Architecture:
@@ -79,7 +78,7 @@ def parse_args():
                    help="Chebyshev polynomial order K")
     p.add_argument("--kt",                type=int,   default=3,
                    help="Temporal conv kernel size")
-    p.add_argument("--n-blocks",          type=int,   default=3,
+    p.add_argument("--n-blocks",          type=int,   default=2,
                    help="Number of ST-Conv blocks")
     p.add_argument("--adj-threshold",     type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge")

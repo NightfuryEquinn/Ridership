@@ -1,25 +1,26 @@
 # Malaysian Transit Ridership Forecasting Research
 
-> Last updated: 2026-05-27
+> Last updated: 2026-05-30
 
 Masters Final Year Project comparing 15 deep-learning models for Malaysian public transit ridership forecasting across three model series using 8 spatio-temporal feature sources.
 
 ## Key Results
 
-Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7** (both must be met simultaneously).
+Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7** (both must be met simultaneously). Headline ranking uses the **no-MCO (nomco) · lb14** configuration; MCO-inclusive results are reported as a structural-break robustness check.
 
-**Peak result — highest Combined% and R² achieved together:**
+**Peak result — highest Combined% and R² achieved together (nomco · lb14):**
 
-| Model | Config | Combined% | R² | Exceeds targets? |
-|-------|--------|-----------|----|-----------------|
-| **LSTM (tuned)** | tuned · nomco · lb14 | **81.04%** | **0.798** | Yes — both |
-| Informer (tuned) | tuned · nomco · lb28 | 80.08% | 0.785 | Yes — both |
-| **HMT-TSF** | nomco · lb14 | **80.04%** | **0.783** | Yes — both |
-| TPA-LSTM (tuned) | tuned · nomco · lb14 | 79.95% | 0.782 | Yes — both |
+| Model | Config | Combined% | R² | MAE | RMSE | Exceeds targets? |
+|-------|--------|-----------|----|-----|------|-----------------|
+| **HMT-TSF** | nomco · lb14 | **81.46%** | **0.797** | **59,105** | **103,684** | Yes — both |
+| Informer (tuned) | tuned · nomco · lb14 | 79.99% | 0.778 | 65,360 | 108,628 | Yes — both |
+| TPA-LSTM (tuned) | tuned · nomco · lb14 | 79.95% | 0.782 | 66,703 | 107,475 | Yes — both |
+| BiLSTM (tuned) | tuned · nomco · lb14 | 79.44% | 0.794 | 73,516 | 104,667 | Yes — both |
+| ST-LSTM (tuned) | tuned · nomco · lb14 | 79.13% | 0.774 | 70,796 | 109,604 | Yes — both |
 
-**LSTM (tuned · nomco · lb14) is the single best result on both metrics simultaneously** — Combined% = 81.04% and R² = 0.798. Among the 17 baseline models, **Informer** is the most consistent (mean Combined% = 76.93%, std dev = 2.45 pp), winning 8 of 12 configuration matchups and maintaining a MCO-regime floor of 72.62%. Full analysis is in [`src/outputs/RESULTS.md`](src/outputs/RESULTS.md).
+**HMT-TSF (nomco · lb14) is the single best result and wins on all four metrics simultaneously** — Combined% = 81.46%, R² = 0.797, lowest MAE (59,105) and lowest RMSE (103,684). It is the global best across every model/config in the study, clearing the best baseline (Informer tuned, 79.99%) by ~1.5 pp. Among the 17 baselines, **Informer** is the most consistent family (mean Combined% ≈ 76.9% across its 12 configs) and the strongest baseline under MCO. Full analysis is in [`src/outputs/RESULTS.md`](src/outputs/RESULTS.md).
 
-**HMT-TSF (Hybrid SOTA)** achieves the best overall consistency across both nomco and MCO conditions: 10-config mean **77.30%**, std dev **1.55 pp**, and 9/10 configurations clearing both study targets. It is the top model for MCO-inclusive deployment (best at mco·lb14 and mco·lb28, surpassing Informer tuned) and the only model with a nomco→mco degradation below 2 pp. Full analysis is in [`src/outputs/HMT-TSF-RESULTS.md`](src/outputs/HMT-TSF-RESULTS.md).
+**HMT-TSF (Hybrid SOTA)** spans 10 configs (nomco + mco × lb7/14/28/56/84): nomco mean **78.80%**, MCO mean **75.45%**, with **8/10** configs clearing both study targets (only the two lb84 configs fall short). Its mean nomco→mco degradation is just **~3.3 pp** (1.3 pp at lb56, 0.7 pp at lb84) versus a far larger median drop across the tuned baselines — confirming the value of its learned regime embeddings. Under MCO at lb14 it is statistically level with Informer tuned (75.66% vs 75.79%); HMT-TSF's decisive advantage is on the nomco headline. Full analysis is in [`src/outputs/HMT-TSF-RESULTS.md`](src/outputs/HMT-TSF-RESULTS.md).
 
 ---
 
@@ -162,7 +163,7 @@ python src/models/attention-based/informer.py
 HMT-TSF is a purpose-built hybrid that fuses three parallel encoders (Multi-Scale TCN, Feature GCN, Regime Gating) with a gated combiner and an optional post-hoc residual boosting stage:
 
 ```bash
-# Default run (lookback=14, d_model=128, 3 TCN blocks)
+# Default run (lookback=14, d_model=64, 3 TCN blocks)
 python src/models/hybrid/hmttsf.py
 
 # Longer lookback with more TCN depth
@@ -238,7 +239,7 @@ All models accept these arguments:
 - Model-specific hyperparameters (see each script's docstring)
 
 **HMT-TSF additional arguments:**
-- `--d-model {64,128,192,256}`: Model dimension (default: `128`)
+- `--d-model {64,128,192,256}`: Model dimension (default: `64`)
 - `--n-tcn-blocks N`: Number of TCN blocks per scale (default: `3`)
 - `--graph-hidden {32,64,128}`: GCN hidden dimension (default: `64`)
 - `--n-regimes N`: Number of regime embeddings (default: `3`)
