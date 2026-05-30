@@ -77,15 +77,15 @@ def parse_args():
                    help="Temporal conv kernel size (reduced from 3 to satisfy T_after>0 with n_blocks=3)")
     p.add_argument("--n-blocks",           type=int,   default=3,
                    help="Number of PDR-ST-Conv blocks")
-    p.add_argument("--period",             type=int,   default=14,
+    p.add_argument("--period",             type=int,   default=7,
                    help="Periodic lag for difference encoding (default=7 for weekly)")
-    p.add_argument("--dk",                 type=int,   default=128,
+    p.add_argument("--dk",                 type=int,   default=64,
                    help="Key/Query dimension for dynamic attention graph")
     p.add_argument("--adj-threshold",      type=float, default=0.1,
                    help="Min abs Pearson correlation to keep an edge")
-    p.add_argument("--dropout",            type=float, default=0.20,
+    p.add_argument("--dropout",            type=float, default=0.25,
                    help="Dropout on graph conv output")
-    p.add_argument("--weight-decay",       type=float, default=1e-4,
+    p.add_argument("--weight-decay",       type=float, default=2e-4,
                    help="Adam weight decay")
     p.add_argument("--batch-size",         type=int,   default=32)
     p.add_argument("--epochs",             type=int,   default=150)
@@ -880,10 +880,6 @@ def main():
             k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall
         }
 
-    results["comparison"] = comparison
-    with open(f"{out_dir}/results.json", "w") as f:
-        json.dump(results, f, indent=2)
-
     # ── Naive persistence baseline ────────────────────────────────────────────
     target_idx   = split_meta.get("target_col_idx", 0)
     last_obs_s   = X_te[:, -1, target_idx:target_idx+1].cpu().numpy()
@@ -897,11 +893,21 @@ def main():
     naive  = compute_metrics(y_true.flatten(), naive_pred.flatten())
     d_comb = overall["Combined"] - naive["Combined"]
     d_mape = naive["MAPE"] - overall["MAPE"]
+    d_r2   = overall["R2"] - naive["R2"]
     print(f"\n  Naive persistence  "
           f"Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  "
           f"R²={naive['R2']:.4f}")
     print(f"  PDR-STGCN (Tuned) vs naive  "
-          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
+          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%  ΔR²={d_r2:+.4f}")
+    results["naive_persistence"] = {
+        "metrics":        {k: round(v, 4) for k, v in naive.items()},
+        "delta_combined": round(d_comb, 4),
+        "delta_mape":     round(d_mape, 4),
+        "delta_r2":       round(d_r2,   4),
+    }
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":

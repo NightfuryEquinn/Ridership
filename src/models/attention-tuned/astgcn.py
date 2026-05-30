@@ -690,9 +690,6 @@ def main():
     for name, m_overall, _, __ in models_data[:-1]:
         key = name.lower().replace("-", "_").replace(" ", "_")
         comparison[f"delta_vs_{key}"] = {k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall}
-    results["comparison"] = comparison
-    with open(f"{out_dir}/results.json", "w") as f: json.dump(results, f, indent=2)
-
     target_idx = split_meta.get("target_col_idx", 0)
     last_obs_s = X_te[:, -1, target_idx:target_idx+1].cpu().numpy()
     naive_pred_s = np.tile(last_obs_s, (1, T_out))
@@ -703,8 +700,17 @@ def main():
         naive_pred = naive_pred_s
     naive = compute_metrics(y_true.flatten(), naive_pred.flatten())
     d_comb = overall["Combined"] - naive["Combined"]; d_mape = naive["MAPE"] - overall["MAPE"]
+    d_r2   = overall["R2"] - naive["R2"]
     print(f"\n  Naive persistence   Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  R²={naive['R2']:.4f}")
-    print(f"  ASTGCN (tuned) vs naive     ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
+    print(f"  ASTGCN (tuned) vs naive     ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%  ΔR²={d_r2:+.4f}")
+    results["naive_persistence"] = {
+        "metrics":        {k: round(v, 4) for k, v in naive.items()},
+        "delta_combined": round(d_comb, 4),
+        "delta_mape":     round(d_mape, 4),
+        "delta_r2":       round(d_r2,   4),
+    }
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f: json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":

@@ -69,14 +69,14 @@ from src.utils.comparison_table import (
 def parse_args():
     p = argparse.ArgumentParser(description="Tuned STFGNN forecaster — 11-way comparison")
     p.add_argument("--seq-dir",           default=None)
-    p.add_argument("--hidden",            type=int,   default=256,
+    p.add_argument("--hidden",            type=int,   default=128,
                    help="Channel width inside each fusion block")
-    p.add_argument("--n-layers",          type=int,   default=5,
+    p.add_argument("--n-layers",          type=int,   default=3,
                    help="Number of STFGNN fusion blocks")
-    p.add_argument("--adj-threshold",     type=float, default=0.1,
+    p.add_argument("--adj-threshold",     type=float, default=0.15,
                    help="Min abs Pearson correlation to keep an edge (both graphs)")
-    p.add_argument("--dropout",           type=float, default=0.2)
-    p.add_argument("--weight-decay",      type=float, default=1e-4)
+    p.add_argument("--dropout",           type=float, default=0.35)
+    p.add_argument("--weight-decay",      type=float, default=3e-4)
     p.add_argument("--batch-size",        type=int,   default=32)
     p.add_argument("--epochs",            type=int,   default=150)
     p.add_argument("--lr",                type=float, default=1e-3)
@@ -752,10 +752,6 @@ def main():
         comparison[f"delta_vs_{key}"] = {
             k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall
         }
-    results["comparison"] = comparison
-    with open(f"{out_dir}/results.json", "w") as f:
-        json.dump(results, f, indent=2)
-
     target_idx   = split_meta.get("target_col_idx", 0)
     last_obs_s   = X_te[:, -1, target_idx:target_idx+1].cpu().numpy()
     naive_pred_s = np.tile(last_obs_s, (1, T_out))
@@ -768,11 +764,21 @@ def main():
     naive  = compute_metrics(y_true.flatten(), naive_pred.flatten())
     d_comb = overall["Combined"] - naive["Combined"]
     d_mape = naive["MAPE"] - overall["MAPE"]
+    d_r2   = overall["R2"] - naive["R2"]
     print(f"\n  Naive persistence  "
           f"Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  "
           f"R²={naive['R2']:.4f}")
     print(f"  STFGNN (Tuned) vs naive  "
-          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
+          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%  ΔR²={d_r2:+.4f}")
+    results["naive_persistence"] = {
+        "metrics":        {k: round(v, 4) for k, v in naive.items()},
+        "delta_combined": round(d_comb, 4),
+        "delta_mape":     round(d_mape, 4),
+        "delta_r2":       round(d_r2,   4),
+    }
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":

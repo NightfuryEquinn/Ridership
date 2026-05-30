@@ -68,16 +68,16 @@ def parse_args():
     p.add_argument("--seq-dir",            default=None)
     p.add_argument("--hidden",             type=int,   default=64,
                    help="Channel width inside each MTGNN block")
-    p.add_argument("--skip-ch",            type=int,   default=128,
+    p.add_argument("--skip-ch",            type=int,   default=64,
                    help="Skip-connection channels aggregated at output")
     p.add_argument("--n-layers",           type=int,   default=3,
                    help="Number of MTGNN blocks")
-    p.add_argument("--d-emb",              type=int,   default=10,
+    p.add_argument("--d-emb",              type=int,   default=7,
                    help="Node embedding dimension for M1/M2")
     p.add_argument("--d-hop",              type=int,   default=2,
                    help="Mix-hop propagation order")
-    p.add_argument("--dropout",            type=float, default=0.25)
-    p.add_argument("--weight-decay",       type=float, default=1e-4)
+    p.add_argument("--dropout",            type=float, default=0.30)
+    p.add_argument("--weight-decay",       type=float, default=3e-4)
     p.add_argument("--batch-size",         type=int,   default=32)
     p.add_argument("--epochs",             type=int,   default=150)
     p.add_argument("--lr",                 type=float, default=1e-3)
@@ -732,10 +732,6 @@ def main():
         comparison[f"delta_vs_{key}"] = {
             k: round(overall.get(k, 0) - m_overall.get(k, 0), 4) for k in overall
         }
-    results["comparison"] = comparison
-    with open(f"{out_dir}/results.json", "w") as f:
-        json.dump(results, f, indent=2)
-
     target_idx   = split_meta.get("target_col_idx", 0)
     last_obs_s   = X_te[:, -1, target_idx:target_idx+1].cpu().numpy()
     naive_pred_s = np.tile(last_obs_s, (1, T_out))
@@ -748,11 +744,21 @@ def main():
     naive  = compute_metrics(y_true.flatten(), naive_pred.flatten())
     d_comb = overall["Combined"] - naive["Combined"]
     d_mape = naive["MAPE"] - overall["MAPE"]
+    d_r2   = overall["R2"] - naive["R2"]
     print(f"\n  Naive persistence  "
           f"Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  "
           f"R²={naive['R2']:.4f}")
     print(f"  MTGNN (Tuned) vs naive  "
-          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
+          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%  ΔR²={d_r2:+.4f}")
+    results["naive_persistence"] = {
+        "metrics":        {k: round(v, 4) for k, v in naive.items()},
+        "delta_combined": round(d_comb, 4),
+        "delta_mape":     round(d_mape, 4),
+        "delta_r2":       round(d_r2,   4),
+    }
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":

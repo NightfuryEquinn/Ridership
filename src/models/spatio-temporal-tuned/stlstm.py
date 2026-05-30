@@ -750,10 +750,6 @@ def main():
             for k in overall
         }
 
-    results["comparison"] = comparison
-    with open(f"{out_dir}/results.json", "w") as f:
-        json.dump(results, f, indent=2)
-
     # ── Naive persistence baseline ────────────────────────────────────────────
     target_idx   = split_meta.get("target_col_idx", 0)
     last_obs_s   = X_te[:, -1, target_idx : target_idx + 1].cpu().numpy()
@@ -770,11 +766,21 @@ def main():
     naive  = compute_metrics(y_true.flatten(), naive_pred.flatten())
     d_comb = overall["Combined"] - naive["Combined"]
     d_mape = naive["MAPE"] - overall["MAPE"]
+    d_r2   = overall["R2"] - naive["R2"]
     print(f"\n  Naive persistence  "
           f"Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  "
           f"R²={naive['R2']:.4f}")
     print(f"  ST-LSTM vs naive   "
-          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
+          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%  ΔR²={d_r2:+.4f}")
+    results["naive_persistence"] = {
+        "metrics":        {k: round(v, 4) for k, v in naive.items()},
+        "delta_combined": round(d_comb, 4),
+        "delta_mape":     round(d_mape, 4),
+        "delta_r2":       round(d_r2,   4),
+    }
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":

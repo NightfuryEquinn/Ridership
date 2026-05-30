@@ -304,20 +304,20 @@ Architecture hyperparameters changed in the tuned scripts (training params uncha
 
 | Model | Tuned Defaults |
 |-------|---------------|
-| LSTM (tuned) | `hidden=128`, `layers=2`, `dropout=0.15` |
+| LSTM (tuned) | `hidden=128`, `layers=2`, `dropout=0.20`, `weight_decay=2e-4` |
 | BiLSTM (tuned) | `hidden=128`, `layers=2`, `dropout=0.15` |
 | CNN-LSTM (tuned) | `cnn_filters=64`, `dropout=0.20` (hidden/layers unchanged) |
 | CNN-BiLSTM (tuned) | `hidden=128`, `cnn_filters=64`, `dropout=0.25` |
 | ST-LSTM (tuned) | `hidden=128`, `spatial_hidden=64`, `dropout=0.20` |
-| STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=2`, `dropout=0.15` |
-| MTGNN (tuned) | `hidden=64`, `skip_ch=128`, `n_layers=4`, `dropout=0.15` |
-| STSGCN (tuned) | `hidden=128`, `n_layers=3`, `dropout=0.20` |
-| STFGNN (tuned) | `hidden=128`, `n_layers=4`, `dropout=0.30` |
-| PDR-STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=2`, `dk=64`, `dropout=0.20` |
+| STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=3`, `dropout=0.25`, `weight_decay=3e-4` |
+| MTGNN (tuned) | `hidden=64`, `skip_ch=64`, `n_layers=3`, `d_emb=7`, `dropout=0.30`, `weight_decay=3e-4` |
+| STSGCN (tuned) | `hidden=128`, `n_layers=3`, `dropout=0.25`, `weight_decay=2e-4`, `epochs=200`, `patience=25` |
+| STFGNN (tuned) | `hidden=128`, `n_layers=3`, `dropout=0.35`, `weight_decay=3e-4`, `adj_threshold=0.15` |
+| PDR-STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=2`, `dk=64`, `period=7`, `dropout=0.25`, `weight_decay=2e-4` |
 | TPA-LSTM (tuned) | `hidden=128`, `filters=64`, `dropout=0.15` |
 | ASTGCN (tuned) | `d_model=128`, `n_heads=8`, `n_blocks=3`, `dropout=0.20` |
-| TFT (tuned) | `d_model=128`, `n_heads=8`, `n_lstm_layers=2`, `n_attn_layers=3`, `dropout=0.25` |
-| Autoformer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.20` |
+| TFT (tuned) | `d_model=128`, `n_heads=8`, `n_lstm_layers=2`, `n_attn_layers=3`, `dropout=0.25`, `weight_decay=2e-4` |
+| Autoformer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.25`, `weight_decay=2e-4` |
 | Informer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.15` |
 
 Full per-model rationale is in `src/models/MODEL.md`.

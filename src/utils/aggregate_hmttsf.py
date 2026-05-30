@@ -45,6 +45,14 @@ MCO_CUTOFF    = date(2022, 1, 1)   # train_start before this → "include"
 METRIC_KEYS   = ["Combined", "MAPE", "MAE_pct", "RMSE_pct", "R2", "MAE", "RMSE"]
 METRIC_LABELS = ["Combined%", "MAPE%", "MAE%", "RMSE%", "R²", "MAE", "RMSE"]
 
+# Naive persistence metrics
+NAIVE_KEYS   = ["Combined", "MAPE", "MAE_pct", "RMSE_pct", "R2", "MAE", "RMSE"]
+NAIVE_LABELS = ["Naive Combined%", "Naive MAPE%", "Naive MAE%", "Naive RMSE%", "Naive R²", "Naive MAE", "Naive RMSE"]
+
+# Delta metrics
+DELTA_KEYS   = ["Combined", "MAPE", "MAE_pct", "RMSE_pct", "R2", "MAE", "RMSE"]
+DELTA_LABELS = ["Delta Combined%", "Delta MAPE%", "Delta MAE%", "Delta RMSE%", "Delta R²", "Delta MAE", "Delta RMSE"]
+
 # 6 primary + 4 extended = 10 total configurations (mco, lookback)
 _PRIMARY_LBS   = [14, 28, 56]
 _EXTENDED_LBS  = [7, 84]
@@ -68,6 +76,20 @@ _PIVOT_METRICS = [
     ("R²",        9),
     ("MAE",      11),
     ("RMSE",     11),
+    ("Naive Combined%", 9),
+    ("Naive MAPE%",     9),
+    ("Naive MAE%",      9),
+    ("Naive RMSE%",     9),
+    ("Naive R²",        9),
+    ("Naive MAE",      11),
+    ("Naive RMSE",     11),
+    ("Delta Combined%", 9),
+    ("Delta MAPE%",     9),
+    ("Delta MAE%",      9),
+    ("Delta RMSE%",     9),
+    ("Delta R²",        9),
+    ("Delta MAE",      11),
+    ("Delta RMSE",     11),
 ]
 
 _METRIC_HIGHER_BETTER = {
@@ -195,6 +217,7 @@ def select_runs(records):
     for key, group in sorted(groups.items()):
         newest = max(group, key=lambda r: r["timestamp"])
         m = newest["metrics"]
+        naive_data = newest.get("naive_persistence", {}).get("metrics", {})
         selected[key] = {
             "MCO":          newest["mco"],
             "Lookback":     newest["lookback"],
@@ -205,6 +228,18 @@ def select_runs(records):
             "R²":           m.get("R2"),
             "MAE":          m.get("MAE"),
             "RMSE":         m.get("RMSE"),
+            "Naive Combined%": naive_data.get("Combined"),
+            "Naive MAPE%":     naive_data.get("MAPE"),
+            "Naive MAE%":      naive_data.get("MAE_pct"),
+            "Naive RMSE%":     naive_data.get("RMSE_pct"),
+            "Naive R²":        naive_data.get("R2"),
+            "Naive MAE":       naive_data.get("MAE"),
+            "Naive RMSE":      naive_data.get("RMSE"),
+            "Delta Combined%": newest.get("naive_persistence", {}).get("delta_combined"),
+            "Delta MAPE%":     newest.get("naive_persistence", {}).get("delta_mape"),
+            "Delta MAE%":      newest.get("naive_persistence", {}).get("delta_mae_pct"),
+            "Delta RMSE%":     newest.get("naive_persistence", {}).get("delta_rmse_pct"),
+            "Delta R²":        newest.get("naive_persistence", {}).get("delta_r2"),
             "walk_forward": newest["walk_forward"],
             "run_id":       newest["run_id"],
             "path":         newest["path"],
@@ -343,6 +378,102 @@ def print_walk_forward_table(pivot):
     print("  Note: temporal stability improves if block 3 Combined% ≥ block 1 Combined%")
 
 
+def print_model_vs_naive_table(pivot):
+    """
+    Print a table showing model performance vs naive persistence baseline.
+    
+    Shows delta metrics (model - naive) for each configuration:
+    - Delta Combined% (higher is better)
+    - Delta MAPE% (lower is better)
+    - Delta MAE% (lower is better)
+    - Delta RMSE% (lower is better)
+    - Delta R² (higher is better)
+    """
+    if not pivot:
+        return
+
+    # Check if we have any naive data
+    has_naive_data = any(
+        row.get("Delta Combined%") is not None 
+        for row in pivot.values()
+    )
+    
+    if not has_naive_data:
+        print("[INFO] No naive persistence data found in results.")
+        return
+
+    cell_w = 9
+    gap    = "  "
+    lbl_w  = 10   # "HMT-TSF  "
+
+    print(f"\n{'═' * 70}")
+    print("  Model vs Naive Persistence Baseline  (delta: model - naive)")
+    print(f"{'═' * 70}")
+    print("  ↑ = improvement over naive, ↓ = degradation vs naive, = = no change")
+
+    # Define metrics and their direction (True = higher is better)
+    metrics_info = [
+        ("Delta Combined%", "Combined%", True),
+        ("Delta MAPE%", "MAPE%", False),
+        ("Delta MAE%", "MAE%", False),
+        ("Delta RMSE%", "RMSE%", False),
+        ("Delta R²", "R²", True),
+    ]
+
+    for metric_label, metric_key, higher_better in metrics_info:
+        print(f"\n  {metric_label}")
+        header = f"  {''.ljust(lbl_w)}{gap}"
+        header += f"{'No MCO (exclude)'.center((cell_w + len(gap)) * len(_ALL_LBS))}"
+        header += f"{'With MCO (include)'.center((cell_w + len(gap)) * len(_ALL_LBS))}"
+        print(header)
+        
+        # Column headers for lookbacks
+        lb_labels = [str(lb) for lb in _ALL_LBS] * 2   # [7,14,28,56,84, 7,14,28,56,84]
+        cells = gap.join(lbl.rjust(cell_w) for lbl in lb_labels)
+        print(f"{''.ljust(lbl_w)}{gap}{cells}")
+        
+        # Extended lookbacks note
+        print(f"{''.ljust(lbl_w)}{gap}"
+              f"{'↑ lb7/lb84 = HMT-TSF extended lookbacks'.ljust((cell_w + len(gap)) * len(_ALL_LBS))}"
+              f"{'↑ lb7/lb84 = HMT-TSF extended lookbacks'.ljust((cell_w + len(gap)) * len(_ALL_LBS))}")
+        
+        print(f"  {'─' * (lbl_w + len(gap) + (cell_w + len(gap)) * len(_CONFIGS) - len(gap))}")
+        
+        # Data rows
+        cells = []
+        for mco, lb in _CONFIGS:
+            row = pivot.get((mco, lb))
+            v   = row.get(metric_key) if row else None
+            # Format the delta value with direction
+            if v is None:
+                formatted = "—"
+            else:
+                # Determine direction symbol
+                if abs(v) < 1e-9:
+                    direction = "="
+                elif (higher_better and v > 0) or (not higher_better and v < 0):
+                    direction = "↑"  # improvement
+                else:
+                    direction = "↓"  # degradation
+                
+                # Format value based on metric type
+                if "MAE" in metric_key or "RMSE" in metric_key:
+                    formatted = f"{v:+,.0f}{direction}"
+                elif metric_key == "R²":
+                    formatted = f"{v:+.4f}{direction}"
+                else:
+                    formatted = f"{v:+.2f}{direction}"
+            
+            cells.append(formatted.rjust(cell_w))
+        
+        print(f"{'HMT-TSF'.ljust(lbl_w)}{gap}" + gap.join(cells))
+    
+    print(f"\n{'═' * 70}")
+    print("  Note: delta = model metric - naive metric")
+    print("        Positive delta = improvement for Combined% and R²") 
+    print("        Positive delta = degradation for MAPE%, MAE%, RMSE%")
+
+
 # ── Wide-format CSV export ────────────────────────────────────────────────────
 
 def _csv_col(mco, lb, metric):
@@ -437,6 +568,9 @@ def main():
 
     if not args.no_wf:
         print_walk_forward_table(pivot)
+        
+    if not args.no_table:  # Also show model vs naive table when regular table is shown
+        print_model_vs_naive_table(pivot)
 
     if not args.no_csv:
         save_comparison_csv(pivot, csv_out)

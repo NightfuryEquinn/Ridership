@@ -118,7 +118,17 @@ FEAT_GROUPS = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _LOOKBACK_DEFAULTS: dict = {
-    14: {"dropout": 0.15, "weight_decay": 3e-3},
+    # Lookback 7/14: very short sequences → model sees little temporal signal per
+    # sample and memorises easily.  Shrink capacity (d_model=32, 2 TCN blocks),
+    # apply aggressive dropout/weight-decay, and add input noise to regularise.
+    7:  {"d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 2,
+         "dropout": 0.35, "drop_path": 0.30, "weight_decay": 2e-2,
+         "input_noise": 0.05, "smooth_weight": 0.03,
+         "lr": 5e-4, "warmup_epochs": 10, "patience": 25},
+
+    14: {"d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 2,
+         "dropout": 0.25, "drop_path": 0.20, "weight_decay": 1e-2,
+         "input_noise": 0.05},
 
     28: {"lr": 5e-4, "warmup_epochs": 12, "patience": 25,
          "d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 2,
@@ -128,9 +138,10 @@ _LOOKBACK_DEFAULTS: dict = {
          "drop_path": 0.3, "weight_decay": 2e-2, "input_noise": 0.05,
          "smooth_weight": 0.03},
 
-    84: {"d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 3, 
-         "patience": 30, "weight_decay": 1e-2, "input_noise": 0.05, 
-         "smooth_weight": 0.05, "dropout": 0.35, "drop_path": 0.25},
+    84: {"d_model": 32, "graph_hidden": 32, "n_tcn_blocks": 3,
+         "patience": 30, "lr": 5e-4, "warmup_epochs": 15,
+         "weight_decay": 4e-2, "input_noise": 0.08,
+         "smooth_weight": 0.05, "dropout": 0.40, "drop_path": 0.35},
 }
 
 # Global argparse defaults — used to detect whether the user overrode a flag.
@@ -1379,6 +1390,8 @@ def parse_args():
     p.add_argument("--dropout",       type=float, default=0.1)
     p.add_argument("--input-noise",   type=float, default=0.02,
                    help="Std-dev of Gaussian noise added to training inputs (0 = off)")
+    p.add_argument("--ema-decay",     type=float, default=0.995,
+                   help="EMA weight decay for test-time averaging (0 = off)")
     p.add_argument("--device",        default="auto")
     p.add_argument("--seed",          type=int,   default=42)
 
@@ -1548,7 +1561,7 @@ def main():
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimiser, mode="min", factor=0.5, patience=8
+        optimiser, mode="min", factor=0.7, patience=8
     )
 
     # ── training loop ─────────────────────────────────────────────────────────
@@ -1752,6 +1765,7 @@ def main():
             "loss_decay":   args.loss_decay,
             "smooth_weight":args.smooth_weight,
             "warmup_epochs":args.warmup_epochs,
+            "ema_decay":    args.ema_decay,
         },
         "training": {
             "best_epoch":    best_epoch,
@@ -1852,10 +1866,6 @@ def main():
             for k in overall
         }
 
-    results["comparison"] = comparison
-    with open(f"{out_dir}/results.json", "w") as f:
-        json.dump(results, f, indent=2)
-
     # ── naive persistence baseline ─────────────────────────────────────────────
     target_idx_safe = split_meta.get("target_col_idx", args.target_idx)
     last_obs_s      = X_te[:, -1, target_idx_safe:target_idx_safe + 1].cpu().numpy()
@@ -1871,11 +1881,21 @@ def main():
     naive  = compute_metrics(y_true.flatten(), naive_pred.flatten())
     d_comb = overall["Combined"] - naive["Combined"]
     d_mape = naive["MAPE"]       - overall["MAPE"]
+    d_r2   = overall["R2"] - naive["R2"]
     print(f"\n  Naive persistence  "
           f"Combined={naive['Combined']:.2f}%  MAPE={naive['MAPE']:.2f}%  "
           f"R²={naive['R2']:.4f}")
     print(f"  HMT-TSF vs naive   "
-          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%")
+          f"ΔCombined={d_comb:+.2f}%  ΔMAPE={d_mape:+.2f}%  ΔR²={d_r2:+.4f}")
+    results["naive_persistence"] = {
+        "metrics":        {k: round(v, 4) for k, v in naive.items()},
+        "delta_combined": round(d_comb, 4),
+        "delta_mape":     round(d_mape, 4),
+        "delta_r2":       round(d_r2,   4),
+    }
+    results["comparison"] = comparison
+    with open(f"{out_dir}/results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":
