@@ -114,6 +114,8 @@ HMT-TSF-specific flags (in addition to the shared flags below):
 | `--no-revin` | off | Disable RevIN input normalisation |
 | `--shap` | off | Run SHAP feature importance |
 | `--shap-samples N` | `100` | SHAP background samples |
+| `--prob-sparse` | off | Replace full self-attention with ProbSparse (O(L log L)); no-op for lb≤14 |
+| `--sparse-factor N` | `5` | c factor: n_top = c·⌈ln(L)⌉ active queries |
 | `--smooth-weight λ` | `0.01` | Temporal smoothness regularisation |
 | `--loss-decay γ` | `0.9` | Geometric decay for weighted Huber steps |
 
@@ -233,8 +235,8 @@ Each model auto-detects and compares against all prior model runs. Results are l
 ```
 LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
-→ MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
-→ ASTGCN (13-way) → Autoformer (14-way) → Informer (15-way)
+→ ASTGCN (9-way) → STSGCN (10-way) → PDR-STGCN (11-way) → MTGNN (12-way)
+→ STFGNN (13-way) → Autoformer (14-way) → Informer (15-way)
 → HMT-TSF (16-way)
 ```
 

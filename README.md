@@ -1,3 +1,6 @@
+TODO: 
+1. Remove features according to SHAP importance and test on all configurations
+
 # Malaysian Transit Ridership Forecasting Research
 
 > Last updated: 2026-05-30

@@ -191,7 +191,7 @@ Output: TemporalGatedConv → mean(N) → flatten → MLP → (B, T_out)
 
 ---
 
-### 8. MTGNN — Multi-Scale Temporal Graph Neural Network
+### 11. MTGNN — Multi-Scale Temporal Graph Neural Network
 
 **Script:** `mtgnn.py`
 
@@ -249,7 +249,7 @@ Mean pool over N, flatten T, MLP head → (B, T_out)
 
 ---
 
-### 10. STFGNN — Spatial-Temporal Fusion Graph Neural Network
+### 12. STFGNN — Spatial-Temporal Fusion Graph Neural Network
 
 **Script:** `stfgnn.py`
 
@@ -281,7 +281,7 @@ Global mean pool(N, T) → MLP → (B, T_out)
 
 ---
 
-### 11. PDR-STGCN — Periodicity-Aware Dynamic Relational STGCN
+### 10. PDR-STGCN — Periodicity-Aware Dynamic Relational STGCN
 
 **Script:** `pdr_stgcn.py`
 
@@ -332,7 +332,7 @@ Located in `src/models/attention-based/`. These models use attention mechanisms 
 
 ---
 
-### 12. ASTGCN — Attention-Based Spatio-Temporal Graph Convolutional Network
+### 8. ASTGCN — Attention-Based Spatio-Temporal Graph Convolutional Network
 
 **Script:** `astgcn.py`
 
@@ -444,8 +444,8 @@ Each model auto-detects all prior model runs from `src/outputs/` and adds itself
 ```
 LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
-→ MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
-→ ASTGCN (13-way) → Autoformer (14-way) → Informer (15-way)
+→ ASTGCN (9-way) → STSGCN (10-way) → PDR-STGCN (11-way) → MTGNN (12-way)
+→ STFGNN (13-way) → Autoformer (14-way) → Informer (15-way)
 → HMT-TSF (16-way)
 ```
 
@@ -589,11 +589,11 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 | 5 | CNN-BiLSTM | ST | No | No | No | CNN + bidirectional context over CNN features |
 | 6 | ST-LSTM | ST | No | No | No | Explicit parallel spatial + temporal streams |
 | 7 | STGCN | Graph | Static Pearson | No | No | ST-Conv blocks on fixed correlation graph |
-| 8 | MTGNN | Graph | Learned | No | No | Asymmetric end-to-end learned graph + dilated inception |
+| 8 | ASTGCN | Attention | Static Pearson | Spatial+Temporal | Yes | Dual multi-head attention over nodes and timesteps |
 | 9 | STSGCN | Graph | Static Pearson | No | No | Synchronous 3N×3N spatio-temporal graph |
-| 10 | STFGNN | Graph | Static×2 (spa+tem) | No | No | Dual spatial+temporal graphs fused by learned gate |
-| 11 | PDR-STGCN | Graph | Static+Dynamic | Dynamic | No | Periodicity encoding + dynamic relational graph mixing |
-| 12 | ASTGCN | Attention | Static Pearson | Spatial+Temporal | Yes | Dual multi-head attention over nodes and timesteps |
+| 10 | PDR-STGCN | Graph | Static+Dynamic | Dynamic | No | Periodicity encoding + dynamic relational graph mixing |
+| 11 | MTGNN | Graph | Learned | No | No | Asymmetric end-to-end learned graph + dilated inception |
+| 12 | STFGNN | Graph | Static×2 (spa+tem) | No | No | Dual spatial+temporal graphs fused by learned gate |
 | 13 | Autoformer | Attention | No | Auto-Corr (FFT) | Yes | Decomposition + FFT-based periodic autocorrelation |
 | 14 | Informer | Attention | No | ProbSparse | Yes | Sparse attention + distilling for efficiency |
 | 15 | HMT-TSF | Hybrid | Static Pearson (GCN) | — | Yes | Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction |
