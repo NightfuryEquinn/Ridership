@@ -403,11 +403,10 @@ python src/models/hybrid/hmttsf.py \
   --epochs 150
 ```
 
-### 17-way comparison with all prior models
+### 16-way comparison with all prior models
 ```bash
 python src/models/hybrid/hmttsf.py \
   --lstm-results      src/outputs/lstm/.../results.json \
-  --tft-results       src/outputs/tft/.../results.json \
   --informer-results  src/outputs/informer/.../results.json
   # (omit paths for auto-detection of latest run)
 ```
@@ -424,7 +423,7 @@ python src/models/hybrid/hmttsf.py \
 | Feature graph GCN     | STGCN, ASTGCN (existing project models)      |
 | Regime embedding      | Domain adaptation, MoE, NLinear              |
 | RevIN                 | PatchTST, TimesNet, iTransformer             |
-| Gated fusion (SE)     | TFT (Lim 2021), Highway networks, SE-Net     |
+| Gated fusion (SE)     | Highway networks, SE-Net                     |
 | Weighted Huber        | TiDE, N-BEATS loss variants                  |
 | Temporal smoothness   | Modern tabular DL regularisation             |
 | Residual boosting     | GBM ensembles (LightGBM / CatBoost stacking) |

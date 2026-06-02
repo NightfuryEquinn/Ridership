@@ -26,10 +26,10 @@ Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7**
 
 ## Overview
 
-This repository contains the implementation and evaluation of 15 deep learning models plus one hybrid SOTA model for forecasting Malaysian public transit ridership. The models are organized into three baseline series and one hybrid series:
+This repository contains the implementation and evaluation of 14 deep learning models plus one hybrid SOTA model for forecasting Malaysian public transit ridership. The models are organized into three baseline series and one hybrid series:
 - **Spatio-temporal (LSTM-family)**: LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
 - **Graph-based**: STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN
-- **Attention-based**: TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
+- **Attention-based**: TPA-LSTM, ASTGCN, Autoformer, Informer
 - **Hybrid (SOTA)**: HMT-TSF (Hybrid Multi-scale Temporal Spatio-Feature Forecaster)
 
 All models are trained and evaluated on the same dataset comprising 8 spatio-temporal feature sources:
@@ -57,7 +57,7 @@ Ridership/
 │   ├── models/             # Deep learning models (organized by series)
 │   │   ├── spatio-temporal-based/   # Base ST models (LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM)
 │   │   ├── graph-based/             # Base graph models (STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN)
-│   │   ├── attention-based/         # Base attention models (TPA-LSTM, ASTGCN, TFT, Autoformer, Informer)
+│   │   ├── attention-based/         # Base attention models (TPA-LSTM, ASTGCN, Autoformer, Informer)
 │   │   ├── spatio-temporal-tuned/   # Tuned ST variants
 │   │   ├── graph-tuned/             # Tuned graph variants
 │   │   ├── attention-tuned/         # Tuned attention variants
@@ -152,7 +152,6 @@ python src/models/graph-based/stfgnn.py
 python src/models/graph-based/pdr_stgcn.py
 
 # Attention-based models
-python src/models/attention-based/tft.py
 python src/models/attention-based/astgcn.py
 python src/models/attention-based/autoformer.py
 python src/models/attention-based/informer.py
@@ -190,7 +189,7 @@ See `src/models/hybrid/HMT-TSF.md` for the full architecture diagram, component 
 
 ### Fine-Tuned Models
 
-Fifteen fine-tuned variants with revised architecture hyperparameters (training params unchanged):
+Fourteen fine-tuned variants with revised architecture hyperparameters (training params unchanged):
 
 ```bash
 # Spatio-temporal tuned
@@ -210,7 +209,6 @@ python src/models/graph-tuned/pdr_stgcn.py
 # Attention tuned
 python src/models/attention-tuned/tpalstm.py
 python src/models/attention-tuned/astgcn.py
-python src/models/attention-tuned/tft.py
 python src/models/attention-tuned/autoformer.py
 python src/models/attention-tuned/informer.py
 ```
@@ -227,13 +225,13 @@ Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full architectur
 ### Common Arguments
 All models accept these arguments:
 - `--seq-dir`: Override sequence directory (if not set, resolved from `--lookback`)
-- `--lookback {14,28,56}`: Look-back window for the 15 base models; auto-selects the matching `data/sequences/` directory (default: `14`). HMT-TSF additionally supports `7` and `84`.
+- `--lookback {14,28,56}`: Look-back window for the 14 base models; auto-selects the matching `data/sequences/` directory (default: `14`). HMT-TSF additionally supports `7` and `84`.
 - `--loss {mse,huber,mae}`: Training loss function (default: `huber`)
-- `--warmup-epochs N`: Linear LR warm-up epochs before ReduceLROnPlateau (default: `5` for the 15 base models; `8` for HMT-TSF)
+- `--warmup-epochs N`: Linear LR warm-up epochs before ReduceLROnPlateau (default: `5` for the 14 base models; `8` for HMT-TSF)
 - `--epochs`: Number of training epochs
 - `--batch-size`: Training batch size
 - `--lr`: Learning rate
-- `--patience`: Early stopping patience (default: `15` for the 15 base models; `20` for HMT-TSF)
+- `--patience`: Early stopping patience (default: `15` for the 14 base models; `20` for HMT-TSF)
 - `--device`: Computation device (`auto`, `cuda`, `cpu`, or `mps`)
 - `--seed`: Random seed for reproducibility
 - Model-specific hyperparameters (see each script's docstring)
@@ -278,8 +276,8 @@ Models are compared in a historical chain where each new model evaluates against
 LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
 → MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
-→ ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
-→ HMT-TSF (17-way)
+→ ASTGCN (13-way) → Autoformer (14-way) → Informer (15-way)
+→ HMT-TSF (16-way)
 ```
 
 The comparison system automatically:
@@ -292,7 +290,7 @@ The comparison system automatically:
 ### Training Optimizations (all models)
 - **Optimiser**: AdamW (decoupled weight decay)
 - **Loss**: HuberLoss (delta=1.0, default) — robust to ridership outliers; selectable via `--loss`
-- **LR schedule**: Linear warm-up → ReduceLROnPlateau; configurable via `--warmup-epochs` (default 5 epochs for the 15 base models, 8 for HMT-TSF)
+- **LR schedule**: Linear warm-up → ReduceLROnPlateau; configurable via `--warmup-epochs` (default 5 epochs for the 14 base models, 8 for HMT-TSF)
 
 ### HMT-TSF Specific
 - **Loss**: WeightedHuber (step-decayed, γ=0.9) + TemporalSmoothness regularisation (λ=0.01)
@@ -304,7 +302,7 @@ The comparison system automatically:
 - **Lookback support**: 7 / 14 / 28 / 56 / 84 days (`lookback_7` and `lookback_84` sequence dirs must be built separately if needed)
 
 ### Data Configuration
-- **Look-back window (T_in)**: 14 / 28 / 56 days for the 15 base models; 7 / 14 / 28 / 56 / 84 days for HMT-TSF (controlled via `--lookback` or `--T-in`)
+- **Look-back window (T_in)**: 14 / 28 / 56 days for the 14 base models; 7 / 14 / 28 / 56 / 84 days for HMT-TSF (controlled via `--lookback` or `--T-in`)
 - **Forecast horizon (T_out)**: 7 days
 - **Data split**: 70% train / 15% validation / 15% test (chronological)
 - **MCO exclusion**: Movement Control Order period (2020-03-18 to 2021-12-31) excluded by default
@@ -314,10 +312,8 @@ The comparison system automatically:
 ### Model-Specific Notes
 - **Reference Model**: `src/models/spatio-temporal-based/stlstm.py` serves as the canonical reference for training loop structure, output format, and comparison patterns
 - **Graph Construction**: Graph-based models and HMT-TSF treat features as nodes; adjacency built from Pearson correlation (threshold=0.1) of training features
-- **AMP Usage**: Attention-based models (ASTGCN, TFT, Autoformer, Informer) and HMT-TSF use mixed precision training on the A100
-- **TFT/Autoformer Specifics**: 
-  - TFT uses standard AMP implementation
-  - Autoformer wraps FFT operations in explicit float32 casts within autocast for numerical stability
+- **AMP Usage**: Attention-based models (ASTGCN, Autoformer, Informer) and HMT-TSF use mixed precision training on the A100
+- **Autoformer Specifics**: Autoformer wraps FFT operations in explicit float32 casts within autocast for numerical stability
 - **HMT-TSF Architecture**: Five feature-group encoders → parallel Multi-Scale TCN + Feature GCN + Regime Gating → Gated Fusion → dual forecast heads (primary + boost) → optional CatBoost residual correction
 
 ## Evaluation Metrics

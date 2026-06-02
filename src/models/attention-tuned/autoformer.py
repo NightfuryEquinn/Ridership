@@ -105,7 +105,6 @@ def parse_args():
     p.add_argument("--stfgnn-results",       default=None)
     p.add_argument("--pdrstgcn-results",     default=None)
     p.add_argument("--astgcn-results",       default=None)
-    p.add_argument("--tft-results",          default=None)
     p.add_argument("--informer-results",     default=None)
     p.add_argument("--lookback",      type=int,   default=14, choices=[14, 28, 56],
                    help="Look-back window; auto-selects seq-dir when --seq-dir is not set")
@@ -757,7 +756,6 @@ def main():
         ("STFGNN",        args.stfgnn_results,        "src/outputs/stfgnn",         "#a855f7"),
         ("PDR-STGCN",     args.pdrstgcn_results,      "src/outputs/pdr_stgcn",      "#f97316"),
         ("ASTGCN",        args.astgcn_results,        "src/outputs/astgcn",         "#e11d48"),
-        ("TFT",           args.tft_results,           "src/outputs/tft",            "#ca8a04"),
         ("Informer",      args.informer_results,      "src/outputs/informer",       "#9333ea"),
     ]
     models_data = []; comparison = {}

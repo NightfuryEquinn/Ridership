@@ -3,11 +3,11 @@ feature_align.py  — Temporal Feature Alignment
 
 Merges all cleaned data sources onto a single daily date index, producing
 the flat feature matrix consumed by sequence_builder.py and used by all
-15 models in the stack:
+14 models in the stack:
 
   LSTM-family      : LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
   Graph-based      : STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN
-  Attention-based  : TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
+  Attention-based  : TPA-LSTM, ASTGCN, Autoformer, Informer
 
 All 8 feature sources are incorporated:
 

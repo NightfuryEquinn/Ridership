@@ -7,7 +7,7 @@ Scans two directory tiers under outputs_root:
 
 Aggregates across three dimensions:
 
-  Model      : 17 entries — 15 base models + CNN-LSTM parallel + CNN-LSTM augmented
+  Model      : 16 entries — 14 base models + CNN-LSTM parallel + CNN-LSTM augmented
   MCO        : "include" (train start < 2022-01-01 → 2019-2025 range)
              | "exclude" (train start >= 2022-01-01 → 2022-2025 range)
   Lookback   : 14 | 28 | 56 days  (from split_dates.T_in)
@@ -58,7 +58,6 @@ MODEL_REGISTRY = [
     ("STFGNN",               "stfgnn",      None),
     ("PDR-STGCN",            "pdr_stgcn",   None),
     ("ASTGCN",               "astgcn",      None),
-    ("TFT",                  "tft",         None),
     ("Autoformer",           "autoformer",  None),
     ("Informer",             "informer",    None),
 ]

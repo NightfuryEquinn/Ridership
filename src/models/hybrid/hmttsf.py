@@ -85,13 +85,7 @@ from src.utils.comparison_table import (
     print_comparison_table,
     plot_comparison,
 )
-
-# ── optional dependencies ─────────────────────────────────────────────────────
-try:
-    import shap
-    SHAP_AVAILABLE = True
-except ImportError:
-    SHAP_AVAILABLE = False
+from src.utils.shap_analysis import load_feature_names, run_shap_analysis
 
 try:
     from catboost import CatBoostRegressor
@@ -1180,65 +1174,6 @@ def fit_residual_booster(X_train_np: np.ndarray,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 14. SHAP Analysis
-# ══════════════════════════════════════════════════════════════════════════════
-
-def run_shap_analysis(model: nn.Module,
-                       X_test: torch.Tensor,
-                       out_dir: str,
-                       n_samples: int = 100,
-                       use_amp: bool = False) -> None:
-    if not SHAP_AVAILABLE:
-        print("  [SHAP] shap not installed — skipping.")
-        return
-    print("  [SHAP] Computing gradient-based feature importances …")
-    model.eval()
-    subset = X_test[:n_samples]
-
-    # Wrap model so SHAP forward passes respect AMP when enabled
-    class _AMPWrapper(nn.Module):
-        def __init__(self, m, amp):
-            super().__init__()
-            self.m = m
-            self.amp = amp
-
-        def forward(self, x):
-            with autocast('cuda', enabled=self.amp):
-                return self.m(x)
-
-    wrapped = _AMPWrapper(model, use_amp)
-    explainer = shap.GradientExplainer(wrapped, subset)
-    shap_vals  = explainer.shap_values(subset)   # list[T_out] or (N, T, F)
-
-    if isinstance(shap_vals, list):
-        shap_arr = np.mean([np.abs(sv) for sv in shap_vals], axis=0)  # (N, T, F)
-    else:
-        shap_arr = np.abs(shap_vals)
-
-    # Reduce all axes except the feature axis (axis=2, matching input (N, T_in, F)).
-    # SHAP may return (N, T_in, F) or (N, T_in, F, T_out); averaging over every
-    # non-feature axis handles both and produces a 1-D (F,) importance vector.
-    axes_to_reduce = tuple(i for i in range(shap_arr.ndim) if i != 2)
-    mean_importance = shap_arr.mean(axis=axes_to_reduce)   # (F,)
-    top_k = min(20, len(mean_importance))
-    top_idx = np.argsort(mean_importance)[-top_k:][::-1]
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.barh(range(top_k), mean_importance[top_idx[::-1]], color="#2563eb", alpha=0.85)
-    ax.set_yticks(range(top_k))
-    ax.set_yticklabels([f"feat_{i}" for i in top_idx[::-1]], fontsize=8)
-    ax.set_xlabel("Mean |SHAP value|")
-    ax.set_title("HMT-TSF — Top-20 Feature Importances (SHAP)", fontweight="bold")
-    ax.grid(axis="x", alpha=0.3)
-    fig.tight_layout()
-    path = os.path.join(out_dir, "shap_importance.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    np.save(os.path.join(out_dir, "shap_values.npy"), shap_arr)
-    print(f"  [SHAP] Saved: {path}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # 15. Plotting
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1429,7 +1364,6 @@ def parse_args():
     p.add_argument("--stfgnn-results",     default=None)
     p.add_argument("--pdrstgcn-results",   default=None)
     p.add_argument("--astgcn-results",     default=None)
-    p.add_argument("--tft-results",        default=None)
     p.add_argument("--autoformer-results", default=None)
     p.add_argument("--informer-results",   default=None)
 
@@ -1799,6 +1733,7 @@ def main():
     # ── SHAP ──────────────────────────────────────────────────────────────────
     if args.shap:
         run_shap_analysis(model, X_te, out_dir,
+                          feature_names=load_feature_names(),
                           n_samples=args.shap_samples, use_amp=use_amp)
 
     # ── summary ───────────────────────────────────────────────────────────────
@@ -1827,7 +1762,6 @@ def main():
         ("STFGNN",     args.stfgnn_results,     "src/outputs/stfgnn",      "#a855f7"),
         ("PDR-STGCN",  args.pdrstgcn_results,   "src/outputs/pdr_stgcn",   "#f97316"),
         ("ASTGCN",     args.astgcn_results,      "src/outputs/astgcn",      "#e11d48"),
-        ("TFT",        args.tft_results,         "src/outputs/tft",         "#ca8a04"),
         ("Autoformer", args.autoformer_results,  "src/outputs/autoformer",  "#047857"),
         ("Informer",   args.informer_results,    "src/outputs/informer",    "#9333ea"),
     ]

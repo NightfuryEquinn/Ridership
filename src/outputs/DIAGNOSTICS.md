@@ -1,6 +1,6 @@
 # Fit Diagnostics (Overfit / Underfit Analysis)
 
-> Source: `src/outputs/aggregate_diagnosis.csv` (15 baseline/tuned models × 6 configs) + diagnosis columns of `aggregate_hmttsf.csv` (HMT-TSF × 10 configs) · Generated 2026-05-30
+> Source: `src/outputs/aggregate_diagnosis.csv` (14 baseline/tuned models × 6 configs) + diagnosis columns of `aggregate_hmttsf.csv` (HMT-TSF × 10 configs) · Generated 2026-05-30
 > Companion files: `RESULTS.md`, `HMT-TSF-RESULTS.md`
 > This document is **descriptive** — it characterises the fit verdicts and their drivers. No remediation recommendations.
 
@@ -24,13 +24,13 @@ Config axes per model: `{base, tuned}` × `{exclude (nomco), include (mco)}` × 
 
 | Slice | good_fit | total | rate |
 |---|---:|---:|---:|
-| All base runs | 25 | 90 | 28% |
-| All tuned runs | 17 | 90 | 19% |
-| **nomco (exclude MCO)** | 31 | 90 | **34%** |
-| **mco (include MCO)** | 11 | 90 | **12%** |
-| lb14 (all) | 13 | 60 | 22% |
-| lb28 (all) | 15 | 60 | 25% |
-| lb56 (all) | 15 | 60 | 25% |
+| All base runs | 22 | 84 | 26% |
+| All tuned runs | 13 | 84 | 15% |
+| **nomco (exclude MCO)** | 25 | 84 | **30%** |
+| **mco (include MCO)** | 10 | 84 | **12%** |
+| lb14 (all) | 11 | 56 | 20% |
+| lb28 (all) | 13 | 56 | 23% |
+| lb56 (all) | 13 | 56 | 23% |
 | HMT-TSF (all) | 10 | 10 | **100%** |
 
 **Read-out:**
@@ -48,7 +48,6 @@ Config axes per model: `{base, tuned}` × `{exclude (nomco), include (mco)}` × 
 | STSGCN | 4 | 3 | nomco + some mco | Among the cleanest graph models; gaps ~2.0–2.8×. |
 | Autoformer | 4 | 3 | nomco mostly | Robust except scattered mco runs. |
 | MTGNN | 3 | 4 | nomco (tuned best) | Best-balanced graph model; tightest gaps in study (down to 1.40×). |
-| TFT | 3 | 4 | nomco mostly | Tuning *improves* its fit; low gaps (~1.7–2.6×). |
 | STFGNN | 3 | 1 | nomco-exclude only | Clean when MCO excluded; breaks otherwise. |
 | ASTGCN | 2 | 1 | nomco short lb | Good only at exclude/lb14–28. |
 | BiLSTM | 0 | 0 | — | Chronic; gaps 3.4–12.8×. |
@@ -61,7 +60,7 @@ Config axes per model: `{base, tuned}` × `{exclude (nomco), include (mco)}` × 
 | STGCN | 0 | 0 | — | Chronic; gaps up to 11.2×. |
 
 **Two clean groups:**
-- **Cleanest:** Informer (perfect base), MTGNN, STSGCN, Autoformer, TFT — predominantly attention/graph models with gap ratios near 2×.
+- **Cleanest:** Informer (perfect base), MTGNN, STSGCN, Autoformer — predominantly attention/graph models with gap ratios near 2×.
 - **Chronic overfitters (0/12 across base + tuned):** all six LSTM-family models (BiLSTM, CNN-BiLSTM, CNN-LSTM, LSTM, ST-LSTM, TPA-LSTM) plus the two simple-convolution graph models (STGCN, PDR-STGCN). These post strong test numbers (`RESULTS.md`) but always trip the gap-ratio signal — their headroom is memorisation-driven.
 
 ---
@@ -83,7 +82,7 @@ The widest validation/training-loss gaps — the strongest memorisation signals.
 | PDR-STGCN (base) | exclude_lb28 | 10.51× | overfit |
 | CNN-LSTM (tuned) | include_lb56 | 9.77× | overfit |
 
-**Read-out:** PDR-STGCN dominates the memorisation extremes (training loss collapses to near-zero while validation stays high). Gap ratios escalate with lookback (lb56 worst) and with tuning. By contrast the tightest gaps in the study are **MTGNN-tuned (1.40×, 1.50×)**, MTGNN-base (1.71×), STFGNN-base-exclude (1.72×), and TFT (~1.72–1.92×) — all comfortably under 3×.
+**Read-out:** PDR-STGCN dominates the memorisation extremes (training loss collapses to near-zero while validation stays high). Gap ratios escalate with lookback (lb56 worst) and with tuning. By contrast the tightest gaps in the study are **MTGNN-tuned (1.40×, 1.50×)**, MTGNN-base (1.71×), and STFGNN-base-exclude (1.72×) — all comfortably under 3×.
 
 ---
 
@@ -103,18 +102,17 @@ Largest validation-loss drift above the best checkpoint — the strongest "train
 | PDR-STGCN (base) | include_lb56 | 115.9% | 10.74× | overfit |
 | PDR-STGCN (base) | include_lb28 | 108.6% | 9.80× | overfit |
 | STGCN (base) | include_lb56 | 102.4% | 7.18× | overfit |
-| TFT (tuned) | include_lb14 | 102.0% | 2.83× | overfit |
 
 **Read-out:**
 - Drift in the **hundreds of percent** appears only under MCO, concentrated in graph/attention-graph models (ASTGCN, PDR-STGCN, STGCN). The lockdown discontinuity makes the validation surface unstable; after the best epoch the model rapidly degrades.
-- MTGNN-base include_lb56 and TFT-tuned include_lb14 are flagged `overfit` purely on **drift/divergence** (gap ratios 2.36× and 2.83× are within the 3× bar) — illustrating that the verdict is an OR of signals, not gap-ratio alone.
+- MTGNN-base include_lb56 is flagged `overfit` purely on **drift/divergence** (gap ratio 2.36× is within the 3× bar) — illustrating that the verdict is an OR of signals, not gap-ratio alone.
 
 ---
 
 ## 6. Verdict-driver patterns
 
-1. **MCO inclusion is the primary overfit driver.** good-fit rate 34% → 12%; all extreme-drift runs are `include`. Models that are clean under `nomco` (ASTGCN, Autoformer, MTGNN, STFGNN, STSGCN, TFT) routinely flip to `overfit` when the lockdown window is added.
-2. **Model family is the second axis.** Attention/learned-adjacency models (Informer, MTGNN, STSGCN, Autoformer, TFT) keep gap ratios near 2×. LSTM-family and fixed-convolution graph models (STGCN, PDR-STGCN) sit ≥3× regardless of config.
+1. **MCO inclusion is the primary overfit driver.** good-fit rate 30% → 12%; all extreme-drift runs are `include`. Models that are clean under `nomco` (ASTGCN, Autoformer, MTGNN, STFGNN, STSGCN) routinely flip to `overfit` when the lockdown window is added.
+2. **Model family is the second axis.** Attention/learned-adjacency models (Informer, MTGNN, STSGCN, Autoformer) keep gap ratios near 2×. LSTM-family and fixed-convolution graph models (STGCN, PDR-STGCN) sit ≥3× regardless of config.
 3. **Tuning worsens generalisation** (good-fit 28% → 19%; gap ratios rise, e.g. BiLSTM 3.4× → 12.8× at lb56). It does not change the qualitative family pattern.
 4. **Lookback effect is secondary and within-model.** Aggregate verdict rates are flat across lb14/28/56, but for individual models longer windows tend to raise `val_drift` and `gap_ratio` (clearest in ASTGCN, PDR-STGCN, BiLSTM).
 5. **`val_trend` is `falling`/`flat` in almost every overfit run** — training loss was still decreasing while validation diverged, the classic memorisation signature. `rising` appears in only two runs (BiLSTM-tuned include_lb14, STFGNN-tuned exclude_lb56).

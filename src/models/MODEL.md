@@ -2,9 +2,9 @@
 
 > Last updated: 2026-05-29
 
-This document describes all 16 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 15 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
+This document describes all 15 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 14 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
 
-**Shared training optimizations (all 15 models):** AdamW optimiser (decoupled weight decay), HuberLoss (default, selectable via `--loss {mse,huber,mae}`), and a 5-epoch linear LR warm-up before ReduceLROnPlateau (configurable via `--warmup-epochs`). Architecture and hyperparameter values are unchanged.
+**Shared training optimizations (all 14 models):** AdamW optimiser (decoupled weight decay), HuberLoss (default, selectable via `--loss {mse,huber,mae}`), and a 5-epoch linear LR warm-up before ReduceLROnPlateau (configurable via `--warmup-epochs`). Architecture and hyperparameter values are unchanged.
 
 ---
 
@@ -361,37 +361,7 @@ n_blocks stacked, then:
 
 ---
 
-### 13. TFT — Temporal Fusion Transformer
-
-**Script:** `tft.py`
-
-A fully transformer-style model designed for interpretable multi-horizon forecasting. All 79 features are treated as observed past inputs (no static or future covariates in this adaptation). Three core components:
-
-- **Variable Selection Network (VSN):** Softmax-weighted selection over input features per timestep, identifying the most predictive features for the forecast.
-- **LSTM Encoder:** Captures local sequential dynamics after feature selection.
-- **Multi-Head Self-Attention:** Captures long-range temporal dependencies across the look-back window.
-
-**Architecture:**
-```
-X (B, T_in, F)
-  → VSN         (per-timestep feature selection) → (B, T_in, d_model)
-  → LSTM encoder (local processing)              → (B, T_in, d_model)
-  → Multi-head SA × n_attn_layers [Attn + GAN + FFN + GAN]
-  → Mean pool                                    → (B, d_model)
-  → MLP head                                     → (B, T_out)
-```
-
-**Key design choices:**
-- Gated Residual Network (GRN) as the core building block: ELU + GLU gating throughout.
-- Gated Add-and-Norm (GAN) residual connections for stable gradient flow.
-- AMP (fp16) + GradScaler.
-- Default: `d_model=64`, `n_heads=4`, `n_lstm_layers=1`, `n_attn_layers=2`, `dropout=0.1`, `epochs=150`, `batch_size=32`, `lr=1e-3`, `patience=15`.
-
-**Difference from ASTGCN:** Pure transformer architecture with no explicit graph structure; uses VSN for learned feature selection rather than graph-based spatial modelling; combines recurrent local encoding with global self-attention.
-
----
-
-### 14. Autoformer
+### 13. Autoformer
 
 **Script:** `autoformer.py`
 
@@ -426,11 +396,11 @@ Output = trend_accum[:, -T_out:] + seasonal_dec[:, -T_out:]
 - AMP (fp16) + GradScaler.
 - Default: `d_model=64`, `n_heads=4`, `e_layers=2`, `d_layers=1`, `moving_avg=5`, `dropout=0.1`, `epochs=150`, `batch_size=32`, `lr=1e-3`, `patience=15`.
 
-**Difference from TFT:** Decomposes the series into trend and seasonal components explicitly and models periodicity via FFT-based autocorrelation rather than dot-product attention. Better suited to strongly periodic signals like daily/weekly ridership.
+**Difference from ASTGCN:** No graph structure; replaces attention with FFT-based autocorrelation and explicit series decomposition. Better suited to strongly periodic signals like daily/weekly ridership.
 
 ---
 
-### 15. Informer
+### 14. Informer
 
 **Script:** `informer.py`
 
@@ -475,8 +445,8 @@ Each model auto-detects all prior model runs from `src/outputs/` and adds itself
 LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
 → MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
-→ ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
-→ HMT-TSF (17-way)
+→ ASTGCN (13-way) → Autoformer (14-way) → Informer (15-way)
+→ HMT-TSF (16-way)
 ```
 
 ---
@@ -487,7 +457,7 @@ Located in `src/models/hybrid/`. A purpose-built model that combines temporal, s
 
 ---
 
-### 16. HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
+### 15. HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 
 **Script:** `src/models/hybrid/hmttsf.py`
 
@@ -569,23 +539,23 @@ python src/features/sequence_builder.py --T-in 84
 
 ## Fine-Tuned Model Series
 
-Fifteen mirrored fine-tuned variants of the above models are located in three new folders:
+Fourteen mirrored fine-tuned variants of the above models are located in three new folders:
 
 | Folder | Models |
 |--------|--------|
 | `src/models/spatio-temporal-tuned/` | LSTM, BiLSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
 | `src/models/graph-tuned/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
-| `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
+| `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, Autoformer, Informer |
 
 **Tuning strategy (Option C):** Best-configuration selection (MCO-exclusion setting + lookback window) combined with revised architecture hyperparameters. Training hyperparameters (`epochs`, `batch_size`, `lr`, `patience`, `weight_decay`) are unchanged.
 
 **Output directories** use the `_tuned` suffix: `src/outputs/{model_name}_tuned/`.
 
-**Comparison:** each tuned run compares against all 15 base model results (not the tuned runs). Fine-tuned=yes tagging is applied externally by `src/utils/aggregate_results.py`.
+**Comparison:** each tuned run compares against all 14 base model results (not the tuned runs). Fine-tuned=yes tagging is applied externally by `src/utils/aggregate_results.py`.
 
-### Architecture Changes at a Glance (17 tuned variants)
+### Architecture Changes at a Glance (16 tuned variants)
 
-CNN-LSTM is split into three independently tuned variants — one per mode — each with its own best look-back window. All other tuning changes are architecture-only; training hyperparameters (`epochs`, `batch_size`, `lr`, `patience`, `weight_decay`) are unchanged across all 17 variants. Parameters that did not change from base are omitted from the Key Changes column. Dropout rationale reflects the variance observed across the three look-back window configurations during best-configuration selection.
+CNN-LSTM is split into three independently tuned variants — one per mode — each with its own best look-back window. All other tuning changes are architecture-only; training hyperparameters (`epochs`, `batch_size`, `lr`, `patience`, `weight_decay`) are unchanged across all 16 variants. Parameters that did not change from base are omitted from the Key Changes column. Dropout rationale reflects the variance observed across the three look-back window configurations during best-configuration selection.
 
 | Model | Variant / lookback | Key Changes (base → tuned) | Dropout rationale |
 |-------|-------------------|---------------------------|-------------------|
@@ -603,7 +573,6 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 | PDR-STGCN | — / 14 | hidden 128→256, n_blocks 2→3, kt 3→2 ¹, dk 32→64, dropout 0.10→0.20 | MED variance across lookbacks |
 | TPA-LSTM | — / 14 | hidden 64→128, filters 32→64, dropout 0.10→0.15 | moderate variance across lookbacks |
 | ASTGCN | — / 14 | d_model 64→128, n_heads 4→8, n_blocks 2→3, dropout 0.10→0.20 | moderate variance across lookbacks |
-| TFT | — / 14 | d_model 64→128, n_heads 4→8, n_lstm_layers 1→2, n_attn_layers 2→3, dropout 0.10→0.25 | HIGH variance across lookbacks |
 | Autoformer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.20 | moderate variance across lookbacks |
 | Informer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.15 | LOW variance, sparse attention stable |
 
@@ -625,16 +594,15 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 | 10 | STFGNN | Graph | Static×2 (spa+tem) | No | No | Dual spatial+temporal graphs fused by learned gate |
 | 11 | PDR-STGCN | Graph | Static+Dynamic | Dynamic | No | Periodicity encoding + dynamic relational graph mixing |
 | 12 | ASTGCN | Attention | Static Pearson | Spatial+Temporal | Yes | Dual multi-head attention over nodes and timesteps |
-| 13 | TFT | Attention | No | Self-Attn | Yes | Variable selection + LSTM encoder + Transformer decoder |
-| 14 | Autoformer | Attention | No | Auto-Corr (FFT) | Yes | Decomposition + FFT-based periodic autocorrelation |
-| 15 | Informer | Attention | No | ProbSparse | Yes | Sparse attention + distilling for efficiency |
-| 16 | HMT-TSF | Hybrid | Static Pearson (GCN) | — | Yes | Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction |
+| 13 | Autoformer | Attention | No | Auto-Corr (FFT) | Yes | Decomposition + FFT-based periodic autocorrelation |
+| 14 | Informer | Attention | No | ProbSparse | Yes | Sparse attention + distilling for efficiency |
+| 15 | HMT-TSF | Hybrid | Static Pearson (GCN) | — | Yes | Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction |
 
 ---
 
 ## Experimental Results
 
-All 15 baseline models were trained and evaluated across four experimental conditions: MCO-excluded (no-MCO) and MCO-inclusive, at look-back windows of 14, 28, and 56 days. Each model was then fine-tuned with revised architecture hyperparameters under the same conditions. Aggregate results are stored in `src/outputs/aggregate_results.csv`. HMT-TSF results are in `src/outputs/aggregate_hmttsf.csv`.
+All 14 baseline models were trained and evaluated across four experimental conditions: MCO-excluded (no-MCO) and MCO-inclusive, at look-back windows of 14, 28, and 56 days. Each model was then fine-tuned with revised architecture hyperparameters under the same conditions. Aggregate results are stored in `src/outputs/aggregate_results.csv`. HMT-TSF results are in `src/outputs/aggregate_hmttsf.csv`.
 
 **Metric definitions:** Combined% = max(0, 100 − MAPE − MAE% − RMSE%); all percentage terms use mean-demand normalisation. Higher Combined%, R² and lower MAE/RMSE are better. Targets: Combined% ≥ 75%, R² ≥ 0.70.
 
@@ -642,7 +610,7 @@ All 15 baseline models were trained and evaluated across four experimental condi
 
 ### Baseline Performance (No Tuning) — No-MCO, Lookback 14
 
-Results for all 15 base models on the no-MCO condition at the default look-back of 14 days, sorted by Combined%:
+Results for all 14 base models on the no-MCO condition at the default look-back of 14 days, sorted by Combined%:
 
 | Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
 |------|-------|-----------|-------|------|-------|-----|-----|------|
@@ -657,8 +625,7 @@ Results for all 15 base models on the no-MCO condition at the default look-back 
 | 9 | STGCN | 77.44 | 6.99 | 6.46 | 9.11 | 0.753 | 81,203 | 114,496 |
 | 10 | Autoformer | 76.71 | 7.15 | 6.82 | 9.33 | 0.741 | 85,660 | 117,208 |
 | 11 | STFGNN | 75.89 | 7.58 | 6.86 | 9.66 | 0.722 | 86,240 | 121,428 |
-| 12 | TFT | 75.70 | 7.57 | 7.27 | 9.46 | 0.734 | 91,401 | 118,839 |
-| 13 | CNN-LSTM-Augmented | 75.36 | 7.77 | 7.19 | 9.68 | 0.721 | 90,356 | 121,639 |
+| 12 | CNN-LSTM-Augmented | 75.36 | 7.77 | 7.19 | 9.68 | 0.721 | 90,356 | 121,639 |
 | 14 | CNN-LSTM-Parallel | 74.78 | 8.01 | 7.46 | 9.75 | 0.717 | 93,780 | 122,536 |
 | 15 | ASTGCN | 74.34 | 7.98 | 7.54 | 10.14 | 0.694 | 94,737 | 127,449 |
 | 16 | STSGCN | 73.33 | 8.60 | 7.77 | 10.30 | 0.684 | 97,689 | 129,451 |
@@ -667,7 +634,7 @@ Results for all 15 base models on the no-MCO condition at the default look-back 
 **Observations:**
 - LSTM-family models cluster between 75–79%, with simpler recurrent architectures (BiLSTM, TPA-LSTM) outperforming more complex CNN hybrids and graph models.
 - Graph-based models show mixed results: MTGNN (77.62%) and STGCN (77.44%) are competitive via their learned/fixed adjacency, but STSGCN (73.33%) and PDR-STGCN (67.75%) lag — the features-as-nodes graph construction is harder to learn in synchronous or dynamic settings at base capacity.
-- 11 of 15 models exceed the 75% Combined% target at baseline.
+- 10 of 14 models exceed the 75% Combined% target at baseline.
 
 ---
 
@@ -687,8 +654,7 @@ Fine-tuned model performance on no-MCO condition at look-back 14, sorted by Comb
 | 8 | CNN-LSTM-Augmented | 78.57 | 6.57 | 5.85 | 9.01 | 0.758 | 73,464 | 113,271 | +3.21 |
 | 9 | CNN-BiLSTM | 78.53 | 6.78 | 6.01 | 8.68 | 0.776 | 75,520 | 109,064 | +0.35 |
 | 10 | CNN-LSTM | 78.52 | 6.64 | 6.02 | 8.82 | 0.768 | 75,654 | 110,907 | +0.88 |
-| 11 | TFT | 78.47 | 6.56 | 6.03 | 8.95 | 0.762 | 75,788 | 112,444 | +2.77 |
-| 12 | CNN-LSTM-Parallel | 77.52 | 6.89 | 6.14 | 9.45 | 0.734 | 77,128 | 118,805 | +2.74 |
+| 11 | CNN-LSTM-Parallel | 77.52 | 6.89 | 6.14 | 9.45 | 0.734 | 77,128 | 118,805 | +2.74 |
 | 13 | PDR-STGCN | 77.78 | 6.73 | 6.22 | 9.26 | 0.745 | 78,230 | 116,379 | +10.03 |
 | 14 | MTGNN | 77.44 | 7.02 | 6.46 | 9.08 | 0.755 | 81,209 | 114,079 | −0.17 |
 | 15 | STSGCN | 77.14 | 7.04 | 6.33 | 9.49 | 0.732 | 79,494 | 119,266 | +3.81 |
@@ -696,11 +662,11 @@ Fine-tuned model performance on no-MCO condition at look-back 14, sorted by Comb
 | 17 | STFGNN | 74.55 | 8.03 | 7.42 | 10.00 | 0.702 | 93,248 | 125,728 | −1.35 |
 
 **Observations:**
-- 14 of 17 configurations improved; three regressed (MTGNN −0.17%, STGCN −1.11%, STFGNN −1.35%). For STGCN and STFGNN the increased dropout and deeper stacking introduce noise into a fixed pre-computed graph that cannot adapt to the changed capacity.
+- 13 of 16 configurations improved; three regressed (MTGNN −0.17%, STGCN −1.11%, STFGNN −1.35%). For STGCN and STFGNN the increased dropout and deeper stacking introduce noise into a fixed pre-computed graph that cannot adapt to the changed capacity.
 - PDR-STGCN showed the largest gain (+10.03%), recovering from the worst base performance (67.75%) to mid-tier (77.78%). The expanded hidden size and deeper attention-based dynamic graph combine effectively once provided with sufficient capacity.
 - ASTGCN also benefited substantially (+4.48%) from doubling d_model and n_blocks.
 - Combined% range compresses from 67.75–79.13% (base) to 74.55–81.04% (tuned), indicating tuning reduces inter-model variance.
-- All 17 tuned configurations now exceed the 74% floor; 15 of 17 exceed 77%.
+- All 16 tuned configurations now exceed the 74% floor; 14 of 16 exceed 77%.
 
 ---
 
@@ -719,8 +685,7 @@ Including the MCO pandemic period substantially degrades all models, revealing w
 | 7 | Autoformer | 66.40 | 10.75 | 10.40 | 12.45 | 0.574 | 128,254 | 153,503 | −12.87 |
 | 8 | CNN-BiLSTM | 67.53 | 10.22 | 10.20 | 12.05 | 0.601 | 125,837 | 148,570 | −11.00 |
 | 9 | CNN-LSTM-Augmented | 67.30 | 10.26 | 10.26 | 12.18 | 0.593 | 126,532 | 150,165 | −11.27 |
-| 10 | TFT | 64.36 | 11.51 | 11.12 | 13.01 | 0.535 | 137,100 | 160,488 | −14.11 |
-| 11 | STFGNN | 63.62 | 11.53 | 11.23 | 13.62 | 0.490 | 138,496 | 167,971 | −10.93 |
+| 10 | STFGNN | 63.62 | 11.53 | 11.23 | 13.62 | 0.490 | 138,496 | 167,971 | −10.93 |
 | 12 | MTGNN | 63.06 | 12.30 | 11.02 | 13.62 | 0.490 | 135,907 | 167,969 | −14.38 |
 | 13 | CNN-LSTM | 61.75 | 12.11 | 12.28 | 13.87 | 0.472 | 151,387 | 170,989 | −16.77 |
 | 14 | ASTGCN | 60.50 | 12.63 | 12.50 | 14.37 | 0.433 | 154,102 | 177,240 | −18.32 |
@@ -751,7 +716,6 @@ Performance across look-back windows 14, 28, and 56 days for tuned models under 
 | ASTGCN | 78.82 | 68.22 | 73.60 | **14** |
 | CNN-BiLSTM | 78.53 | 75.16 | 55.14 | **14** |
 | CNN-LSTM | 78.52 | 76.60 | 77.83 | **14** |
-| TFT | 78.47 | 51.02 | 37.94 | **14** |
 | PDR-STGCN | 77.78 | 76.10 | 52.13 | **14** |
 | MTGNN | 77.44 | 77.35 | **78.13** | **56** |
 | STSGCN | 77.14 | 73.53 | 50.13 | **14** |
@@ -759,8 +723,8 @@ Performance across look-back windows 14, 28, and 56 days for tuned models under 
 | STFGNN | 74.55 | 72.59 | 42.19 | **14** |
 
 **Observations:**
-- lb14 is optimal for 12 of 15 models; longer lookbacks generally degrade performance.
-- Autoformer (58.59%), TFT (37.94%), STFGNN (42.19%), and STSGCN (50.13%) collapse at lb56 — FFT autocorrelation, variable selection networks, and synchronous graph operations amplify noise over very long input sequences.
+- lb14 is optimal for 11 of 14 models; longer lookbacks generally degrade performance.
+- Autoformer (58.59%), STFGNN (42.19%), and STSGCN (50.13%) collapse at lb56 — FFT autocorrelation and synchronous graph operations amplify noise over very long input sequences.
 - MTGNN uniquely prefers lb56 (78.13%). Its learned asymmetric adjacency and multi-scale dilated inception appear to extract additional benefit from quarterly temporal context, unlike models relying on pre-computed static graphs.
 - Informer and STGCN marginally prefer lb28, consistent with ProbSparse attention capturing slightly longer-range dependencies without performance penalty.
 
@@ -776,7 +740,6 @@ Absolute Combined% improvement from base→tuned at nomco lb14, sorted by impact
 | ASTGCN | 74.34 | 78.82 | +4.48 | Doubled d_model and n_blocks unlock attention capacity |
 | STSGCN | 73.33 | 77.14 | +3.81 | Deeper synchronous graph benefits from larger hidden |
 | CNN-LSTM-Augmented | 75.36 | 78.57 | +3.21 | Richer CNN filters improve skip-connection quality |
-| TFT | 75.70 | 78.47 | +2.77 | Wider d_model + deeper LSTM/attention layers help VSN |
 | CNN-LSTM-Parallel | 74.78 | 77.52 | +2.74 | Deeper CNN filters improve both branches |
 | Autoformer | 76.71 | 79.27 | +2.55 | Larger d_ff and e_layers enhance decomposition quality |
 | LSTM | 78.13 | 81.04 | +2.91 | Doubled hidden/layers extracts more sequential capacity |
@@ -837,6 +800,5 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 | Model | Citation |
 |-------|----------|
 | ASTGCN | Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, 23(15), 6950. https://doi.org/10.3390/s23156950 |
-| TFT | Lee, J. & Kang, Y. (2025). PGTFT: A lightweight graph-attention temporal fusion transformer for predicting pedestrian congestion in shadow areas. *ISPRS International Journal of Geo-Information*, 14(10), 381. https://doi.org/10.3390/ijgi14100381 |
 | Autoformer | Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, 15(7), 3768. https://doi.org/10.3390/app15073768 |
 | Informer | Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, 24(15), 4796. https://doi.org/10.3390/s24154796 |

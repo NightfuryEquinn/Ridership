@@ -2,11 +2,11 @@
 
 > Source: `src/outputs/aggregate_results.csv` · Generated 2026-05-30
 > Companion files: `HMT-TSF-RESULTS.md` (proposed model), `DIAGNOSTICS.md` (fit diagnostics)
-> Scope: 17 model variants × 12 configurations. HMT-TSF appears here **only as a reference row**; full treatment in `HMT-TSF-RESULTS.md`.
+> Scope: 16 model variants × 12 configurations. HMT-TSF appears here **only as a reference row**; full treatment in `HMT-TSF-RESULTS.md`.
 
 ## 1. Scope & conventions
 
-- **Models (17 rows):** ASTGCN, Autoformer, BiLSTM, CNN-BiLSTM, CNN-LSTM, CNN-LSTM-Augmented, CNN-LSTM-Parallel, Informer, LSTM, MTGNN, PDR-STGCN, ST-LSTM, STFGNN, STGCN, STSGCN, TFT, TPA-LSTM. (The three CNN-LSTM rows are the `sequential` / `augmented` / `parallel` modes.)
+- **Models (16 rows):** ASTGCN, Autoformer, BiLSTM, CNN-BiLSTM, CNN-LSTM, CNN-LSTM-Augmented, CNN-LSTM-Parallel, Informer, LSTM, MTGNN, PDR-STGCN, ST-LSTM, STFGNN, STGCN, STSGCN, TPA-LSTM. (The three CNN-LSTM rows are the `sequential` / `augmented` / `parallel` modes.)
 - **Configuration matrix (12 per model):** `{base, tuned}` × `{nomco, mco}` × `{lb14, lb28, lb56}`.
   - `nomco` = MCO/COVID lockdown window (2020-03-18 – 2021-12-31) **excluded** (project default).
   - `mco` = MCO window **included** (structural-break stress test).
@@ -32,8 +32,7 @@ Sorted by Combined% (best → worst). HMT-TSF reference row appended.
 | 7 | CNN-LSTM | 77.64 | 6.92 | 6.32 | 9.12 | 0.752 | 79,375 | 114,632 |
 | 8 | MTGNN | 76.98 | 7.23 | 6.70 | 9.09 | 0.754 | 84,162 | 114,178 |
 | 9 | STSGCN | 76.97 | 7.18 | 6.42 | 9.42 | 0.736 | 80,703 | 118,391 |
-| 10 | TFT | 76.52 | 7.38 | 6.89 | 9.20 | 0.748 | 86,650 | 115,651 |
-| 11 | ASTGCN | 75.69 | 7.42 | 6.89 | 9.99 | 0.703 | 86,631 | 125,606 |
+| 10 | ASTGCN | 75.69 | 7.42 | 6.89 | 9.99 | 0.703 | 86,631 | 125,606 |
 | 12 | CNN-LSTM-Augmented | 75.36 | 7.77 | 7.19 | 9.68 | 0.721 | 90,356 | 121,639 |
 | 13 | STGCN | 74.92 | 7.87 | 7.42 | 9.80 | 0.714 | 93,238 | 123,116 |
 | 14 | Autoformer | 74.73 | 7.86 | 7.51 | 9.90 | 0.708 | 94,414 | 124,408 |
@@ -61,7 +60,6 @@ Sorted by Combined% (best → worst). HMT-TSF reference row appended.
 | ASTGCN | 78.82 | 0.754 | +3.13 |
 | LSTM | 78.43 | 0.777 | +0.30 |
 | PDR-STGCN | 78.16 | 0.759 | **+5.58** |
-| TFT | 76.68 | 0.744 | +0.16 |
 | CNN-LSTM-Augmented | 76.61 | 0.741 | +1.25 |
 | CNN-BiLSTM | 76.40 | 0.750 | −1.78 |
 | MTGNN | 76.40 | 0.742 | −0.58 |
@@ -100,12 +98,11 @@ Combined% at lb14 / lb28 / lb56 (best of the three **bold**).
 | STFGNN | **73.94** | 61.30 | 43.25 |
 | STGCN | 74.92 | **75.58** | 74.93 |
 | STSGCN | **76.97** | 75.02 | 75.15 |
-| TFT | **76.52** | 76.42 | 45.51 |
 | TPA-LSTM | 78.67 | **79.08** | 77.01 |
 
 **Read-out:**
 - **lb14 or lb28 is optimal for almost every model**; lb56 rarely wins (only PDR-STGCN peaks at lb56). Longer windows add parameters/noise without payoff for a 7-day horizon.
-- **Two catastrophic lb56 collapses:** STFGNN (73.94 → 43.25, R² −0.112) and TFT (76.52 → 45.51, R² −0.021). Both fall below the "beats the mean" line at lb56. STFGNN also degrades sharply at lb28 (61.30). These two are the lookback-fragile models.
+- **Catastrophic lb56 collapse:** STFGNN (73.94 → 43.25, R² −0.112) falls below the "beats the mean" line at lb56 and also degrades sharply at lb28 (61.30). This is the most lookback-fragile model.
 - MTGNN is the most lookback-stable (76.98 / 77.99 / 77.76).
 
 ---
@@ -128,7 +125,6 @@ Combined% at lb14 / lb28 / lb56 (best of the three **bold**).
 | CNN-BiLSTM | 78.18 | 60.77 | −17.41 | 0.430 |
 | STFGNN | 73.94 | 55.22 | −18.72 | 0.288 |
 | LSTM | 78.13 | 58.92 | −19.21 | 0.390 |
-| TFT | 76.52 | 54.97 | −21.55 | 0.273 |
 | Autoformer | 74.73 | 51.26 | −23.47 | 0.121 |
 | CNN-LSTM | 77.64 | 47.59 | **−30.05** | 0.026 |
 | — | — | — | — | — |
@@ -136,7 +132,7 @@ Combined% at lb14 / lb28 / lb56 (best of the three **bold**).
 
 **Read-out:**
 - The MCO structural break punishes every model, but the spread is huge: **−5.9 (Informer) to −30.1 (CNN-LSTM)**.
-- **CNN-LSTM (sequential) effectively fails under MCO** (47.59 Combined, R² 0.026 — barely above the mean baseline). Autoformer (R² 0.121) and TFT (R² 0.273) also degrade severely.
+- **CNN-LSTM (sequential) effectively fails under MCO** (47.59 Combined, R² 0.026 — barely above the mean baseline). Autoformer (R² 0.121) also degrades severely.
 - **HMT-TSF is the most MCO-robust model in the study** (−5.80, edging Informer's −5.91) while retaining the highest absolute MCO performance (75.66 vs Informer 73.22). This is the central argument for its regime-aware design — see `HMT-TSF-RESULTS.md` §MCO.
 - Note the CNN-LSTM-Augmented variant is far more MCO-robust (75.36 → 65.25, −10.1) than the sequential CNN-LSTM (−30.1), suggesting the augmentation regularises against the structural break.
 
@@ -155,9 +151,9 @@ Combined% at lb14 / lb28 / lb56 (best of the three **bold**).
 - PDR-STGCN is the weakest baseline at default but the **single biggest beneficiary of tuning (+5.58)** and surprisingly MCO-robust (−7.05).
 - MTGNN is the most lookback-stable graph model and `good_fit` when MCO is excluded.
 
-**Attention-based (TPA-LSTM, ASTGCN, TFT, Autoformer, Informer)**
+**Attention-based (TPA-LSTM, ASTGCN, Autoformer, Informer)**
 - **Informer is the standout** — top baseline Combined%, best non-LSTM R², most MCO-robust attention model, and the only baseline that is `good_fit` across all 6 base configs (`DIAGNOSTICS.md`).
-- Autoformer and TFT are the fragile end: Autoformer worst MCO degradation among attention models (R² 0.121); TFT collapses at lb56.
+- Autoformer is the fragile end: worst MCO degradation among attention models (R² 0.121).
 
 ---
 
@@ -176,7 +172,6 @@ Combined% at lb14 / lb28 / lb56 (best of the three **bold**).
 | MTGNN | base_nomco_lb28 | 77.99 | 0.769 |
 | CNN-LSTM | base_nomco_lb14 | 77.64 | 0.752 |
 | STSGCN | base_nomco_lb14 | 76.97 | 0.736 |
-| TFT | tuned_nomco_lb14 | 76.68 | 0.744 |
 | CNN-LSTM-Augmented | tuned_nomco_lb28 | 77.30 | 0.749 |
 | STGCN | tuned_nomco_lb28 | 76.68 | 0.733 |
 | Autoformer | tuned_nomco_lb28 | 76.66 | 0.715 |
@@ -191,7 +186,7 @@ Every model's best slice is a `nomco` config; no model's best is MCO-included. B
 
 1. **HMT-TSF wins outright.** It is #1 in the default config (+2.33 Combined over the best baseline), posts the lowest MAE/RMSE, and is the most MCO-robust model — a clean sweep across accuracy and robustness axes.
 2. **Best baselines: Informer, BiLSTM, TPA-LSTM.** Informer is the most well-rounded (top accuracy, clean fit, MCO-robust). BiLSTM/TPA-LSTM match it on accuracy but overfit.
-3. **Weakest baselines: PDR-STGCN, STFGNN, Autoformer, CNN-LSTM-Parallel.** STFGNN and TFT additionally have severe lookback fragility; CNN-LSTM (sequential) and Autoformer have severe MCO fragility.
+3. **Weakest baselines: PDR-STGCN, STFGNN, Autoformer, CNN-LSTM-Parallel.** STFGNN has severe lookback fragility; CNN-LSTM (sequential) and Autoformer have severe MCO fragility.
 4. **lb14 is the right default.** Longer windows do not help a 7-day horizon and trigger collapses in fragile models.
 5. **Tuning is a wash on accuracy** (median ~+0.4 Combined) and **costs generalisation** (see `DIAGNOSTICS.md`). Use tuned variants selectively (PDR-STGCN, ASTGCN benefit; CNN-LSTM, STSGCN regress).
 
@@ -205,8 +200,8 @@ Every model's best slice is a `nomco` config; no model's best is MCO-included. B
 | **Robustness to shocks / lockdowns / structural breaks** | HMT-TSF; fallback Informer or BiLSTM | Smallest MCO degradation and highest retained accuracy under the break. |
 | **Lowest absolute error (MAE/RMSE) target** | HMT-TSF | MAE 59k vs best baseline 69k (−15%); lowest RMSE in the field. |
 | **Compute-constrained / simple deployment** | LSTM or BiLSTM (base, lb14) | Near-top accuracy with the simplest architecture and shortest window. |
-| **Interpretability / feature attribution required** | TFT, or HMT-TSF with `--shap` | TFT's attention is interpretable (use lb14 only — avoid its lb56 collapse). |
-| **Longer look-back mandated by data constraints** | MTGNN | Most lookback-stable; avoid STFGNN/TFT at lb≥28. |
-| **Avoid at any cost** | STFGNN, TFT at lb56; CNN-LSTM (seq) under MCO | Sub-mean R² (negative or ~0) — worse than naive persistence. |
+| **Interpretability / feature attribution required** | HMT-TSF with `--shap` | SHAP values expose which feature groups drive each forecast step. |
+| **Longer look-back mandated by data constraints** | MTGNN | Most lookback-stable; avoid STFGNN at lb≥28. |
+| **Avoid at any cost** | STFGNN at lb56; CNN-LSTM (seq) under MCO | Sub-mean R² (negative or ~0) — worse than naive persistence. |
 
 > All numbers verified against `aggregate_results.csv` rows 2–18. Cross-check fit reliability in `DIAGNOSTICS.md` before treating any baseline's headline number as deployable.

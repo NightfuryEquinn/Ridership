@@ -66,7 +66,6 @@ python src/models/graph-based/stgcn.py
 python src/models/graph-based/stsgcn.py
 python src/models/graph-based/stfgnn.py
 python src/models/graph-based/pdr_stgcn.py
-python src/models/attention-based/tft.py
 ```
 
 Each model script accepts `--seq-dir`, `--epochs`, `--batch-size`, `--lr`, `--patience`, `--device`, `--seed`, and model-specific hyperparameter flags. See the docstring at the top of each file. `--device auto` selects CUDA → MPS → CPU automatically.
@@ -148,7 +147,6 @@ python src/models/graph-tuned/pdr_stgcn.py
 # Attention tuned
 python src/models/attention-tuned/tpalstm.py
 python src/models/attention-tuned/astgcn.py
-python src/models/attention-tuned/tft.py
 python src/models/attention-tuned/autoformer.py
 python src/models/attention-tuned/informer.py
 ```
@@ -209,7 +207,7 @@ src/outputs/{model}/           timestamped run dirs with results.json, plots, mo
 |---|---|---|
 | Spatio-temporal (LSTM-family) | `src/models/spatio-temporal-based/` | LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
 | Graph-based | `src/models/graph-based/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
-| Attention-based | `src/models/attention-based/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
+| Attention-based | `src/models/attention-based/` | TPA-LSTM, ASTGCN, Autoformer, Informer |
 | Hybrid SOTA | `src/models/hybrid/` | HMT-TSF |
 
 ### The Three Tuned Series
@@ -218,7 +216,7 @@ src/outputs/{model}/           timestamped run dirs with results.json, plots, mo
 |---|---|---|
 | Spatio-temporal tuned | `src/models/spatio-temporal-tuned/` | LSTM, BiLSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
 | Graph tuned | `src/models/graph-tuned/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
-| Attention tuned | `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, TFT, Autoformer, Informer |
+| Attention tuned | `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, Autoformer, Informer |
 
 **Canonical reference model:** `src/models/spatio-temporal-based/stlstm.py` — the training loop, output structure, and comparison pattern here should be followed when adding new models.
 
@@ -236,8 +234,8 @@ Each model auto-detects and compares against all prior model runs. Results are l
 LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 → CNN-BiLSTM (6-way) → ST-LSTM (7-way) → STGCN (8-way)
 → MTGNN (9-way) → STSGCN (10-way) → STFGNN (11-way) → PDR-STGCN (12-way)
-→ ASTGCN (13-way) → TFT (14-way) → Autoformer (15-way) → Informer (16-way)
-→ HMT-TSF (17-way)
+→ ASTGCN (13-way) → Autoformer (14-way) → Informer (15-way)
+→ HMT-TSF (16-way)
 ```
 
 ### Shared Utilities (`src/utils/`)
@@ -247,7 +245,7 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 
 ### AMP (Mixed Precision)
 
-The attention-based models (ASTGCN, TFT, Autoformer, Informer) and HMT-TSF use `torch.cuda.amp.GradScaler` + `autocast` for mixed-precision training on the A100. Autoformer wraps its FFT ops with an explicit `float32` cast inside `autocast` for numerical stability. LSTM-family and graph-based models do not use AMP.
+The attention-based models (ASTGCN, Autoformer, Informer) and HMT-TSF use `torch.cuda.amp.GradScaler` + `autocast` for mixed-precision training on the A100. Autoformer wraps its FFT ops with an explicit `float32` cast inside `autocast` for numerical stability. LSTM-family and graph-based models do not use AMP.
 
 ### Output Structure
 
@@ -296,7 +294,7 @@ Architecture defaults (per-model, aligned with MODEL.md):
 - MTGNN: `hidden=32`, `skip_ch=64`, `n_layers=3`, `d_emb=10`, `d_hop=2`
 - STSGCN: `hidden=64`, `n_layers=2`, `cheb_k=2`
 - STFGNN: `hidden=64`, `n_layers=3`
-- ASTGCN / TFT / Autoformer / Informer: `d_model=64`, `n_heads=4`
+- ASTGCN / Autoformer / Informer: `d_model=64`, `n_heads=4`
 
 ### Tuned Architecture Defaults (Fine-Tuned Variants)
 
@@ -316,7 +314,6 @@ Architecture hyperparameters changed in the tuned scripts (training params uncha
 | PDR-STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=2`, `dk=64`, `period=7`, `dropout=0.25`, `weight_decay=2e-4` |
 | TPA-LSTM (tuned) | `hidden=128`, `filters=64`, `dropout=0.15` |
 | ASTGCN (tuned) | `d_model=128`, `n_heads=8`, `n_blocks=3`, `dropout=0.20` |
-| TFT (tuned) | `d_model=128`, `n_heads=8`, `n_lstm_layers=2`, `n_attn_layers=3`, `dropout=0.25`, `weight_decay=2e-4` |
 | Autoformer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.25`, `weight_decay=2e-4` |
 | Informer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.15` |
 

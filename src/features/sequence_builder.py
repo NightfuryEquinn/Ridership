@@ -2,12 +2,12 @@
 sequence_builder.py  — Sequence & Tensor Assembly for All Models
 
 Consumes features_aligned.csv (all 8 spatio-temporal feature sources) and
-produces ready-to-train sliding-window sequences for all 15 models in the stack.
+produces ready-to-train sliding-window sequences for all 14 models in the stack.
 
 All models load from data/sequences/lstm/:
   LSTM-family      : LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
   Graph-based      : STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN
-  Attention-based  : TPA-LSTM, ASTGCN, TFT, Autoformer, Informer
+  Attention-based  : TPA-LSTM, ASTGCN, Autoformer, Informer
 
 Graph models build their adjacency matrices on-the-fly from the training
 data (Pearson correlation, threshold 0.1) — no external graph files needed.
