@@ -4,7 +4,7 @@ hmttsf.py — HMT-TSF: Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 Architecture Diagram
 ====================
 
-  Input X: (B, T_in, F=79)
+  Input X: (B, T_in, F=53)  [79 raw features; 26 zero-SHAP features dropped at load time]
            │
   ┌────────┴────────────────────────────────────────────────────┐
   │               Feature Group Encoders                        │
@@ -38,12 +38,12 @@ Architecture Diagram
 
 Custom Loss = λ₁·WeightedHuber(step-decayed) + λ₂·TemporalSmoothness
 
-Feature Groups (from CLAUDE.md / split_dates.json):
+Feature Groups (79→53 after SHAP reduction; see _DROPPED_FEAT_INDICES):
   Indices 0–12   : target context (13 service-line riderships)
-  Indices 13–28  : temporal/cyclical (16: holiday flags, sin/cos, year, doy)
-  Indices 29–58  : external (30: fuel ×15, rainfall ×15)
-  Indices 59–61  : lag features (3: lag_7, lag_14, lag_28)
-  Indices 62–78  : static (17: population, GTFS, OSM POI, GADM)
+  Indices 13–22  : temporal/cyclical (10: 6 zero-importance features dropped)
+  Indices 23–49  : external (27: 3 collinear fuel-level features dropped)
+  Indices 50–52  : lag features (3: lag_7, lag_14, lag_28)
+  (static group eliminated — all 17 features had zero SHAP importance)
 
 Optimisation targets:
   Combined% ≥ 75,  R² ≥ 0.70
@@ -104,6 +104,56 @@ FEAT_GROUPS = {
     "lag":      (59, 62),   # ridership_lag_{7,14,28}
     "static":   (62, 79),   # population, GTFS stats, OSM POI, GADM
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHAP-derived feature reduction (applied at load time in main())
+#
+# 26 features with zero or near-zero importance across all 10 HMT-TSF runs
+# (see HMT-TSF-RESULTS.md §10).  Dropped indices are sourced from the original
+# 79-feature space; the 53 survivors are re-indexed contiguously and their
+# group boundaries are captured in _REDUCED_FEAT_GROUPS.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DROPPED_FEAT_INDICES: frozenset = frozenset([
+    # Temporal — redundant or zero across all configs
+    18,             # days_to_next_school_hol (near-zero, 8/10 runs)
+    21,             # month (redundant with month_sin/cos)
+    22,             # is_weekend (subsumed by day_of_week)
+    23,             # dow_sin (raw day_of_week dominates)
+    24,             # dow_cos (near-zero, 8/10 runs)
+    27,             # year (near-zero, 8/10 runs)
+    # Fuel — collinear level features
+    30,             # fp_lv_ron97 (collinear with RON95)
+    31,             # fp_lv_diesel (collinear with diesel pct_chg)
+    32,             # fp_lv_diesel_eastmsia (East Malaysia, irrelevant)
+    # Static — time-invariant; no day-to-day variance
+    62, 63,         # pop_density_median / log_median
+    64, 65, 66, 67, # GTFS: n_stops, n_routes, n_directed_edges, avg_segment_s
+    68, 69, 70, 71, 72, 73, 74, 75,  # OSM POI: total/transport/food/retail/education/healthcare/leisure/other
+    76, 77, 78,     # GADM: n_states, n_border_pairs, mean_border_km
+])
+
+_KEPT_FEAT_INDICES: list = sorted(set(range(79)) - _DROPPED_FEAT_INDICES)  # 53 features
+
+# Re-mapped group slices for the 53-feature reduced input:
+#   target (0-12)   → 13 features, unchanged
+#   temporal (13-28)→ 10 kept (drop positions 5,8,9,10,11,14 within group)
+#   external (29-58)→ 27 kept (drop indices 30,31,32)
+#   lag (59-61)     → 3 features, unchanged
+#   static (62-78)  → 0 features (all dropped)
+_REDUCED_FEAT_GROUPS: dict = {
+    "target":   (0,  13),
+    "temporal": (13, 23),
+    "external": (23, 50),
+    "lag":      (50, 53),
+    "static":   (53, 53),  # empty — FeatureGroupFusion handles this gracefully
+}
+
+# Positions within the temporal group (0-indexed from feat 13) to retain in
+# X_future tensors (which carry only the temporal slice, not all 79 features).
+_DROPPED_TEMPORAL_POSITIONS: frozenset = frozenset(i - 13 for i in _DROPPED_FEAT_INDICES
+                                                    if 13 <= i <= 28)
+_KEPT_TEMPORAL_POSITIONS: list = sorted(set(range(16)) - _DROPPED_TEMPORAL_POSITIONS)  # 10
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-lookback baseline defaults
@@ -221,9 +271,10 @@ class FeatureGroupFusion(nn.Module):
     how much each group contributes.
     """
 
-    def __init__(self, n_features: int, d_model: int, dropout: float = 0.1):
+    def __init__(self, n_features: int, d_model: int, dropout: float = 0.1,
+                 feat_groups: dict | None = None):
         super().__init__()
-        g = FEAT_GROUPS
+        g = feat_groups if feat_groups is not None else FEAT_GROUPS
         # Clamp end indices to actual feature count
         def _enc(key):
             s, e = g[key]
@@ -495,7 +546,7 @@ class GraphConvLayer(nn.Module):
 
 class FeatureGraphEncoder(nn.Module):
     """
-    Treats the F=79 features as graph nodes.
+    Treats the F input features as graph nodes (F=53 after SHAP reduction).
     Input: raw feature sequence (B, T, F).
     Aggregates over T → node signals → 2-layer GCN → global mean pool → (B, d_model).
 
@@ -706,6 +757,7 @@ class HMTTSFForecaster(nn.Module):
         target_idx:      int   = 12,
         use_revin:       bool  = True,
         n_temporal_feats: int  = 16,
+        feat_groups:      dict | None = None,
     ):
         super().__init__()
         self.target_idx = target_idx
@@ -716,7 +768,8 @@ class HMTTSFForecaster(nn.Module):
             self.revin = RevIN(n_features)
 
         # Feature group fusion: (B, T, F) → (B, T, d_model)
-        self.feat_fusion = FeatureGroupFusion(n_features, d_model, dropout)
+        self.feat_fusion = FeatureGroupFusion(n_features, d_model, dropout,
+                                              feat_groups=feat_groups)
 
         # Global temporal self-attention: (B, T, d_model) → (B, T, d_model)
         # Allows the model to weight which time steps matter before local TCN.
@@ -1432,6 +1485,27 @@ def main():
     n_temporal_feats = (split_meta.get("temporal_feat_end", 29)
                         - split_meta.get("temporal_feat_start", 13))
 
+    # ── SHAP-derived feature reduction: 79 → 53 features ─────────────────────
+    # Applied here so no other model script is affected. The 26 dropped features
+    # have zero (or near-zero) SHAP importance across all 10 HMT-TSF configs;
+    # see HMT-TSF-RESULTS.md §10 for the full removal rationale.
+    print(f"\nFeature reduction: retaining {len(_KEPT_FEAT_INDICES)}/{n_features} features "
+          f"({len(_DROPPED_FEAT_INDICES)} zero-importance features dropped)")
+    _kept_t = torch.tensor(_KEPT_FEAT_INDICES, device=device)
+    X_tr = X_tr[:, :, _kept_t]
+    X_va = X_va[:, :, _kept_t]
+    X_te = X_te[:, :, _kept_t]
+    n_features = X_tr.shape[2]  # 53
+
+    if has_future and len(_KEPT_TEMPORAL_POSITIONS) < n_temporal_feats:
+        _ktp = torch.tensor(_KEPT_TEMPORAL_POSITIONS, device=device)
+        Xf_tr = Xf_tr[:, :, _ktp]
+        if Xf_va is not None:
+            Xf_va = Xf_va[:, :, _ktp]
+        if Xf_te is not None:
+            Xf_te = Xf_te[:, :, _ktp]
+    n_temporal_feats = len(_KEPT_TEMPORAL_POSITIONS)  # 10
+
     def _make_ds(*tensors):
         return TensorDataset(*[t for t in tensors if t is not None])
 
@@ -1470,6 +1544,7 @@ def main():
         target_idx       = args.target_idx,
         use_revin        = not args.no_revin,
         n_temporal_feats = n_temporal_feats,
+        feat_groups      = _REDUCED_FEAT_GROUPS,
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -1732,8 +1807,11 @@ def main():
 
     # ── SHAP ──────────────────────────────────────────────────────────────────
     if args.shap:
+        _all_names = load_feature_names()
+        _reduced_names = ([_all_names[i] for i in _KEPT_FEAT_INDICES]
+                          if _all_names else None)
         run_shap_analysis(model, X_te, out_dir,
-                          feature_names=load_feature_names(),
+                          feature_names=_reduced_names,
                           n_samples=args.shap_samples, use_amp=use_amp)
 
     # ── summary ───────────────────────────────────────────────────────────────

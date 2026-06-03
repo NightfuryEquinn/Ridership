@@ -55,7 +55,7 @@ def main():
     # Zero-fill ONLY for dates on or after the launch date.
     launch_dates = {
         "bus_rkl":            "2022-01-01",
-"bus_rpn":            "2022-01-01",
+        "bus_rpn":            "2022-01-01",
         "rail_ets":           "2020-10-15",
         "rail_intercity":     "2020-10-15",
         "rail_komuter_utara": "2020-10-15",

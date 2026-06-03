@@ -6,6 +6,7 @@ Objectives:
 2. Peak vs off-peak pattern profiling
 3. Day-of-week & hour distribution
 4. Growth rate & change-point detection
+5. MCO impact analysis
 
 Note: Transit lines start reporting from their launch date.
 Zero-filling is only applied AFTER the known launch date.
@@ -18,6 +19,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.tsa.seasonal import seasonal_decompose
 from ruptures.detection import Binseg
+
+MCO_START = pd.Timestamp("2020-03-18")
+MCO_END   = pd.Timestamp("2021-12-31")
 
 # Setup
 OUTPUT_DIR = "results"
@@ -162,6 +166,87 @@ def service_specific_analysis(df):
         plt.savefig(os.path.join(OUTPUT_DIR, f'service_{service}.png'))
         plt.close()
 
+# MCO Impact Analysis
+def mco_impact_analysis(df):
+    """Segment ridership by MCO period and quantify collapse and recovery."""
+    _COMPUTED = {'total_ridership', 'day_of_week', 'month', 'day_type', 'hour', 'peak_period'}
+    service_cols = [c for c in df.columns if c not in _COMPUTED]
+
+    pre_mco  = df[df.index < MCO_START]
+    mco      = df[(df.index >= MCO_START) & (df.index <= MCO_END)]
+    post_mco = df[df.index > MCO_END]
+
+    # --- Plot 1: total ridership with MCO band ---
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.plot(df.index, df['total_ridership'], linewidth=0.8, color='steelblue', label='Total Ridership')
+    ax.axvspan(MCO_START, MCO_END, color='red', alpha=0.15, label='MCO Period')
+    ax.annotate('MCO Period', xy=(MCO_START + (MCO_END - MCO_START) / 2, ax.get_ylim()[1]),
+                ha='center', va='top', color='red', fontsize=9)
+    ax.set_title('Total Ridership with MCO Period Highlighted')
+    ax.set_ylabel('Ridership')
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_DIR, 'mco_period_overlay.png'))
+    plt.close()
+
+    # --- Plot 2: per-service average ridership across three periods ---
+    pre_avgs  = pre_mco[service_cols].mean()
+    mco_avgs  = mco[service_cols].mean()
+    post_avgs = post_mco[service_cols].mean()
+
+    x = np.arange(len(service_cols))
+    width = 0.28
+    fig, ax = plt.subplots(figsize=(16, 6))
+    ax.bar(x - width, pre_avgs,  width, label='Pre-MCO',  color='steelblue')
+    ax.bar(x,          mco_avgs,  width, label='MCO',      color='tomato')
+    ax.bar(x + width, post_avgs, width, label='Post-MCO', color='mediumseagreen')
+    ax.set_xticks(x)
+    ax.set_xticklabels(service_cols, rotation=45, ha='right', fontsize=8)
+    ax.set_ylabel('Average Daily Ridership')
+    ax.set_title('Average Ridership by Period Across Services')
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_DIR, 'mco_period_comparison.png'))
+    plt.close()
+
+    # --- Plot 3: post-MCO recovery trajectories (% of pre-MCO baseline) ---
+    services_with_pre = [c for c in service_cols if pre_mco[c].mean() > 0]
+    monthly_post = post_mco[services_with_pre].resample('ME').mean()
+    palette = sns.color_palette('tab10', n_colors=len(services_with_pre))
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.axhline(100, color='black', linestyle='--', linewidth=0.8, label='Pre-MCO baseline (100%)')
+    for col, color in zip(services_with_pre, palette):
+        baseline = pre_mco[col].mean()
+        if baseline > 0:
+            recovery = monthly_post[col] / baseline * 100
+            ax.plot(recovery.index, recovery, linewidth=1.2, label=col, color=color)
+    ax.set_title('Post-MCO Recovery Trajectories (% of Pre-MCO Baseline)')
+    ax.set_ylabel('% of Pre-MCO Average')
+    ax.legend(fontsize=7, ncol=2)
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_DIR, 'mco_recovery_trajectories.png'))
+    plt.close()
+
+    # --- CSV: per-service MCO impact metrics ---
+    rows = []
+    for col in service_cols:
+        pre_avg  = pre_mco[col].mean()
+        mco_avg  = mco[col].mean()
+        post_avg = post_mco[col].mean()
+        collapse = (mco_avg - pre_avg) / pre_avg * 100 if pre_avg > 0 else float('nan')
+        recovery = (post_avg - pre_avg) / pre_avg * 100 if pre_avg > 0 else float('nan')
+        rows.append({
+            'service':      col,
+            'pre_mco_avg':  round(pre_avg,  2) if pre_avg > 0 else float('nan'),
+            'mco_avg':      round(mco_avg,  2),
+            'post_mco_avg': round(post_avg, 2),
+            'collapse_pct': round(collapse, 2) if not np.isnan(collapse) else float('nan'),
+            'recovery_pct': round(recovery, 2) if not np.isnan(recovery) else float('nan'),
+        })
+    pd.DataFrame(rows).to_csv(os.path.join(OUTPUT_DIR, 'mco_impact_metrics.csv'), index=False)
+
+
 # Main Execution
 def main():
     """Run all EDA functions."""
@@ -182,7 +267,10 @@ def main():
     
     print("Running Service-Specific Analysis...")
     service_specific_analysis(df)
-    
+
+    print("Running MCO Impact Analysis...")
+    mco_impact_analysis(df)
+
     print("EDA completed. Visualizations saved to current directory.")
 
 if __name__ == "__main__":
