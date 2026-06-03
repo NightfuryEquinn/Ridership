@@ -1,6 +1,6 @@
 # Model Descriptions
 
-> Last updated: 2026-05-29
+> Last updated: 2026-06-03
 
 This document describes all 15 deep-learning models used in the Malaysian transit ridership forecasting study. Models are divided into three baseline series — **Spatio-Temporal (LSTM-family)**, **Graph-Based**, and **Attention-Based** — plus one **Hybrid SOTA** model (HMT-TSF). All 14 baseline models share the same input/output dimensions (T_in ∈ {14, 28, 56} look-back via `--lookback`, T_out=7 forecast horizon), the same dataset (79 features across 8 spatio-temporal sources), and the same evaluation metrics (Combined%, MAPE%, MAE%, RMSE%, R², MAE, RMSE). HMT-TSF extends look-back support to {7, 14, 28, 56, 84} days.
 
@@ -757,16 +757,18 @@ Absolute Combined% improvement from base→tuned at nomco lb14, sorted by impact
 
 ### HMT-TSF vs Best Tuned Baselines
 
-For a direct cross-model comparison at the canonical lb14 configuration, see `src/models/hybrid/HMT-TSF.md` → Achieved Results. Key summary:
+For a direct cross-model comparison at the canonical lb14 configuration, see `src/models/hybrid/HMT-TSF.md` → Achieved Results. Key summary (lb14 no-MCO and MCO):
 
-| Condition | Best Baseline | Best Baseline Combined% | HMT-TSF Combined% | Δ |
-|-----------|---------------|------------------------|-------------------|---|
-| No-MCO, lb14 | LSTM (tuned) | 81.04 | 80.99 | −0.05 |
-| MCO, lb14 | Informer (tuned) | 75.35 | 77.17 | +1.82 |
-| No-MCO, lb28 | Informer (tuned) | 80.08 | 79.37 | −0.71 |
-| No-MCO, lb56 | TPA-LSTM (tuned) | 79.33 | 78.93 | −0.40 |
+| Condition | Model | Combined% | R² | Δ vs Best Baseline |
+|-----------|-------|-----------|-----|-------------------|
+| No-MCO, lb14 | **HMT-TSF-FR** | **81.62** | **0.807** | **+1.63 pp** vs Informer tuned (79.99) |
+| No-MCO, lb14 | HMT-TSF | 81.46 | 0.797 | +1.47 pp vs Informer tuned (79.99) |
+| No-MCO, lb14 | Informer (tuned) | 79.99 | 0.778 | — best baseline |
+| MCO, lb14 | Informer (tuned) | 75.79 | 0.742 | — best baseline |
+| MCO, lb14 | HMT-TSF | 75.66 | 0.724 | −0.13 pp vs Informer tuned |
+| MCO, lb14 | HMT-TSF-FR | 75.66 | 0.708 | −0.13 pp vs Informer tuned |
 
-Under no-MCO conditions HMT-TSF is effectively tied with the best baselines (within 0.05–0.71%). Under MCO conditions it leads by 1.82 percentage points at lb14, confirming the regime gating mechanism provides a meaningful advantage during COVID-disruption periods.
+Under no-MCO conditions both HMT-TSF variants lead the study: HMT-TSF-FR (F=53) at 81.62% and HMT-TSF Full (F=79) at 81.46% are 1.47–1.63 pp above the best baseline (Informer tuned, 79.99%). Under MCO conditions both variants are effectively tied with Informer tuned (75.79%) at lb14, within 0.13 pp. Note that HMT-TSF-FR's MCO optimum is at lb28 (76.54%), not lb14; see `HMT-TSF.md` for the full 10-config breakdown.
 
 ---
 

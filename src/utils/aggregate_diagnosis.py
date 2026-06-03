@@ -84,6 +84,13 @@ _MCO_LABELS = {
     "include": "With MCO (include)",
 }
 
+# Override display names for model keys whose data.get("model") value is
+# ambiguous (e.g. both hmttsf and hmttsf_feat_reduced report "HMTTSFForecaster").
+_MODEL_DISPLAY_OVERRIDE = {
+    "hmttsf":              "HMT-TSF",
+    "hmttsf_feat_reduced": "HMT-TSF-FR",
+}
+
 _PIVOT_FIELDS = [
     ("verdict",       "Verdict",   8),
     ("val_drift_pct", "Drift%",    7),
@@ -234,14 +241,18 @@ def scan_all_results(outputs_root):
         if data is None:
             continue
 
-        diag = data.get("fit_diagnosis")
+        diag = (data.get("training") or {}).get("fit_diagnosis") or data.get("fit_diagnosis")
         if not diag:
             continue
 
         split_dates  = data.get("split_dates") or {}
         model_key    = _model_key_from_path(path, outputs_root)
-        display_name = data.get("model") or model_key
-        if model_key.endswith("_tuned"):
+        display_name = (
+            _MODEL_DISPLAY_OVERRIDE.get(model_key)
+            or data.get("model")
+            or model_key
+        )
+        if model_key.endswith("_tuned") and model_key not in _MODEL_DISPLAY_OVERRIDE:
             display_name = display_name.rstrip(")") + " (tuned)"
         run_id       = data.get("run_id", os.path.basename(os.path.dirname(path)))
 

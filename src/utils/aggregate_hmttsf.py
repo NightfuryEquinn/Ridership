@@ -1,7 +1,13 @@
 """
 aggregate_hmttsf.py — Collect all HMT-TSF run results into a summary table.
 
-Scans src/outputs/hmttsf/ for results.json files and aggregates across:
+Scans src/outputs/hmttsf/ and src/outputs/hmttsf_feat_reduced/ for results.json
+files and aggregates across two model variants:
+
+  HMT-TSF    : full 79-feature model  (src/outputs/hmttsf/)
+  HMT-TSF-FR : feature-reduced 53-feat (src/outputs/hmttsf_feat_reduced/)
+
+Each variant covers the same MCO × lookback configurations:
 
   MCO      : "include" (train start < 2022-01-01)
            | "exclude" (train start >= 2022-01-01)
@@ -15,6 +21,8 @@ Scans src/outputs/hmttsf/ for results.json files and aggregates across:
   No MCO  × [lb7, lb84]
   With MCO × [lb7, lb84]
 
+Total: 2 variants × 10 configs = 20 cells per metric.
+
 Output sections
 ---------------
   1. Overall metric pivot tables (per metric)
@@ -25,7 +33,7 @@ Output sections
   6. Verdict Summary      — counts with % bar charts
   7. Flagged Notes        — severity-sorted annotations
 
-  CSV: src/outputs/aggregate_hmttsf.csv  (wide-format)
+  CSV: src/outputs/aggregate_hmttsf.csv  (wide-format, one row per variant)
 
 Usage
 -----
@@ -86,7 +94,12 @@ def _color_verdict(text, verdict):
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-HMTTSF_SUBDIR = "hmttsf"
+# Maps output subdir → display label (order defines row order in tables)
+_VARIANT_SUBDIRS = {
+    "hmttsf":              "HMT-TSF",
+    "hmttsf_feat_reduced": "HMT-TSF-FR",
+}
+
 MCO_CUTOFF    = date(2022, 1, 1)   # train_start before this → "include"
 
 METRIC_KEYS   = ["Combined", "MAPE", "MAE_pct", "RMSE_pct", "R2", "MAE", "RMSE"]
@@ -255,71 +268,80 @@ def _bar(n, total, width=_BAR_WIDTH):
     return _BAR_FULL * filled + _BAR_EMPTY * (width - filled)
 
 
+def _ordered_variants(pivot):
+    """Return variant labels in the canonical order defined by _VARIANT_SUBDIRS."""
+    present = {k[0] for k in pivot}
+    return [v for v in _VARIANT_SUBDIRS.values() if v in present]
+
+
 # ── Core scan ─────────────────────────────────────────────────────────────────
 
 def scan_hmttsf_results(outputs_root):
     """
-    Walk src/outputs/hmttsf/ for all results.json files.
+    Walk src/outputs/hmttsf/ and src/outputs/hmttsf_feat_reduced/ for all
+    results.json files.
 
     Returns a list of record dicts:
-      mco, lookback, run_id, timestamp, metrics (overall), walk_forward,
+      variant, mco, lookback, run_id, timestamp, metrics (overall), walk_forward,
       naive_persistence, fit_diagnosis, notes, path
     """
     records = []
-    model_dir = os.path.join(outputs_root, HMTTSF_SUBDIR)
-    if not os.path.isdir(model_dir):
-        print(f"[WARN] Directory not found: {model_dir}")
-        return records
-
-    pattern = os.path.join(model_dir, "**", "results.json")
-    for path in sorted(glob.glob(pattern, recursive=True)):
-        data = _load_json(path)
-        if data is None:
+    for subdir, variant_label in _VARIANT_SUBDIRS.items():
+        model_dir = os.path.join(outputs_root, subdir)
+        if not os.path.isdir(model_dir):
             continue
 
-        run_id  = data.get("run_id", os.path.basename(os.path.dirname(path)))
-        lb      = _get_lookback(data)
-        mco     = _infer_mco(data.get("split_dates") or {})
-        overall = _get_overall(data)
-        wf      = _get_walk_forward(data)
-        ts      = _timestamp_from_run_id(run_id)
-        diag    = (data.get("training") or {}).get("fit_diagnosis") or data.get("fit_diagnosis") or {}
+        pattern = os.path.join(model_dir, "**", "results.json")
+        for path in sorted(glob.glob(pattern, recursive=True)):
+            data = _load_json(path)
+            if data is None:
+                continue
 
-        records.append({
-            "mco":               mco,
-            "lookback":          lb,
-            "run_id":            run_id,
-            "timestamp":         ts,
-            "metrics":           overall,
-            "walk_forward":      wf,
-            "naive_persistence": data.get("naive_persistence") or {},
-            "fit_diagnosis":     {
-                "verdict":       diag.get("verdict"),
-                "val_drift_pct": diag.get("val_drift_pct"),
-                "gap_ratio":     diag.get("gap_ratio"),
-                "val_trend":     diag.get("val_trend"),
-                "early_stop":    diag.get("early_stop"),
-                "best_epoch":    diag.get("best_epoch"),
-                "total_epochs":  diag.get("total_epochs"),
-            },
-            "notes": diag.get("notes") or [],
-            "path":  path,
-        })
+            run_id  = data.get("run_id", os.path.basename(os.path.dirname(path)))
+            lb      = _get_lookback(data)
+            mco     = _infer_mco(data.get("split_dates") or {})
+            overall = _get_overall(data)
+            wf      = _get_walk_forward(data)
+            ts      = _timestamp_from_run_id(run_id)
+            diag    = (data.get("training") or {}).get("fit_diagnosis") or data.get("fit_diagnosis") or {}
+
+            records.append({
+                "variant":           variant_label,
+                "mco":               mco,
+                "lookback":          lb,
+                "run_id":            run_id,
+                "timestamp":         ts,
+                "metrics":           overall,
+                "walk_forward":      wf,
+                "naive_persistence": data.get("naive_persistence") or {},
+                "fit_diagnosis":     {
+                    "verdict":       diag.get("verdict"),
+                    "val_drift_pct": diag.get("val_drift_pct"),
+                    "gap_ratio":     diag.get("gap_ratio"),
+                    "val_trend":     diag.get("val_trend"),
+                    "early_stop":    diag.get("early_stop"),
+                    "best_epoch":    diag.get("best_epoch"),
+                    "total_epochs":  diag.get("total_epochs"),
+                },
+                "notes": diag.get("notes") or [],
+                "path":  path,
+            })
 
     return records
 
 
-# ── Selection: newest run per (mco, lookback) ─────────────────────────────────
+# ── Selection: newest run per (variant, mco, lookback) ────────────────────────
 
 def select_runs(records):
     """
-    Group records by (mco, lookback) and keep the newest run in each group.
+    Group records by (variant, mco, lookback) and keep the newest run in each
+    group.
 
-    Returns a dict keyed by (mco, lookback) → row dict.
+    Returns a dict keyed by (variant, mco, lookback) → row dict.
     """
     groups = defaultdict(list)
     for r in records:
-        key = (r["mco"], r["lookback"])
+        key = (r["variant"], r["mco"], r["lookback"])
         groups[key].append(r)
 
     selected = {}
@@ -341,6 +363,7 @@ def select_runs(records):
         delta_rmse     = _delta(m.get("RMSE"), naive_data.get("RMSE"))
 
         selected[key] = {
+            "Variant":      newest["variant"],
             "MCO":          newest["mco"],
             "Lookback":     newest["lookback"],
             "Combined%":    m.get("Combined"),
@@ -382,7 +405,7 @@ def print_results_table(pivot):
     Layout (10 columns, grouped):
       No MCO  [7, 14, 28, 56, 84] | With MCO [7, 14, 28, 56, 84]
 
-    Requires a ~130-char-wide terminal.
+    One row per variant (HMT-TSF and HMT-TSF-FR).
     Primary lookbacks (14/28/56) are the base-model comparison dimensions.
     Extended lookbacks (7/84) are unique to HMT-TSF.
     """
@@ -390,9 +413,10 @@ def print_results_table(pivot):
         print("[INFO] No HMT-TSF results found.")
         return
 
+    variants  = _ordered_variants(pivot)
     cell_w    = 9
     gap       = "  "
-    label_w   = 10   # "HMT-TSF  "
+    label_w   = 12   # fits "HMT-TSF-FR"
 
     n_configs  = len(_CONFIGS)      # 10
     sub_span   = (cell_w + len(gap)) * len(_ALL_LBS)   # 5 lookbacks per MCO group
@@ -412,7 +436,7 @@ def print_results_table(pivot):
 
     def _col_hdr():
         cells = gap.join(lbl.rjust(cell_w) for lbl in lb_labels)
-        return f"{'HMT-TSF'.ljust(label_w)}{gap}{cells}"
+        return f"{'Model'.ljust(label_w)}{gap}{cells}"
 
     def _ext_note():
         return (
@@ -421,38 +445,44 @@ def print_results_table(pivot):
             f"{'↑ lb7/lb84 = HMT-TSF extended lookbacks'.ljust(sub_span)}"
         )
 
-    def _data_row(metric):
+    def _data_row(metric, variant):
         cells = []
         for mco, lb in _CONFIGS:
-            row = pivot.get((mco, lb))
+            row = pivot.get((variant, mco, lb))
             v   = row.get(metric) if row else None
             cells.append(_fmt_cell(v, metric).rjust(cell_w))
-        return f"{'HMT-TSF'.ljust(label_w)}{gap}" + gap.join(cells)
+        return f"{variant.ljust(label_w)}{gap}" + gap.join(cells)
 
     for metric, _ in _PIVOT_METRICS:
         print(f"\n{eq}")
-        print(f"  {metric}  ·  HMT-TSF  ×  [No MCO / With MCO  ·  Lookback]")
+        print(f"  {metric}  ·  HMT-TSF Variants  ×  [No MCO / With MCO  ·  Lookback]")
         print(eq)
         print(_sub_hdr())
         print(_col_hdr())
         print(_ext_note())
         print(sep)
-        print(_data_row(metric))
+        for variant in variants:
+            print(_data_row(metric, variant))
         print(eq)
 
     # Legend for run coverage
     found = sorted(pivot.keys())
-    print(f"\n  Configurations with results ({len(found)}/10):")
-    for mco, lb in found:
-        row = pivot[(mco, lb)]
+    print(f"\n  Configurations with results ({len(found)}/{len(variants) * 10}):")
+    for variant, mco, lb in found:
+        row = pivot[(variant, mco, lb)]
         tag = "primary" if lb in _PRIMARY_LBS else "extended"
-        print(f"    MCO={mco:<8}  lb={lb:>2}  [{tag}]  run_id={row['run_id']}")
-    missing = [cfg for cfg in _CONFIGS if cfg not in pivot]
+        print(f"    Variant={variant:<12}  MCO={mco:<8}  lb={lb:>2}  [{tag}]  run_id={row['run_id']}")
+    missing = [
+        (variant, mco, lb)
+        for variant in variants
+        for mco, lb in _CONFIGS
+        if (variant, mco, lb) not in pivot
+    ]
     if missing:
-        print(f"\n  Missing configurations ({len(missing)}/10):")
-        for mco, lb in missing:
+        print(f"\n  Missing configurations ({len(missing)}):")
+        for variant, mco, lb in missing:
             tag = "primary" if lb in _PRIMARY_LBS else "extended"
-            print(f"    MCO={mco:<8}  lb={lb:>2}  [{tag}]  — no results.json found")
+            print(f"    Variant={variant:<12}  MCO={mco:<8}  lb={lb:>2}  [{tag}]  — no results.json found")
     print(f"\n  — = no data for that configuration")
 
 
@@ -463,11 +493,11 @@ def print_walk_forward_table(pivot):
     Print a walk-forward temporal stability table for every configuration
     that has walk_forward data.
 
-    Shows Block 1 / 2 / 3 Combined% and R² for each (mco, lookback) combo.
+    Shows Block 1 / 2 / 3 Combined% and R² for each (variant, mco, lookback).
     """
     wf_configs = [
-        (mco, lb) for (mco, lb) in _CONFIGS
-        if (mco, lb) in pivot and pivot[(mco, lb)].get("walk_forward")
+        (variant, mco, lb) for (variant, mco, lb) in sorted(pivot)
+        if pivot[(variant, mco, lb)].get("walk_forward")
     ]
 
     if not wf_configs:
@@ -475,11 +505,11 @@ def print_walk_forward_table(pivot):
 
     cell_w = 9
     gap    = "  "
-    lbl_w  = 22   # "MCO=exclude / lb=14  "
+    lbl_w  = 30   # "HMT-TSF-FR  MCO=exclude / lb=14 [pri]"
 
-    print(f"\n{'═' * 70}")
+    print(f"\n{'═' * 80}")
     print("  Walk-Forward Temporal Stability  (3 equal test blocks, newest last)")
-    print(f"{'═' * 70}")
+    print(f"{'═' * 80}")
 
     for metric_label, metric_key in [("Combined%", "Combined"), ("R²", "R2")]:
         print(f"\n  {metric_label}")
@@ -487,10 +517,10 @@ def print_walk_forward_table(pivot):
         print(header)
         print(f"  {'─' * (lbl_w + (cell_w + len(gap)) * WF_BLOCKS - len(gap))}")
 
-        for mco, lb in wf_configs:
-            row = pivot[(mco, lb)]
-            tag = "primary" if lb in _PRIMARY_LBS else "extended"
-            cfg_label = f"MCO={mco} / lb={lb} [{tag}]"
+        for variant, mco, lb in wf_configs:
+            row = pivot[(variant, mco, lb)]
+            tag = "pri" if lb in _PRIMARY_LBS else "ext"
+            cfg_label = f"{variant}  MCO={mco}/lb={lb} [{tag}]"
             blocks = row["walk_forward"]
             cells = []
             for b in range(1, WF_BLOCKS + 1):
@@ -499,7 +529,7 @@ def print_walk_forward_table(pivot):
                 cells.append(_fmt_cell(v, metric_label).rjust(cell_w))
             print(f"  {cfg_label.ljust(lbl_w)}" + gap.join(cells))
 
-    print(f"\n{'═' * 70}")
+    print(f"\n{'═' * 80}")
     print("  Note: temporal stability improves if block 3 Combined% ≥ block 1 Combined%")
 
 
@@ -507,12 +537,7 @@ def print_model_vs_naive_table(pivot):
     """
     Print a table showing model performance vs naive persistence baseline.
 
-    Shows delta metrics (model - naive) for each configuration:
-    - Delta Combined% (higher is better)
-    - Delta MAPE% (lower is better)
-    - Delta MAE% (lower is better)
-    - Delta RMSE% (lower is better)
-    - Delta R² (higher is better)
+    Shows delta metrics (model - naive) for each configuration, one row per variant.
     """
     if not pivot:
         return
@@ -526,13 +551,14 @@ def print_model_vs_naive_table(pivot):
         print("[INFO] No naive persistence data found in results.")
         return
 
-    cell_w = 9
-    gap    = "  "
-    lbl_w  = 10   # "HMT-TSF  "
+    variants = _ordered_variants(pivot)
+    cell_w   = 9
+    gap      = "  "
+    label_w  = 12   # fits "HMT-TSF-FR"
 
-    print(f"\n{'═' * 70}")
+    print(f"\n{'═' * 80}")
     print("  Model vs Naive Persistence Baseline  (delta: model - naive)")
-    print(f"{'═' * 70}")
+    print(f"{'═' * 80}")
     print("  ↑ = improvement over naive, ↓ = degradation vs naive, = = no change")
 
     metrics_info = [
@@ -543,49 +569,52 @@ def print_model_vs_naive_table(pivot):
         ("Delta R²", "R²", True),
     ]
 
+    sub_span = (cell_w + len(gap)) * len(_ALL_LBS)
+
     for metric_label, metric_key, higher_better in metrics_info:
         print(f"\n  {metric_label}")
-        header = f"  {''.ljust(lbl_w)}{gap}"
-        header += f"{'No MCO (exclude)'.center((cell_w + len(gap)) * len(_ALL_LBS))}"
-        header += f"{'With MCO (include)'.center((cell_w + len(gap)) * len(_ALL_LBS))}"
+        header = f"  {''.ljust(label_w)}{gap}"
+        header += f"{'No MCO (exclude)'.center(sub_span)}"
+        header += f"{'With MCO (include)'.center(sub_span)}"
         print(header)
 
         lb_labels = [str(lb) for lb in _ALL_LBS] * 2
         cells_hdr = gap.join(lbl.rjust(cell_w) for lbl in lb_labels)
-        print(f"{''.ljust(lbl_w)}{gap}{cells_hdr}")
+        print(f"{''.ljust(label_w)}{gap}{cells_hdr}")
 
-        print(f"{''.ljust(lbl_w)}{gap}"
-              f"{'↑ lb7/lb84 = HMT-TSF extended lookbacks'.ljust((cell_w + len(gap)) * len(_ALL_LBS))}"
-              f"{'↑ lb7/lb84 = HMT-TSF extended lookbacks'.ljust((cell_w + len(gap)) * len(_ALL_LBS))}")
+        print(f"{''.ljust(label_w)}{gap}"
+              f"{'↑ lb7/lb84 = HMT-TSF extended lookbacks'.ljust(sub_span)}"
+              f"{'↑ lb7/lb84 = HMT-TSF extended lookbacks'.ljust(sub_span)}")
 
-        print(f"  {'─' * (lbl_w + len(gap) + (cell_w + len(gap)) * len(_CONFIGS) - len(gap))}")
+        print(f"  {'─' * (label_w + len(gap) + (cell_w + len(gap)) * len(_CONFIGS) - len(gap))}")
 
-        cells = []
-        for mco, lb in _CONFIGS:
-            row = pivot.get((mco, lb))
-            v   = row.get(metric_label) if row else None
-            if v is None:
-                formatted = "—"
-            else:
-                if abs(v) < 1e-9:
-                    direction = "="
-                elif (higher_better and v > 0) or (not higher_better and v < 0):
-                    direction = "↑"
+        for variant in variants:
+            cells = []
+            for mco, lb in _CONFIGS:
+                row = pivot.get((variant, mco, lb))
+                v   = row.get(metric_label) if row else None
+                if v is None:
+                    formatted = "—"
                 else:
-                    direction = "↓"
+                    if abs(v) < 1e-9:
+                        direction = "="
+                    elif (higher_better and v > 0) or (not higher_better and v < 0):
+                        direction = "↑"
+                    else:
+                        direction = "↓"
 
-                if "MAE" in metric_key or "RMSE" in metric_key:
-                    formatted = f"{v:+,.0f}{direction}"
-                elif metric_key == "R²":
-                    formatted = f"{v:+.4f}{direction}"
-                else:
-                    formatted = f"{v:+.2f}{direction}"
+                    if "MAE" in metric_key or "RMSE" in metric_key:
+                        formatted = f"{v:+,.0f}{direction}"
+                    elif metric_key == "R²":
+                        formatted = f"{v:+.4f}{direction}"
+                    else:
+                        formatted = f"{v:+.2f}{direction}"
 
-            cells.append(formatted.rjust(cell_w))
+                cells.append(formatted.rjust(cell_w))
 
-        print(f"{'HMT-TSF'.ljust(lbl_w)}{gap}" + gap.join(cells))
+            print(f"{variant.ljust(label_w)}{gap}" + gap.join(cells))
 
-    print(f"\n{'═' * 70}")
+    print(f"\n{'═' * 80}")
     print("  Note: delta = model metric - naive metric")
     print("        Positive delta = improvement for Combined% and R²")
     print("        Positive delta = degradation for MAPE%, MAE%, RMSE%")
@@ -652,7 +681,8 @@ def _pivot_diag_cell(field, diag, colorize=True):
 
 def print_fit_overview(pivot):
     """
-    Compact coloured verdict matrix — one cell per (MCO, lookback) configuration.
+    Compact coloured verdict matrix — one row per variant, one cell per
+    (MCO, lookback) configuration.
 
     Legend:
       good  = good_fit (green)
@@ -662,56 +692,59 @@ def print_fit_overview(pivot):
       ····  = no data  (dim)
     """
     has_diag = any(
-        pivot[(mco, lb)]["fit_diagnosis"].get("verdict") is not None
-        for (mco, lb) in pivot
+        pivot[(variant, mco, lb)]["fit_diagnosis"].get("verdict") is not None
+        for (variant, mco, lb) in pivot
     )
     if not has_diag:
         return
 
-    cell_w = 6
-    gap    = "  "
-    lbl_w  = 10   # "HMT-TSF  "
+    variants = _ordered_variants(pivot)
+    cell_w   = 6
+    gap      = "  "
+    label_w  = 12   # fits "HMT-TSF-FR"
 
     n_cols_per_mco = len(_ALL_LBS)
     mco_grp_w = n_cols_per_mco * (cell_w + len(gap)) - len(gap)
 
-    total_w = lbl_w + len(gap) + len(_MCO_VALS) * (mco_grp_w + len(gap))
+    total_w = label_w + len(gap) + len(_MCO_VALS) * (mco_grp_w + len(gap))
     total_w = max(total_w, 72)
     eq  = _c("═" * total_w, _C.CYAN)
     sep = "─" * total_w
 
     print(f"\n{eq}")
-    print(_c("  Quick Fit Overview  —  HMT-TSF × [MCO × Lookback]", _C.CYAN, _C.BOLD))
+    print(_c("  Quick Fit Overview  —  HMT-TSF Variants × [MCO × Lookback]", _C.CYAN, _C.BOLD))
     print(eq)
 
     mco_hdrs = gap.join(_MCO_LABELS[m].center(mco_grp_w) for m in _MCO_VALS)
-    print(f"{''.ljust(lbl_w)}{gap}{mco_hdrs}")
+    print(f"{''.ljust(label_w)}{gap}{mco_hdrs}")
 
     lb_cells = gap.join(f"lb{lb}".rjust(cell_w) for lb in _ALL_LBS)
     col_hdr  = gap.join(lb_cells for _ in _MCO_VALS)
-    print(_c(f"{'HMT-TSF'.ljust(lbl_w)}{gap}{col_hdr}", _C.BOLD))
+    print(_c(f"{'Model'.ljust(label_w)}{gap}{col_hdr}", _C.BOLD))
     print(sep)
 
-    cells = []
-    for mco in _MCO_VALS:
-        for lb in _ALL_LBS:
-            row = pivot.get((mco, lb))
-            if row is None:
-                cells.append(_c("····".rjust(cell_w), _C.DIM))
-                continue
-            verdict = row["fit_diagnosis"].get("verdict") or ""
-            if verdict.lower() == "overfit":
-                short = "OVER"
-            elif verdict.lower() == "underfit":
-                short = "UNDR"
-            elif verdict.lower() == "suspect":
-                short = "susp?"
-            elif verdict.lower() == "good_fit":
-                short = "good"
-            else:
-                short = "····"
-            cells.append(_color_verdict(short.rjust(cell_w), verdict))
-    print(f"{'HMT-TSF'.ljust(lbl_w)}{gap}{gap.join(cells)}")
+    for variant in variants:
+        cells = []
+        for mco in _MCO_VALS:
+            for lb in _ALL_LBS:
+                row = pivot.get((variant, mco, lb))
+                if row is None:
+                    cells.append(_c("····".rjust(cell_w), _C.DIM))
+                    continue
+                verdict = row["fit_diagnosis"].get("verdict") or ""
+                if verdict.lower() == "overfit":
+                    short = "OVER"
+                elif verdict.lower() == "underfit":
+                    short = "UNDR"
+                elif verdict.lower() == "suspect":
+                    short = "susp?"
+                elif verdict.lower() == "good_fit":
+                    short = "good"
+                else:
+                    short = "····"
+                cells.append(_color_verdict(short.rjust(cell_w), verdict))
+        print(f"{variant.ljust(label_w)}{gap}{gap.join(cells)}")
+
     print(eq)
 
     legend_parts = [
@@ -728,54 +761,57 @@ def print_fit_overview(pivot):
 
 def print_fit_pivot_tables(pivot):
     has_diag = any(
-        pivot[(mco, lb)]["fit_diagnosis"].get("verdict") is not None
-        for (mco, lb) in pivot
+        pivot[(variant, mco, lb)]["fit_diagnosis"].get("verdict") is not None
+        for (variant, mco, lb) in pivot
     )
     if not has_diag:
         return
 
-    cell_w = 9
-    gap    = "  "
-    lbl_w  = 10   # "HMT-TSF  "
+    variants = _ordered_variants(pivot)
+    cell_w   = 9
+    gap      = "  "
+    label_w  = 12   # fits "HMT-TSF-FR"
 
     n_lbs    = len(_ALL_LBS)
     grp_span = (cell_w + len(gap)) * n_lbs
 
     def _sub_hdr():
         return (
-            f"{''.ljust(lbl_w)}{gap}"
+            f"{''.ljust(label_w)}{gap}"
             + gap.join(_MCO_LABELS[m].center(grp_span) for m in _MCO_VALS)
         )
 
     def _col_hdr():
         lb_cells = gap.join(f"lb{lb}".rjust(cell_w) for lb in _ALL_LBS)
         return (
-            _c(f"{'HMT-TSF'.ljust(lbl_w)}{gap}", _C.BOLD)
+            _c(f"{'Model'.ljust(label_w)}{gap}", _C.BOLD)
             + (gap.join(lb_cells for _ in _MCO_VALS))
         )
 
-    total_w = lbl_w + len(gap) + grp_span * len(_MCO_VALS)
+    total_w = label_w + len(gap) + grp_span * len(_MCO_VALS)
     eq  = _c("═" * total_w, _C.CYAN)
     sep = "─" * total_w
 
     for field, label, _ in _PIVOT_FIELDS:
         print(f"\n{eq}")
-        print(_c(f"  {label}  ·  HMT-TSF × [MCO  ·  Lookback]", _C.CYAN, _C.BOLD))
+        print(_c(f"  {label}  ·  HMT-TSF Variants × [MCO  ·  Lookback]", _C.CYAN, _C.BOLD))
         print(eq)
         print(_sub_hdr())
         print(_col_hdr())
         print(sep)
 
-        cells = []
-        for mco in _MCO_VALS:
-            for lb in _ALL_LBS:
-                row  = pivot.get((mco, lb))
-                diag = row["fit_diagnosis"] if row else None
-                raw  = _pivot_diag_cell(field, diag, colorize=True)
-                visible_len = len(_pivot_diag_cell(field, diag, colorize=False))
-                padding     = " " * max(0, cell_w - visible_len)
-                cells.append(padding + raw)
-        print(f"{'HMT-TSF'.ljust(lbl_w)}{gap}" + gap.join(cells))
+        for variant in variants:
+            cells = []
+            for mco in _MCO_VALS:
+                for lb in _ALL_LBS:
+                    row  = pivot.get((variant, mco, lb))
+                    diag = row["fit_diagnosis"] if row else None
+                    raw  = _pivot_diag_cell(field, diag, colorize=True)
+                    visible_len = len(_pivot_diag_cell(field, diag, colorize=False))
+                    padding     = " " * max(0, cell_w - visible_len)
+                    cells.append(padding + raw)
+            print(f"{variant.ljust(label_w)}{gap}" + gap.join(cells))
+
         print(eq)
 
 
@@ -783,20 +819,22 @@ def print_fit_pivot_tables(pivot):
 
 def print_verdict_summary(pivot):
     diag_rows = [
-        {"mco": mco, "lookback": lb, "fit_diagnosis": row["fit_diagnosis"]}
-        for (mco, lb), row in pivot.items()
+        {"variant": variant, "mco": mco, "lookback": lb, "fit_diagnosis": row["fit_diagnosis"]}
+        for (variant, mco, lb), row in pivot.items()
         if row["fit_diagnosis"].get("verdict") is not None
     ]
     if not diag_rows:
         return
 
-    overall = defaultdict(int)
-    by_mco  = defaultdict(lambda: defaultdict(int))
-    by_lb   = defaultdict(lambda: defaultdict(int))
+    overall    = defaultdict(int)
+    by_variant = defaultdict(lambda: defaultdict(int))
+    by_mco     = defaultdict(lambda: defaultdict(int))
+    by_lb      = defaultdict(lambda: defaultdict(int))
 
     for row in diag_rows:
         v = str(row["fit_diagnosis"].get("verdict") or "unknown").lower()
         overall[v] += 1
+        by_variant[row["variant"]][v] += 1
         by_mco[row["mco"]][v] += 1
         by_lb[row["lookback"]][v] += 1
 
@@ -824,6 +862,13 @@ def print_verdict_summary(pivot):
     print(_c("  Overall:", _C.BOLD))
     _print_counts(overall)
 
+    print(_c("\n  By variant:", _C.BOLD))
+    for variant in _ordered_variants(pivot):
+        if variant not in by_variant:
+            continue
+        print(f"    {variant}:")
+        _print_counts(by_variant[variant], indent="      ")
+
     print(_c("\n  By MCO:", _C.BOLD))
     for mco in _MCO_VALS:
         if mco not in by_mco:
@@ -846,8 +891,8 @@ def print_flagged_notes(pivot):
     Notes for non-clean configurations, severity-sorted (overfit/underfit first).
     """
     flagged = [
-        {"mco": mco, "lookback": lb, **row}
-        for (mco, lb), row in pivot.items()
+        {"variant": variant, "mco": mco, "lookback": lb, **row}
+        for (variant, mco, lb), row in pivot.items()
         if _severity(row["fit_diagnosis"].get("verdict")) > 0
     ]
     if not flagged:
@@ -858,13 +903,14 @@ def print_flagged_notes(pivot):
     eq = _c("═" * total_w, _C.CYAN)
 
     print(f"\n{eq}")
-    print(_c("  Fit Diagnosis Notes  (severity-sorted, then by MCO · lookback)", _C.CYAN, _C.BOLD))
+    print(_c("  Fit Diagnosis Notes  (severity-sorted, then by variant · MCO · lookback)", _C.CYAN, _C.BOLD))
     print(eq)
 
     flagged_sorted = sorted(
         flagged,
         key=lambda r: (
             -_severity(r["fit_diagnosis"].get("verdict")),
+            r["variant"],
             r["mco"],
             r["lookback"],
         )
@@ -881,35 +927,40 @@ def print_flagged_notes(pivot):
         drift_s = f"  drift={drift:.1f}%" if drift is not None else ""
         gap_s   = f"  gap={gap_r:.2f}x"  if gap_r  is not None else ""
         tag     = "primary" if row["lookback"] in _PRIMARY_LBS else "extended"
-        label   = f"HMT-TSF  MCO={row['mco']}  lb={row['lookback']} [{tag}]"
+        label   = f"{row['variant']}  MCO={row['mco']}  lb={row['lookback']} [{tag}]"
         header  = _color_verdict(
-            f"  {label:<40}  [{verdict}{marker}]{drift_s}{gap_s}",
+            f"  {label:<46}  [{verdict}{marker}]{drift_s}{gap_s}",
             verdict
         )
         print(header)
         for note in row.get("notes", []):
             print(f"      • {note}")
 
-    print(f"\n{_c('  Grouped by MCO · lookback:', _C.BOLD)}")
-    for mco in _MCO_VALS:
-        mco_rows = [r for r in flagged if r["mco"] == mco]
-        if not mco_rows:
+    print(f"\n{_c('  Grouped by variant · MCO · lookback:', _C.BOLD)}")
+    for variant in _ordered_variants(pivot):
+        variant_rows = [r for r in flagged if r["variant"] == variant]
+        if not variant_rows:
             continue
-        print(f"\n  ── {_MCO_LABELS[mco]}")
-        for lb in sorted({r["lookback"] for r in mco_rows}):
-            lb_rows = [r for r in mco_rows if r["lookback"] == lb]
-            if not lb_rows:
+        print(f"\n  ── {variant}")
+        for mco in _MCO_VALS:
+            mco_rows = [r for r in variant_rows if r["mco"] == mco]
+            if not mco_rows:
                 continue
-            print(f"\n    lb={lb}")
-            for row in sorted(lb_rows, key=lambda r: -_severity(r["fit_diagnosis"].get("verdict"))):
-                diag    = row["fit_diagnosis"]
-                verdict = diag.get("verdict") or "unknown"
-                sev     = _severity(verdict)
-                marker  = _VERDICT_MARKER[sev]
-                line    = f"      HMT-TSF  ·  run_id={row['run_id']}  ·  verdict={verdict}{marker}"
-                print(_color_verdict(line, verdict))
-                for note in row.get("notes", []):
-                    print(f"        • {note}")
+            print(f"\n    {_MCO_LABELS[mco]}")
+            for lb in sorted({r["lookback"] for r in mco_rows}):
+                lb_rows = [r for r in mco_rows if r["lookback"] == lb]
+                if not lb_rows:
+                    continue
+                print(f"\n      lb={lb}")
+                for row in sorted(lb_rows, key=lambda r: -_severity(r["fit_diagnosis"].get("verdict"))):
+                    diag    = row["fit_diagnosis"]
+                    verdict = diag.get("verdict") or "unknown"
+                    sev     = _severity(verdict)
+                    marker  = _VERDICT_MARKER[sev]
+                    line    = f"        {row['variant']}  ·  run_id={row['run_id']}  ·  verdict={verdict}{marker}"
+                    print(_color_verdict(line, verdict))
+                    for note in row.get("notes", []):
+                        print(f"          • {note}")
 
     print(f"\n{eq}")
 
@@ -924,14 +975,15 @@ def _csv_col(mco, lb, metric):
 
 def save_comparison_csv(pivot, csv_path):
     """
-    Save a wide-format CSV with one row (HMT-TSF) and columns for each
-    (mco × lookback) combination.
+    Save a wide-format CSV with one row per variant (HMT-TSF and HMT-TSF-FR)
+    and columns for each (mco × lookback) combination.
 
     Also includes walk-forward block columns and fit_diagnosis columns.
     """
+    variants    = _ordered_variants(pivot)
     metric_keys = [m for m, _ in _PIVOT_METRICS]
 
-    fieldnames = ["Model"]
+    fieldnames = ["Variant"]
     for mco, lb in _CONFIGS:
         for metric in metric_keys:
             fieldnames.append(_csv_col(mco, lb, metric))
@@ -956,29 +1008,30 @@ def save_comparison_csv(pivot, csv_path):
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
 
-        rec = {"Model": "HMT-TSF"}
+        for variant in variants:
+            rec = {"Variant": variant}
 
-        for mco, lb in _CONFIGS:
-            row = pivot.get((mco, lb))
-            for metric in metric_keys:
-                rec[_csv_col(mco, lb, metric)] = row.get(metric) if row else None
-            rec[_csv_col(mco, lb, "run_id")] = row.get("run_id") if row else None
+            for mco, lb in _CONFIGS:
+                row = pivot.get((variant, mco, lb))
+                for metric in metric_keys:
+                    rec[_csv_col(mco, lb, metric)] = row.get(metric) if row else None
+                rec[_csv_col(mco, lb, "run_id")] = row.get("run_id") if row else None
 
-            # Walk-forward blocks
-            blocks = row.get("walk_forward", []) if row else []
-            for b in range(1, WF_BLOCKS + 1):
-                b_data = next((x for x in blocks if x.get("block") == b), None)
-                rec[_csv_col(mco, lb, f"wf_block{b}_Combined")] = b_data.get("Combined") if b_data else None
-                rec[_csv_col(mco, lb, f"wf_block{b}_R2")]       = b_data.get("R2")       if b_data else None
+                # Walk-forward blocks
+                blocks = row.get("walk_forward", []) if row else []
+                for b in range(1, WF_BLOCKS + 1):
+                    b_data = next((x for x in blocks if x.get("block") == b), None)
+                    rec[_csv_col(mco, lb, f"wf_block{b}_Combined")] = b_data.get("Combined") if b_data else None
+                    rec[_csv_col(mco, lb, f"wf_block{b}_R2")]       = b_data.get("R2")       if b_data else None
 
-            # Fit diagnosis
-            diag = row.get("fit_diagnosis") or {} if row else {}
-            for key in _DIAG_CSV_KEYS:
-                rec[_csv_col(mco, lb, f"diag_{key}")] = diag.get(key)
-            notes = row.get("notes") or [] if row else []
-            rec[_csv_col(mco, lb, "diag_notes")] = " | ".join(notes)
+                # Fit diagnosis
+                diag = row.get("fit_diagnosis") or {} if row else {}
+                for key in _DIAG_CSV_KEYS:
+                    rec[_csv_col(mco, lb, f"diag_{key}")] = diag.get(key)
+                notes = row.get("notes") or [] if row else []
+                rec[_csv_col(mco, lb, "diag_notes")] = " | ".join(notes)
 
-        writer.writerow(rec)
+            writer.writerow(rec)
 
     print(f"\n[INFO] CSV saved → {csv_path}")
 
@@ -1019,16 +1072,21 @@ def main():
     if args.no_color:
         _USE_COLOR = False
 
-    print(f"[INFO] Scanning: {os.path.abspath(os.path.join(outputs_root, HMTTSF_SUBDIR))}")
+    for subdir, label in _VARIANT_SUBDIRS.items():
+        scan_path = os.path.abspath(os.path.join(outputs_root, subdir))
+        print(f"[INFO] Scanning [{label}]: {scan_path}")
+
     records = scan_hmttsf_results(outputs_root)
-    print(f"[INFO] Found {len(records)} HMT-TSF result file(s).")
+    print(f"[INFO] Found {len(records)} HMT-TSF result file(s) across all variants.")
 
     if not records:
-        print("[INFO] Nothing to aggregate — no results.json files found in hmttsf/.")
+        print("[INFO] Nothing to aggregate — no results.json files found.")
         return
 
     pivot = select_runs(records)
-    print(f"[INFO] Selected {len(pivot)} unique (MCO × lookback) configuration(s).")
+    variants = _ordered_variants(pivot)
+    print(f"[INFO] Selected {len(pivot)} unique (variant × MCO × lookback) configuration(s) "
+          f"across {len(variants)} variant(s): {', '.join(variants)}")
 
     # Always show fit overview
     print_fit_overview(pivot)
