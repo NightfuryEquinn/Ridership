@@ -171,9 +171,6 @@ python src/models/hybrid/hmttsf.py
 # Longer lookback with more TCN depth
 python src/models/hybrid/hmttsf.py --lookback 28 --n-tcn-blocks 4 --d-model 192
 
-# With Optuna HPO (50 trials) then full training
-python src/models/hybrid/hmttsf.py --tune-trials 50 --lookback 56
-
 # With CatBoost residual boosting
 python src/models/hybrid/hmttsf.py --use-catboost
 
@@ -244,7 +241,6 @@ All models accept these arguments:
 - `--n-tcn-blocks N`: Number of TCN blocks per scale (default: `3`)
 - `--graph-hidden {32,64,128}`: GCN hidden dimension (default: `64`)
 - `--n-regimes N`: Number of regime embeddings (default: `3`)
-- `--tune-trials N`: Optuna HPO trials before full training (default: `0`, disabled)
 - `--use-catboost`: Enable CatBoost post-hoc residual boosting stage
 - `--no-boost`: Disable the neural boost head
 - `--no-revin`: Disable Reversible Instance Normalisation
@@ -299,7 +295,6 @@ The comparison system automatically:
 - **Loss**: WeightedHuber (step-decayed, γ=0.9) + TemporalSmoothness regularisation (λ=0.01)
 - **AMP**: GradScaler + autocast fp16 on CUDA (same as attention-based models)
 - **Gradient clipping**: max_norm=1.0
-- **Optional HPO**: Optuna with MedianPruner (via `--tune-trials N`)
 - **Optional residual boosting**: CatBoost or sklearn MLP trained on train-set residuals; correction applied at 0.5× weight only if it improves Combined% (via `--use-catboost`)
 - **Walk-forward evaluation**: test set split into 3 equal blocks; per-block Combined% and R² reported
 - **Lookback support**: 7 / 14 / 28 / 56 / 84 days (`lookback_7` and `lookback_84` sequence dirs must be built separately if needed)
@@ -344,7 +339,7 @@ As outlined in `CLAUDE.md`:
 
 Each model script docstring includes a `References` section citing one Scopus-indexed journal article (2022–2027) for its architecture. The full citation list is consolidated in `src/models/MODEL.md` under the **Journal References** section, grouped by model series.
 
-HMT-TSF has per-component Scopus-indexed citations (one per architectural block: RevIN, Temporal Transformer, Multi-Scale TCN, DropPath, Feature GCN, Regime Gating, SE-Net Gated Fusion, Weighted Huber Loss, Temporal Smoothness Regularisation, Optuna HPO, Post-hoc Residual Boosting, Walk-Forward Evaluation). These are listed in `src/models/hybrid/HMT-TSF.md` under the **Journal References** section.
+HMT-TSF has per-component Scopus-indexed citations (one per architectural block: RevIN, Temporal Transformer, Multi-Scale TCN, DropPath, Feature GCN, Regime Gating, SE-Net Gated Fusion, Weighted Huber Loss, Temporal Smoothness Regularisation, Post-hoc Residual Boosting, Walk-Forward Evaluation). These are listed in `src/models/hybrid/HMT-TSF.md` under the **Journal References** section.
 
 See `journal_articles/` directory for additional supporting research papers that informed this work.
 

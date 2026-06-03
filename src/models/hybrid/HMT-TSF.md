@@ -154,7 +154,7 @@ Output: (B, T_out=7)  [MinMax-scaled]
 - Step 1 carries weight 1.0, decaying geometrically (default decay=0.9)
 - Prioritises accurate near-term forecasts; tail steps still contribute to training
 - Huber δ=`--huber-delta` (default 1.0) for robustness to ridership outliers
-- Both `--huber-delta` and `--loss-decay` are included in the Optuna search space
+- Both `--huber-delta` and `--loss-decay` are configurable via CLI flags
 
 ### Temporal Smoothness Regularisation
 - Penalises `||y_{t+1} - y_t||²` across the forecast horizon
@@ -165,13 +165,7 @@ Output: (B, T_out=7)  [MinMax-scaled]
 
 ## Training Strategy
 
-### Phase 1 — Optuna HPO (optional, `--tune-trials N`)
-- Run N trials, up to 40 epochs each with per-trial early stopping (patience=10)
-- Median pruner also prunes underperforming trials after warmup (15 epochs)
-- Search space covers architecture + regularisation + loss params simultaneously
-- Transfer best hyperparameters to Phase 2
-
-### Phase 2 — Full Training
+### Full Training
 ```
 Epochs:        150 (default)
 Batch size:    32
@@ -184,14 +178,14 @@ Loss:          WeightedHuber + TemporalSmoothness
 Input noise:   Gaussian noise std=0.02 added to training inputs (data augmentation)
 ```
 
-### Phase 3 — Post-Hoc Residual Boosting
+### Post-Hoc Residual Boosting
 - Collect neural predictions on the **training set** (no shuffle, preserving row alignment)
 - Compute residuals: `Δ = y_true − y_neural`
 - Fit CatBoost (if installed) or sklearn MLP on flattened `(X_train, Δ)`
 - Apply correction to test predictions: `y_final = y_neural + 0.5 × Δ_boost`
 - Only applied if correction improves Combined% (automatic validation)
 
-### Phase 4 — Walk-Forward Evaluation
+### Walk-Forward Evaluation
 - Split test set chronologically into 3 equal blocks
 - Report Combined%, R² per block to detect temporal degradation
 - Stable models show <3% Combined% variance across blocks
@@ -220,69 +214,6 @@ Parameters baked into `parse_args()` defaults — what runs when no flags are pa
 | `input_noise`   | 0.02    | Gaussian noise std added to training inputs |
 | `loss_decay`    | 0.9     | Per-step geometric weight decay in WeightedHuber |
 | `smooth_weight` | 0.01    | Temporal smoothness regularisation weight λ |
-
----
-
-## Hyperparameter Search Space (Optuna)
-
-Parameters explored during `--tune-trials N`. All others are inherited from base configuration.
-
-| Parameter       | Distribution                   | Base Default |
-|-----------------|--------------------------------|--------------|
-| `d_model`       | Categorical [32, 64, 128]      | 64           |
-| `n_tcn_blocks`  | Integer [1, 3]                 | 3            |
-| `graph_hidden`  | Categorical [32, 64, 128]      | 64           |
-| `dropout`       | Float [0.05, 0.40] step 0.05   | 0.1          |
-| `drop_path`     | Float [0.10, 0.40] step 0.05   | 0.2          |
-| `lr`            | Log-uniform [5e-4, 5e-3]       | 1e-3         |
-| `weight_decay`  | Log-uniform [5e-4, 5e-3]       | 1e-3         |
-| `smooth_weight` | Float [0.0, 0.05] step 0.005   | 0.01         |
-| `input_noise`   | Float [0.0, 0.05] step 0.005   | 0.02         |
-
-Pruner: MedianPruner (n_startup_trials=5, n_warmup_steps=15). Per-trial early stopping: patience=10, max 40 epochs.
-
-Recommended N trials:
-- Quick validation: 20 trials (~40 min on A100)
-- Standard: 50 trials (~100 min on A100)
-- Thorough: 100 trials (~200 min on A100)
-
----
-
-## Optimized Configuration (Post-Optuna)
-
-> To be populated after running `--tune-trials N`. Replace the placeholder row with the best trial's output once Optuna completes.
-
-```bash
-# Run HPO and record best params from the console output
-python src/models/hybrid/hmttsf.py --tune-trials 50 --lookback 14
-```
-
-Expected console output after Optuna finishes:
-```
-[Optuna] Best trial: val_loss=X.XXXXXX
-  d_model: ...
-  n_tcn_blocks: ...
-  graph_hidden: ...
-  dropout: ...
-  drop_path: ...
-  lr: ...
-  weight_decay: ...
-  smooth_weight: ...
-  input_noise: ...
-```
-
-| Parameter       | Optimized Value | Delta vs Base |
-|-----------------|-----------------|---------------|
-| `d_model`       | —               | —             |
-| `n_tcn_blocks`  | —               | —             |
-| `graph_hidden`  | —               | —             |
-| `dropout`       | —               | —             |
-| `drop_path`     | —               | —             |
-| `lr`            | —               | —             |
-| `weight_decay`  | —               | —             |
-| `smooth_weight` | —               | —             |
-| `input_noise`   | —               | —             |
-| Val loss        | —               | — vs base val loss |
 
 ---
 
@@ -361,7 +292,6 @@ python src/features/sequence_builder.py --T-in 84
 |------|---------|-------------|
 | `--use-catboost` | off | CatBoost for residual boosting (requires catboost) |
 | `--no-boost` | off | Skip neural boost head and post-hoc boosting |
-| `--tune-trials N` | `0` | Optuna HPO trials (0 = disabled) |
 | `--shap` | off | Run SHAP feature importance analysis |
 | `--shap-samples N` | `100` | SHAP background samples |
 
@@ -379,11 +309,6 @@ python src/models/hybrid/hmttsf.py
 python src/models/hybrid/hmttsf.py --lookback 28 --n-tcn-blocks 4 --d-model 192
 ```
 
-### With Optuna HPO (50 trials) then full training
-```bash
-python src/models/hybrid/hmttsf.py --tune-trials 50 --lookback 56
-```
-
 ### With SHAP feature importance
 ```bash
 python src/models/hybrid/hmttsf.py --shap --shap-samples 150
@@ -394,12 +319,12 @@ python src/models/hybrid/hmttsf.py --shap --shap-samples 150
 python src/models/hybrid/hmttsf.py --use-catboost
 ```
 
-### Maximum configuration (84-day lookback, HPO, SHAP, CatBoost)
+### Maximum configuration (84-day lookback, SHAP, CatBoost)
 ```bash
 python src/models/hybrid/hmttsf.py \
   --lookback 84 --d-model 256 --n-tcn-blocks 5 \
   --graph-hidden 128 --dropout 0.15 \
-  --tune-trials 50 --use-catboost --shap \
+  --use-catboost --shap \
   --epochs 150
 ```
 

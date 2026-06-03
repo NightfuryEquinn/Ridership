@@ -83,20 +83,17 @@ python src/models/hybrid/hmttsf.py
 # Longer lookback with larger model
 python src/models/hybrid/hmttsf.py --lookback 28 --n-tcn-blocks 4 --d-model 192
 
-# With Optuna HPO (50 trials) before full training
-python src/models/hybrid/hmttsf.py --tune-trials 50 --lookback 56
-
 # With CatBoost post-hoc residual boosting
 python src/models/hybrid/hmttsf.py --use-catboost
 
 # With SHAP feature importance
 python src/models/hybrid/hmttsf.py --shap --shap-samples 150
 
-# Maximum configuration (84-day lookback, HPO, SHAP, CatBoost)
+# Maximum configuration (84-day lookback, SHAP, CatBoost)
 python src/models/hybrid/hmttsf.py \
   --lookback 84 --d-model 256 --n-tcn-blocks 5 \
   --graph-hidden 128 --dropout 0.15 \
-  --tune-trials 50 --use-catboost --shap \
+  --use-catboost --shap \
   --epochs 150
 ```
 
@@ -108,7 +105,6 @@ HMT-TSF-specific flags (in addition to the shared flags below):
 | `--n-tcn-blocks N` | `3` | TCN blocks per scale |
 | `--graph-hidden {32,64,128}` | `64` | GCN hidden dimension |
 | `--n-regimes N` | `3` | Regime embedding count |
-| `--tune-trials N` | `0` | Optuna HPO trials (0 = disabled) |
 | `--use-catboost` | off | CatBoost post-hoc residual boosting |
 | `--no-boost` | off | Disable neural boost head |
 | `--no-revin` | off | Disable RevIN input normalisation |

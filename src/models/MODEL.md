@@ -510,8 +510,6 @@ L = WeightedHuber(step-decay γ=0.9) + λ · TemporalSmoothness
 ```
 Step 1 has weight 1.0; subsequent steps decay geometrically. Temporal smoothness penalises `‖y_{t+1} − y_t‖²` across T_out to prevent oscillatory predictions.
 
-**Optional HPO:** Optuna with MedianPruner — `--tune-trials N` runs N trials (up to 40 epochs each) before full training. Search space covers `d_model`, `n_tcn_blocks`, `graph_hidden`, `dropout`, `lr`, `smooth_weight`.
-
 **Architecture (end-to-end):**
 ```
 X (B, T_in, 79)  →  RevIN  →  FeatureGroupFusion  →  (B, T_in, d_model)
