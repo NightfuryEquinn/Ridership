@@ -1,101 +1,183 @@
 # HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 
-> Last updated: 2026-06-03
+> Last updated: 2026-06-04
 
 ## Architecture Diagram
 
 ```
-Input X: (B, T_in, F=79)   [MinMax-scaled by data pipeline]
-          │
-  ┌───────┴──────────────────────────────────────────────────────────┐
-  │                 RevIN (input-only instance norm)                 │
-  │  x̂ = (x − μ_sample) / σ_sample * γ + β   (per B per F)           │
-  └───────┬──────────────────────────────────────────────────────────┘
-          │
-  ┌───────┴──────────────────────────────────────────────────────────┐
-  │              Feature Group Fusion  →  (B, T_in, d_model)         │
-  │                                                                  │
-  │  ┌──────────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────────┐ │
-  │  │Target context│ │Temporal/Cyc. │ │ Lag enc. │ │Static enc.   │ │
-  │  │  idx  0–12   │ │  idx 13–28   │ │ idx 59–61│ │  idx 62–78   │ │
-  │  │  MLP→d/2     │ │  MLP→d/2     │ │  MLP→d/2 │ │  MLP→d/2     │ │
-  │  └──────┬───────┘ └──────┬───────┘ └────┬─────┘ └──────┬───────┘ │
-  │         │ External enc.  │              │              │         │
-  │  ┌──────┴───────┐        │              │              │         │
-  │  │  idx 29–58   │        │              │              │         │
-  │  │  MLP→d/2     │        │              │              │         │
-  │  └──────┬───────┘        │              │              │         │
-  │         └────────────────┴──────────────┴──────────────┘         │
-  │                   concat + learned group gates                   │
-  │                   Linear→d_model, GELU, LayerNorm                │
-  └───────┬──────────────────────────────────────────────────────────┘
-          │  (B, T_in, d_model)
-  ┌───────┴──────────────────────────────────────────────────────────┐
-  │         Temporal Transformer Block (global self-attention)       │
-  │  Learnable positional embeddings + MultiheadAttention (n_heads)  │
-  │  Pre-LN residual + FFN (d → 2d → d)                              │
-  └───────┬──────────────────────────────────────────────────────────┘
-          │  (B, T_in, d_model)
-          ├───────────────────────────┬──────────────────────────────┐
-          │                           │                              │
-  ┌───────▼────────────┐   ┌──────────▼─────────────┐   ┌────────────▼────┐
-  │  Multi-Scale TCN   │   │ Feature Graph Encoder  │   │  Regime Gating  │
-  │  (with DropPath)   │   │                        │   │  Embedding      │
-  │                    │   │  Learned time-attn →   │   │                 │
-  │  Scale 1 (T_in)    │   │  (B, F, 1) node feats  │   │  x.mean(T) →    │
-  │  CausalConv dil=1  │   │  Linear(1, g_hid)      │   │  Linear→K logit │
-  │  CausalConv dil=2  │   │  GCN(g_hid, g_hid)     │   │  Softmax → gate │
-  │  CausalConv dil=4  │   │  GCN(g_hid, d_model)   │   │  gate @ E_k     │
-  │  …                 │   │  mean(F) → (B, d_model)│   │  → (B, d_model) │
-  │                    │   │                        │   │                 │
-  │  Scale 2 (T_in//2) │   │  Pearson adj (F×F):    │   │  K=3 regime     │
-  │  (if T_in ≥ 28)    │   │  |corr|≥threshold,     │   │  embeddings     │
-  │                    │   │  sym-norm              │   │  (pre/MCO/post) │
-  │  Scale 3 (T_in//4) │   │                        │   │                 │
-  │  (if T_in ≥ 56)    │   │                        │   │                 │
-  │                    │   │                        │   │                 │
-  │  learned scale attn│   │                        │   │                 │
-  │  pool → (B,d_model)│   │                        │   │                 │
-  └───────┬────────────┘   └──────────┬─────────────┘   └──────┬──────────┘
-          │ h_t (B,d)                 │ h_s (B,d)              │ h_r (B,d)
-          └───────────────────────────┴────────────────────────┘
-                                      │
-                          ┌───────────▼─────────────-─┐
-                          │      Gated Fusion         │
-                          │                           │
-                          │  h = cat[h_t, h_s, h_r]   │
-                          │  SE bottleneck gate:      │
-                          │  d_cat → d_cat//4 → d_cat │
-                          │  g = σ(bottleneck(h))     │
-                          │  proj: g⊙h → 2d → d_model│
-                          │  GELU → Dropout → LN      │
-                          └───────────┬─────────────-─┘
-                                      │ (B, d_model)
-                          ┌───────────▼────────────────┐
-                          │      Forecast Heads        │
-                          │                            │
-                          │  Primary:                  │
-                          │   h → d → d → T_out        │
-                          │   (highway residual)       │
-                          │                            │
-                          │  Boosting:                 │
-                          │   h → d → T_out            │
-                          │   × sigmoid(α)             │
-                          │   (small α init=0.1)       │
-                          │                            │
-                          │  y_final = y_p + y_b       │
-                          └───────────┬────────────────┘
-                                      │
-                          ┌───────────▼──────────────────┐
-                          │ Post-hoc Residual Booster    │
-                          │  (optional, out-of-graph)    │
-                          │  CatBoost / sklearn MLP      │
-                          │  trained on train residuals  │
-                          │  y_final += 0.5 * Δ_boost    │
-                          └──────────────────────────────┘
+Input: (B, T_in, F=79)   [MinMax-scaled by data pipeline]
+        │
+        │  SHAP reduction at load time (default, --no-feat-reduce retains F=79)
+        │  26 zero-importance features dropped: 6 temporal, 3 fuel-level, 17 static
+        ▼
+Input: (B, T_in, F=53)
+        │
+┌───────┴──────────────────────────────────────────────────────────┐
+│                 RevIN (input-only instance norm)                 │
+│  x̂ = (x − μ_sample) / σ_sample * γ + β   (per B per F)           │
+└───────┬──────────────────────────────────────────────────────────┘
+        │  x̂: (B, T_in, F=53)
+        ├────────────────────────────────────────────────────────--───┐
+        │                                                             │ (bypasses
+        │                                                             │  Fusion +
+        │                                                             │  Transformer)
+┌───────▼─────────────────────────────────────────────────────────-─┐ │
+│              Feature Group Fusion  →  (B, T_in, d_model)          │ │
+│                                                                   │ │
+│  ┌────────────────┐ ┌──────────────┐ ┌───────────────┐ ┌───────┐  │ │
+│  │ Target context │ │Temporal/Cyc. │ │   External    │ │  Lag  │  │ │
+│  │   idx  0–12    │ │  idx 13–22   │ │  idx 23–49    │ │50–52  │  │ │
+│  │   MLP → d/2    │ │  MLP → d/2   │ │  MLP → d/2    │ │MLP→d/2│  │ │
+│  └──────┬─────────┘ └──────┬───────┘ └───────┬───────┘ └───┬───┘  │ │
+│         └──────────────────┴─────────────────┴─────────────┘      │ │
+│              concat × softmax(group_gate) — learned group weights │ │
+│              Linear(d_concat → d_model), GELU, Dropout            │ │
+│              Linear(d_model → d_model), LayerNorm                 │ │
+└───────┬──────────────────────────────────────────────────────-────┘ │
+        │  (B, T_in, d_model)                                         │
+┌───────┴───────────────────────────────────────────────────────-───┐ │
+│         Temporal Transformer Block (global self-attention)        │ │
+│  Learnable positional embeddings + MultiheadAttention (n_heads)   │ │
+│  Post-LN residual + FFN (d → d)                                   │ │
+└───────┬────────────────────────────────────────────────────────-──┘ │
+        │  (B, T_in, d_model)                                         │
+        │                                     ┌───────────────────────┘
+        │                                     │ x̂: (B, T_in, F=53)
+        │                                     ├───────────────────────┐
+        ▼                                     ▼                       ▼
+┌──────────────────┐            ┌─────────────────────────┐  ┌────────────────────┐
+│  Multi-Scale TCN │            │  Feature Graph Encoder  │  │  Regime Gating     │
+│  (with DropPath) │            │                         │  │  Embedding         │
+│                  │            │  Learned time-attn →    │  │                    │
+│  Scale 1 (T_in)  │            │  (B, F, 1) node feats   │  │  x.mean(T) →       │
+│  CausalConv d=1  │            │  Linear(1, g_hid)       │  │  Linear→K logit    │
+│  CausalConv d=2  │            │  GCN(g_hid, g_hid)      │  │  Softmax → gate    │
+│  CausalConv d=4  │            │  GCN(g_hid, d_model)    │  │  gate @ E_k        │
+│  …               │            │  mean(F) → (B, d_model) │  │  → (B, d_model)    │
+│                  │            │                         │  │                    │
+│  Scale 2 (T_in/2)│            │  Pearson adj (F×F):     │  │  K=3 regime        │
+│  (if T_in ≥ 28)  │            │  soft weights           │  │  embeddings        │
+│                  │            │  |corr|≥threshold       │  │  (pre/MCO/post)    │
+│  Scale 3 (T_in/4)│            │  sym-norm               │  │                    │
+│  (if T_in ≥ 56)  │            │                         │  │                    │
+│                  │            │                         │  │                    │
+│  learned scale   │            │                         │  │                    │
+│  attn pool       │            │                         │  │                    │
+│  → (B, d_model)  │            │                         │  │                    │
+└────────┬─────────┘            └────────────┬────────────┘  └──────────┬─────────┘
+         │ h_t (B, d)                        │ h_s (B, d)               │ h_r (B, d)
+         └───────────────────────────────────┴──────────────────────────┘
+                                             │
+                             ┌───────────────▼─────────────────-──┐
+                             │           Gated Fusion             │
+                             │  h = cat[h_t, h_s, h_r]            │
+                             │  SE bottleneck gate:               │
+                             │  d_cat → d_cat//4 → d_cat          │
+                             │  g = σ(bottleneck(h))              │
+                             │  proj: g⊙h → d_model → d_model    │
+                             │  GELU → Dropout → LN               │
+                             └───────────────┬─────────────────-──┘
+                                             │ (B, d_model)
+                             ┌───────────────▼───────────────────┐
+                             │          Forecast Heads           │
+                             │                                   │
+                             │  Primary:                         │
+                             │   h → d → d → T_out               │
+                             │   (highway residual + LayerNorm)  │
+                             │                                   │
+                             │  Boosting:                        │
+                             │   h → d → T_out                   │
+                             │   × sigmoid(α), α init=−2.0       │
+                             │   (sigmoid(−2.0) ≈ 0.12)          │
+                             │                                   │
+                             │  y = y_primary + y_boost          │
+                             └───────────────┬───────────────────┘
+                                             │ (B, T_out)  [RevIN-normalised space]
+                             ┌───────────────▼───────────────────────-───┐
+                             │  Future Temporal Projection               │
+                             │  (optional; requires X_future)            │
+                             │  x_future: (B, T_out, n_temporal)         │
+                             │  MLP: n_t → max(2·n_t, 32) → 1 per step   │
+                             │  zero-init output (starts as no-op)       │
+                             │  additive correction in RevIN space       │
+                             └───────────────┬────────────────────────-──┘
+                                             │
+                             ┌───────────────▼───────────────────┐
+                             │       RevIN Denormalize           │
+                             │   → MinMax-scaled space           │
+                             └───────────────┬───────────────────┘
+                                             │
+                             ┌───────────────▼───────────────────┐
+                             │   Post-hoc Residual Booster       │
+                             │   (optional, out-of-graph)        │
+                             │   CatBoost / sklearn MLP          │
+                             │   trained on train residuals      │
+                             │   y_final += 0.5 * Δ_boost        │
+                             └───────────────────────────────────┘
 
 Output: (B, T_out=7)  [MinMax-scaled]
         → scaler_y.inverse_transform() → raw ridership counts
+```
+
+---
+
+## Architecture Diagram (Mermaid)
+
+```mermaid
+flowchart TD
+    IN79["Input X · (B, T_in, F=79) · MinMax-scaled"]
+    SHAP["SHAP Reduction at load time<br/>79 → 53 features<br/>−6 temporal · −3 fuel-level · −17 static<br/><i>--no-feat-reduce retains F=79</i>"]
+    IN53["Input X · (B, T_in, F=53)"]
+
+    REVIN["<b>RevIN</b><br/>x̂ = (x − μ) / σ × γ + β<br/>per sample · per feature<br/>learnable γ, β per feature"]
+
+    FGF["<b>Feature Group Fusion</b> → (B, T_in, d_model)<br/>Target ctx  idx 0–12  → MLP → d/2<br/>Temporal/Cyc.  idx 13–22  → MLP → d/2<br/>External  idx 23–49  → MLP → d/2<br/>Lag  idx 50–52  → MLP → d/2<br/>concat × softmax(group_gate)<br/>Linear→d, GELU, Dropout, Linear→d, LayerNorm"]
+
+    TTB["<b>Temporal Transformer Block</b><br/>Learnable positional embeddings<br/>MultiheadAttention (n_heads)<br/>Post-LN residual · FFN d → d"]
+
+    TCN["<b>Multi-Scale TCN</b> (with DropPath)<br/>Scale 1: full T_in<br/>Scale 2: T_in/2  (if T_in ≥ 28)<br/>Scale 3: T_in/4  (if T_in ≥ 56)<br/>CausalConv · WaveNet-gated activation<br/>exp. dilation 1, 2, 4, …<br/>learned scale attn pool → (B, d_model)"]
+
+    GCN["<b>Feature Graph Encoder</b><br/>Learned time-attn over T → (B, F, 1)<br/>Linear(1, g_hid) · 2-layer GCN<br/>global mean pool → (B, d_model)<br/>Pearson adj · soft weights · sym-norm"]
+
+    RGE["<b>Regime Gating Embedding</b><br/>x̂.mean(T) → Linear → K logits<br/>Softmax → gate · gate @ E_k<br/>K=3 embeddings: pre / MCO / post"]
+
+    GF["<b>Gated Fusion</b><br/>h = cat[h_t, h_s, h_r]<br/>SE bottleneck gate: d_cat → d_cat//4 → d_cat<br/>g = σ(bottleneck(h))<br/>proj: g⊙h → d_model → d_model<br/>GELU → Dropout → LN"]
+
+    FH["<b>Forecast Heads</b><br/>Primary: h → d → d → T_out (highway + LN)<br/>Boosting: h → d → T_out × sigmoid(α)<br/>α init = −2.0  ⟹  sigmoid(α) ≈ 0.12<br/>y = y_primary + y_boost"]
+
+    FTP["<b>Future Temporal Projection</b> (optional)<br/>x_future: (B, T_out, n_temporal)<br/>MLP: n_t → max(2·n_t, 32) → 1 per step<br/>zero-init output · starts as no-op<br/>additive correction in RevIN space"]
+
+    REVIND["<b>RevIN Denormalize</b><br/>→ MinMax-scaled space"]
+
+    BOOST["<b>Post-hoc Residual Booster</b> (optional, out-of-graph)<br/>CatBoost / sklearn MLP<br/>trained on train residuals<br/>y_final += 0.5 × Δ_boost"]
+
+    OUT["<b>Output</b> · (B, T_out=7) · MinMax-scaled<br/>→ scaler_y.inverse_transform()<br/>→ raw ridership counts"]
+
+    IN79   --> SHAP --> IN53 --> REVIN
+    REVIN  --> FGF
+    REVIN  -- "bypasses Fusion + Transformer" --> GCN
+    REVIN  -- "bypasses Fusion + Transformer" --> RGE
+    FGF    --> TTB --> TCN
+    TCN    -->|h_t| GF
+    GCN    -->|h_s| GF
+    RGE    -->|h_r| GF
+    GF     --> FH --> FTP --> REVIND --> BOOST --> OUT
+
+    classDef default  fill:#f8fafc,stroke:#94a3b8,color:#0f172a
+    classDef norm     fill:#fefce8,stroke:#ca8a04,color:#713f12
+    classDef fusion   fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    classDef bypass   fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a
+    classDef head     fill:#fdf4ff,stroke:#a21caf,color:#581c87
+    classDef optional fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+    classDef out      fill:#f1f5f9,stroke:#475569,color:#0f172a
+
+    class REVIN,REVIND norm
+    class FGF,TTB,TCN fusion
+    class GCN,RGE bypass
+    class GF head
+    class FH head
+    class FTP,BOOST optional
+    class OUT out
 ```
 
 ---
@@ -113,7 +195,9 @@ Output: (B, T_out=7)  [MinMax-scaled]
 - Source: Vaswani et al. (2017); PatchTST (2022)
 - Single Transformer encoder block with learnable positional embeddings and MultiheadAttention
 - Positioned **between** FeatureGroupFusion and the Multi-Scale TCN
+- Post-LN residual: `x = norm(x + attn(x))`; FFN is `d → d` (no 2× expansion — avoids head overfitting at large d_model)
 - Purpose: TCN only captures local patterns via dilated convolutions; this block adds global temporal self-attention so the model can weight which time steps matter most across the full lookback window before local extraction
+- Note: Feature Graph Encoder and Regime Gating Embedding both receive raw `x̂` (after RevIN only) — they bypass this block intentionally so the graph and regime branches see the unprocessed feature signal rather than the projected d_model representation
 
 ### Multi-Scale TCN
 - Source: WaveNet (van den Oord 2016), TCN (Bai 2018), TimesNet (Wu 2023)
@@ -147,8 +231,16 @@ Output: (B, T_out=7)  [MinMax-scaled]
 ### Gated Fusion
 - Source: Highway networks (Srivastava 2015), Gated Linear Units, SE-Net (Hu 2018)
 - Combines temporal, spatial, and regime information with learned gates
-- **SE-style bottleneck gate**: d_cat → d_cat//4 → d_cat (avoids a massive square weight matrix at d_model=256)
+- **SE-style bottleneck gate**: d_cat → d_cat//4 → d_cat (avoids a massive square weight matrix at d_model=256); projection then maps `g⊙h` through `d_cat → d_model → d_model` (not `2d`)
 - Prevents any single modality from dominating
+
+### Future Temporal Projection
+- Learns a per-step additive correction from known future temporal features (day-of-week, weekend flag, holiday flags, sin/cos encodings)
+- These features are deterministic for any calendar date and are pre-computed for the forecast horizon as `X_future: (B, T_out, n_temporal)` by `sequence_builder.py`
+- MLP: `n_temporal → max(2·n_temporal, 32) → 1` per step, squeezed to `(B, T_out)`
+- Output weights zero-initialised — starts as a no-op; only diverges from baseline as gradient evidence accumulates
+- Applied in RevIN-normalised space (before denormalization) so the correction scales with each sample's ridership level
+- Enabled automatically when `X_future_*.npy` files are present in the sequence directory; falls back to no-op otherwise
 
 ### Weighted Huber Loss
 - Step 1 carries weight 1.0, decaying geometrically (default decay=0.9)
