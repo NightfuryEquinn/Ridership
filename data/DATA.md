@@ -139,8 +139,10 @@ Output of `src/features/feature_align.py`. This is the single source of truth fo
 
 | File | Description |
 |------|-------------|
-| `features_aligned.csv` | Daily feature matrix: every source merged onto a shared date index. ~79 columns (see breakdown below). MCO period rows are retained here; exclusion happens in `sequence_builder.py`. |
-| `feature_metadata.json` | JSON schema describing each feature column: source, type, value range, and derived-feature formula. |
+| `features_aligned.csv` | Daily feature matrix with **MCO period included** (2020-03-18 – 2021-12-31 retained). ~79 columns (see breakdown below). Fed to `sequence_builder.py` for the MCO-included sequence variant. |
+| `features_aligned_no_mco.csv` | Same matrix with MCO rows dropped. Fed to `sequence_builder.py` for the MCO-excluded (default) sequence variant. |
+| `feature_metadata.json` | JSON schema for `features_aligned.csv`: column groups, source list, null counts. |
+| `feature_metadata_no_mco.json` | Same as above but with the day count after MCO exclusion. |
 
 ### Feature column breakdown (~79 columns)
 
@@ -172,17 +174,24 @@ Output of `src/features/sequence_builder.py`. Each subdirectory is a self-contai
 
 ### Subdirectory layout
 
-| Directory | Lookback (`T_in`) | Built by |
-|-----------|-------------------|----------|
-| `lstm/` | 14 days | `sequence_builder.py` (default, no flag) |
-| `lookback_28/` | 28 days | `sequence_builder.py --T-in 28` |
-| `lookback_56/` | 56 days | `sequence_builder.py --T-in 56` |
+Each lookback window produces **two** sibling directories — one with MCO excluded (default) and one with MCO included. Both are built automatically by `run_pipeline.py` step 3.
 
-Additional directories (`lookback_7/`, `lookback_84/`) can be built on demand for HMT-TSF:
+| Directory | Lookback (`T_in`) | MCO rows |
+|-----------|-------------------|----------|
+| `lstm/` | 14 days | excluded |
+| `lstm_mco/` | 14 days | included |
+| `lookback_28/` | 28 days | excluded |
+| `lookback_28_mco/` | 28 days | included |
+| `lookback_56/` | 56 days | excluded |
+| `lookback_56_mco/` | 56 days | included |
+
+Additional directories for HMT-TSF can be built on demand:
 
 ```bash
-python src/features/sequence_builder.py --T-in 7
-python src/features/sequence_builder.py --T-in 84
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 7  --out-dir data/sequences/lookback_7
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 7  --out-dir data/sequences/lookback_7_mco
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 84 --out-dir data/sequences/lookback_84
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 84 --out-dir data/sequences/lookback_84_mco
 ```
 
 ### Files inside each subdirectory
@@ -215,7 +224,7 @@ X_train = np.load("data/sequences/lstm/X_train.npy").astype(np.float32)
 | Validation | 15% | Early stopping and LR scheduling |
 | Test | 15% | Held-out evaluation; never seen during training |
 
-MCO period (2020-03-18 – 2021-12-31) is excluded from all splits.
+MCO rows are removed in `feature_align.py` (written to `features_aligned_no_mco.csv`) before sequence building. The `_mco/` directories are built from `features_aligned.csv` and therefore contain MCO-period windows.
 
 ---
 

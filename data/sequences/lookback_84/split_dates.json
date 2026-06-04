@@ -17,5 +17,7 @@
   "target_col": "total_ridership",
   "target_col_idx": 12,
   "dtype": "float16",
-  "compressed": false
+  "compressed": false,
+  "temporal_feat_start": 13,
+  "temporal_feat_end": 29
 }

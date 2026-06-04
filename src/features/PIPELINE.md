@@ -19,11 +19,16 @@ Raw data (data/raw/)
         ▼
  feature_align.py    ─── merges all sources onto a daily date index
         │                 also computes lag features + year/day_of_year
+        │                 exports TWO matrices:
+        │                   features_aligned.csv         (MCO included)
+        │                   features_aligned_no_mco.csv  (MCO excluded)
         ▼
- sequence_builder.py ─── sliding-window tensors (X, y) for all 16 models
+ sequence_builder.py ─── called TWICE per lookback window (once per MCO condition)
         │
         ▼
- data/sequences/lstm/  ─── X_train.npy, y_train.npy, …, scaler_X.pkl, …
+ data/sequences/lstm/      ─── MCO excluded, T_in=14
+ data/sequences/lstm_mco/  ─── MCO included, T_in=14
+ (same pattern for lookback_28/ and lookback_56/)
 ```
 
 ---
@@ -227,8 +232,10 @@ python src/features/feature_align.py \
 ```
 
 Outputs:
-- `data/features/features_aligned.csv` — daily matrix (days × N_features)
-- `data/features/feature_metadata.json` — column groups, source list, null counts
+- `data/features/features_aligned.csv` — daily matrix with MCO period included
+- `data/features/features_aligned_no_mco.csv` — same matrix with MCO rows (2020-03-18 – 2021-12-31) dropped
+- `data/features/feature_metadata.json` — column groups, source list, null counts (MCO included)
+- `data/features/feature_metadata_no_mco.json` — same metadata with adjusted day count (MCO excluded)
 
 The terminal output reports the total feature count and a breakdown by group
 (targets, temporal, external, lag, static). Feature sources included are listed
@@ -251,38 +258,53 @@ explicitly; any `[SKIP]` messages indicate a cleaning script has not been run.
 ## Step 3 — Sequence Builder
 
 Slices the aligned feature matrix into overlapping sliding windows and
-produces scaled tensors for all 15 models.
+produces scaled tensors for all models. MCO filtering is **not** done here —
+pass the appropriate features file via `--features-path`.
+
+`run_pipeline.py` calls this script **twice per lookback window** automatically,
+pointing at `features_aligned_no_mco.csv` and `features_aligned.csv` in turn.
+To run manually for a single condition:
 
 ```bash
-python src/features/sequence_builder.py
+# MCO excluded (default for model training)
+python src/features/sequence_builder.py \
+    --features-path data/features/features_aligned_no_mco.csv \
+    --out-dir data/sequences/lstm
+
+# MCO included
+python src/features/sequence_builder.py \
+    --features-path data/features/features_aligned.csv \
+    --out-dir data/sequences/lstm_mco
 ```
 
 Optional arguments:
 
 | Argument | Default | Description |
 |---|---|---|
-| `--features-path` | `data/features/features_aligned.csv` | Aligned features |
+| `--features-path` | `data/features/features_aligned.csv` | Aligned features CSV to load |
 | `--T-in` | `14` | Look-back window (days) |
 | `--T-out` | `7` | Forecast horizon (days) |
 | `--target` | `total_ridership` | Target column name |
 | `--train-frac` | `0.70` | Training split fraction |
 | `--val-frac` | `0.15` | Validation split fraction |
-| `--include-mco` | off | Include MCO-period rows |
+| `--out-dir` | auto | Output directory (default: `lstm/` for T_in=14, else `lookback_{N}/`) |
 | `--dtype` | `float16` | Storage dtype (`float16` or `float32`) |
 | `--compress` | off | Save `.npz` instead of `.npy` |
 
-Outputs (`data/sequences/lstm/`):
+Each output directory contains:
 - `X_train.npy`, `y_train.npy`
 - `X_val.npy`, `y_val.npy`
 - `X_test.npy`, `y_test.npy`
+- `X_future_train.npy`, `X_future_val.npy`, `X_future_test.npy` ← known future temporal features
 - `scaler_X.pkl`, `scaler_y.pkl`
 - `split_dates.json` — split boundaries, T_in, T_out, n_features, target index
 
 Tensor shapes:
-- `X`: `(N_samples, T_in=14, N_features)`
+- `X`: `(N_samples, T_in, N_features)`
 - `y`: `(N_samples, T_out=7)`
+- `X_future`: `(N_samples, T_out=7, 16)` — temporal features for forecast horizon
 
-> `N_features` is whatever `features_aligned.csv` contains. Check
+> `N_features` is whatever the input CSV contains. Check
 > `split_dates.json → n_features` for the exact count after running.
 
 ---
@@ -312,19 +334,26 @@ python src/features/osm.py
 # 2. Feature alignment (all 8 sources + lag + trend → one daily matrix)
 python src/features/feature_align.py
 
-# 3. Sequence builder (daily matrix → model-ready tensors, repeat for each lookback)
-python src/features/sequence_builder.py               # --T-in 14  → data/sequences/lstm/
-python src/features/sequence_builder.py --T-in 28     # → data/sequences/lookback_28/
-python src/features/sequence_builder.py --T-in 56     # → data/sequences/lookback_56/
+# 3. Sequence builder — run twice per lookback (MCO excluded + MCO included)
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 14 --out-dir data/sequences/lstm
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 14 --out-dir data/sequences/lstm_mco
+
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 28 --out-dir data/sequences/lookback_28
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 28 --out-dir data/sequences/lookback_28_mco
+
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 56 --out-dir data/sequences/lookback_56
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 56 --out-dir data/sequences/lookback_56_mco
 ```
 
 ---
 
 ## Notes
 
-- **MCO exclusion** — `sequence_builder.py` drops 2020-03-18 to 2021-12-31 by
-  default. Pass `--include-mco` to keep this period (the `is_mco` flag is still
-  available as a feature for models that can learn the anomaly).
+- **MCO split** — `feature_align.py` exports both `features_aligned.csv` (MCO
+  included) and `features_aligned_no_mco.csv` (MCO excluded, 2020-03-18 –
+  2021-12-31 rows dropped). `sequence_builder.py` performs no MCO filtering
+  itself — select the correct input file via `--features-path`. `run_pipeline.py`
+  builds both sequence sets automatically.
 
 - **Static feature scaling** — GTFS, OSM POI, GADM, and population features are
   broadcast to every date as constant columns. `MinMaxScaler` in
@@ -346,8 +375,10 @@ python src/features/sequence_builder.py --T-in 56     # → data/sequences/lookb
   `X_train.npy`. No separate graph file is needed.
 
 - **HMT-TSF lookback 7 and 84** — Sequence dirs for these two non-standard
-  lookbacks must be built separately if needed:
+  lookbacks must be built separately if needed (both MCO conditions):
   ```bash
-  python src/features/sequence_builder.py --T-in 7
-  python src/features/sequence_builder.py --T-in 84
+  python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 7  --out-dir data/sequences/lookback_7
+  python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 7  --out-dir data/sequences/lookback_7_mco
+  python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 84 --out-dir data/sequences/lookback_84
+  python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 84 --out-dir data/sequences/lookback_84_mco
   ```

@@ -1,10 +1,10 @@
 {
   "date_range": {
-    "start": "2019-01-01",
+    "start": "2022-01-01",
     "end": "2025-12-31"
   },
   "total_features": 79,
-  "total_days": 2557,
+  "total_days": 1461,
   "feature_sources": [
     "ridership",
     "fuel_price",
@@ -107,13 +107,9 @@
     ]
   },
   "null_counts": {
-    "bus_rkl": 1096,
-    "bus_rpn": 1096,
-    "rail_mrt_pjy": 1262,
-    "rail_ets": 653,
-    "rail_intercity": 653,
-    "rail_komuter_utara": 653,
-    "rail_tebrau": 1265,
-    "rail_komuter": 1713
-  }
+    "rail_mrt_pjy": 166,
+    "rail_tebrau": 169,
+    "rail_komuter": 617
+  },
+  "mco_excluded": true
 }

@@ -283,12 +283,30 @@ def main():
     with open(f"{OUT_DIR}/feature_metadata.json", "w") as f:
         json.dump(metadata, f, indent=2)
 
+    # ── MCO-excluded variant ───────────────────────────────────────────────────────
+    _mco_start = pd.Timestamp("2020-03-18")
+    _mco_end   = pd.Timestamp("2021-12-31")
+    aligned_no_mco = aligned[(aligned.index < _mco_start) | (aligned.index > _mco_end)]
+    print(f"\nMCO rows excluded: {len(aligned) - len(aligned_no_mco)} rows removed "
+          f"({_mco_start.date()} – {_mco_end.date()}), "
+          f"{len(aligned_no_mco)} rows remaining")
+
+    metadata_no_mco = {**metadata,
+                       "total_days": int(len(aligned_no_mco)),
+                       "mco_excluded": True}
+
+    with open(f"{OUT_DIR}/feature_metadata_no_mco.json", "w") as f:
+        json.dump(metadata_no_mco, f, indent=2)
+
     # ── Export ─────────────────────────────────────────────────────────────────────
     aligned.to_csv(f"{OUT_DIR}/features_aligned.csv")
+    aligned_no_mco.to_csv(f"{OUT_DIR}/features_aligned_no_mco.csv")
 
     print("\nExported:")
-    print(f"  {OUT_DIR}/features_aligned.csv    ← feed into sequence_builder.py")
+    print(f"  {OUT_DIR}/features_aligned.csv         ← MCO included  ({len(aligned)} days)")
+    print(f"  {OUT_DIR}/features_aligned_no_mco.csv  ← MCO excluded  ({len(aligned_no_mco)} days)")
     print(f"  {OUT_DIR}/feature_metadata.json")
+    print(f"  {OUT_DIR}/feature_metadata_no_mco.json")
     print(f"\nFeature sources included: {sources_present}")
     print(f"Total features: {aligned.shape[1]}")
     print(f"  targets={len([c for c in target_cols if c in aligned.columns])}, "

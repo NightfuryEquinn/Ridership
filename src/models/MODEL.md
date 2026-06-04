@@ -525,10 +525,12 @@ X (B, T_in, 79)  →  RevIN  →  FeatureGroupFusion  →  (B, T_in, d_model)
 
 **Default hyperparameters:** `d_model=128`, `n_tcn_blocks=3`, `graph_hidden=64`, `n_regimes=3`, `dropout=0.1`, `epochs=150`, `batch_size=32`, `lr=1e-3`, `weight_decay=1e-4`, `patience=15`, `warmup_epochs=5`, `smooth_weight=0.01`, `loss_decay=0.9`.
 
-**Lookback support:** {7, 14, 28, 56, 84} days — wider than the 15 base models ({14, 28, 56} only). Multi-scale TCN: Scale 2 (T//2) activates for T_in ≥ 28; Scale 3 (T//4) activates for T_in ≥ 56. Sequence dirs for lookback 7 and 84 must be built before use:
+**Lookback support:** {7, 14, 28, 56, 84} days — wider than the 15 base models ({14, 28, 56} only). Multi-scale TCN: Scale 2 (T//2) activates for T_in ≥ 28; Scale 3 (T//4) activates for T_in ≥ 56. Sequence dirs for lookback 7 and 84 must be built before use (both MCO conditions):
 ```bash
-python src/features/sequence_builder.py --T-in 7
-python src/features/sequence_builder.py --T-in 84
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 7  --out-dir data/sequences/lookback_7
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 7  --out-dir data/sequences/lookback_7_mco
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 84 --out-dir data/sequences/lookback_84
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 84 --out-dir data/sequences/lookback_84_mco
 ```
 
 **Optimisation targets:** Combined% ≥ 75, R² ≥ 0.70.

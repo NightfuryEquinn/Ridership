@@ -47,13 +47,20 @@ python src/features/gtfs.py --input data/raw/gtfs_rapid_rail_kl --output data/cl
 python src/features/population.py
 python src/features/osm.py
 
-# 2. Merge all 8 sources → daily matrix (also computes lag + trend features)
+# 2. Merge all 8 sources → two daily matrices (MCO included + MCO excluded)
 python src/features/feature_align.py
+# outputs: data/features/features_aligned.csv (MCO included)
+#          data/features/features_aligned_no_mco.csv (MCO excluded)
 
-# 3. Sliding-window tensors → data/sequences/{lstm | lookback_28 | lookback_56}/
-python src/features/sequence_builder.py               # default: --T-in 14
-python src/features/sequence_builder.py --T-in 28     # → data/sequences/lookback_28/
-python src/features/sequence_builder.py --T-in 56     # → data/sequences/lookback_56/
+# 3. Sliding-window tensors — two sets per lookback (MCO excluded + MCO included)
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 14 --out-dir data/sequences/lstm
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 14 --out-dir data/sequences/lstm_mco
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 28 --out-dir data/sequences/lookback_28
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 28 --out-dir data/sequences/lookback_28_mco
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 56 --out-dir data/sequences/lookback_56
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 56 --out-dir data/sequences/lookback_56_mco
+# Or run all of the above in one shot:
+# python src/features/run_pipeline.py --skip-clean --skip-align
 ```
 
 ## Running a Model
@@ -168,7 +175,7 @@ New shared flags added to all 15 models:
 
 Sequence directory auto-resolution (base models): `--lookback 14` → `data/sequences/lstm/`, `--lookback 28` → `data/sequences/lookback_28/`, `--lookback 56` → `data/sequences/lookback_56/`.
 
-HMT-TSF additionally supports `--lookback 7` → `data/sequences/lookback_7/` and `--lookback 84` → `data/sequences/lookback_84/` (build these dirs first with `sequence_builder.py --T-in 7` / `--T-in 84`).
+HMT-TSF additionally supports `--lookback 7` → `data/sequences/lookback_7/` and `--lookback 84` → `data/sequences/lookback_84/` (build both MCO conditions first — see `src/features/PIPELINE.md` Step 3).
 
 ## Architecture
 
@@ -178,14 +185,18 @@ HMT-TSF additionally supports `--lookback 7` → `data/sequences/lookback_7/` an
 data/raw/                      8 raw sources
     └── src/features/          cleaning scripts (one per source)
 data/cleaned/                  cleaned CSVs, GeoJSONs, .npy adjacency matrices
-    └── feature_align.py       merges onto daily index → features_aligned.csv
-                               also derives: ridership_lag_{7,14,28}, year, day_of_year
-data/features/                 features_aligned.csv (~69 cols) + feature_metadata.json
-    └── sequence_builder.py    sliding windows, MinMaxScaler, chronological split
-data/sequences/lstm/           lookback=14 (default): X_train/val/test.npy, y_*.npy, scaler_X/y.pkl, split_dates.json
-data/sequences/lookback_28/    lookback=28: same layout
-data/sequences/lookback_56/    lookback=56: same layout
-    └── src/models/**/*.py     model training (--lookback selects the right dir)
+    └── feature_align.py       merges onto daily index; also derives lag + trend features
+                               → features_aligned.csv        (MCO included, 1 461 days)
+                               → features_aligned_no_mco.csv (MCO excluded, ~1 097 days)
+data/features/                 both aligned CSVs + feature_metadata{,_no_mco}.json (79 cols)
+    └── sequence_builder.py    called twice per lookback (once per MCO condition)
+data/sequences/lstm/           lookback=14, MCO excluded: X/y_train/val/test.npy, scalers, split_dates.json
+data/sequences/lstm_mco/       lookback=14, MCO included: same layout
+data/sequences/lookback_28/    lookback=28, MCO excluded
+data/sequences/lookback_28_mco/ lookback=28, MCO included
+data/sequences/lookback_56/    lookback=56, MCO excluded
+data/sequences/lookback_56_mco/ lookback=56, MCO included
+    └── src/models/**/*.py     model training (--lookback + --seq-dir selects the right dir)
 src/outputs/{model}/           timestamped run dirs with results.json, plots, model.pt
 ```
 
@@ -257,7 +268,7 @@ Each model run writes to `src/outputs/{model_name}/{YYYYMMDD_HHMMSS}/`:
 
 - `T_in=14` (look-back window, choices: 14/28/56), `T_out=7` (forecast horizon)
 - Chronological split: 70% train / 15% val / 15% test
-- MCO period (2020-03-18 – 2021-12-31) excluded from sequences by default
+- MCO period (2020-03-18 – 2021-12-31) split at feature_align stage: `features_aligned_no_mco.csv` excludes it; `features_aligned.csv` retains it. Both sequence sets are always built.
 - Sequences stored as `float16` by default; load and cast to `float32` before feeding to models
 - All scalers fitted on training split only (`scaler_X.pkl`, `scaler_y.pkl`)
 

@@ -26,10 +26,15 @@ Flags
   --date-start DATE   feature_align --date-start  (default: 2022-01-01)
   --date-end   DATE   feature_align --date-end    (default: 2025-12-31)
   --output-dir DIR    feature_align --output-dir  (default: data/features)
+                      also sets --features-path for sequence_builder
   --T-out N           Forecast horizon in days    (default: 7)
   --lookbacks L …     Look-back windows           (default: 14 28 56)
-  --include-mco       Pass --include-mco to sequence_builder
   --dtype DTYPE       Storage dtype: float16 or float32 (default: float16)
+  --compress          Save sequences as .npz (zlib); load via np.load(...)['arr']
+
+Step 3 always produces two sets of sequences per lookback window:
+  MCO excluded → data/sequences/lstm/ (T-in=14), data/sequences/lookback_{N}/
+  MCO included → data/sequences/lstm_mco/         data/sequences/lookback_{N}_mco/
 """
 
 import argparse
@@ -86,12 +91,12 @@ def main() -> None:
     # sequence_builder arguments
     parser.add_argument("--T-out", type=int, default=7, metavar="N",
                         help="Forecast horizon in days (default: %(default)s)")
-    parser.add_argument("--lookbacks", type=int, nargs="+", default=[14, 28, 56],
-                        metavar="L", help="Look-back windows (default: 14 28 56)")
-    parser.add_argument("--include-mco", action="store_true",
-                        help="Pass --include-mco to sequence_builder")
+    parser.add_argument("--lookbacks", type=int, nargs="+", default=[7, 14, 28, 56, 84],
+                        metavar="L", help="Look-back windows (default: 7 14 28 56 84)")
     parser.add_argument("--dtype", choices=["float16", "float32"], default="float16",
                         help="Storage dtype (default: %(default)s)")
+    parser.add_argument("--compress", action="store_true",
+                        help="Save sequences as .npz (zlib compressed); load via np.load(...)['arr']")
 
     args = parser.parse_args()
 
@@ -145,18 +150,32 @@ def main() -> None:
             "2   Feature Alignment  (8 sources + lag + trend → daily matrix)",
         )
 
-    # ── Step 3: Sequence Builder (one run per look-back window) ───────────
+    # ── Step 3: Sequence Builder (MCO-excluded + MCO-included per window) ────
     if not args.skip_sequences:
-        for T_in in args.lookbacks:
-            seq_cmd = [
+        no_mco_path = f"{args.output_dir}/features_aligned_no_mco.csv"
+        mco_path    = f"{args.output_dir}/features_aligned.csv"
+
+        def _seq_cmd(features_path: str, out_dir: str) -> list[str]:
+            cmd = [
                 py, "src/features/sequence_builder.py",
-                "--T-in",  str(T_in),
-                "--T-out", str(args.T_out),
-                "--dtype", args.dtype,
+                "--features-path", features_path,
+                "--T-in",   str(T_in),
+                "--T-out",  str(args.T_out),
+                "--dtype",  args.dtype,
+                "--out-dir", out_dir,
             ]
-            if args.include_mco:
-                seq_cmd.append("--include-mco")
-            run(seq_cmd, f"3   Sequence Builder  (T-in={T_in})")
+            if args.compress:
+                cmd.append("--compress")
+            return cmd
+
+        for T_in in args.lookbacks:
+            base_dir = "data/sequences/lstm" if T_in == 14 else f"data/sequences/lookback_{T_in}"
+            mco_dir  = f"{base_dir}_mco"
+
+            run(_seq_cmd(no_mco_path, base_dir),
+                f"3a  Sequence Builder  (T-in={T_in}, MCO excluded)")
+            run(_seq_cmd(mco_path, mco_dir),
+                f"3b  Sequence Builder  (T-in={T_in}, MCO included)")
 
     # ── Summary ───────────────────────────────────────────────────────────
     total = time.perf_counter() - total_start

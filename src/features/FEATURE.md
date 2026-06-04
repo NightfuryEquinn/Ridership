@@ -9,11 +9,13 @@ Detailed account of all exploratory data analysis (EDA) and engineering decision
 ## Pipeline Overview
 
 ```
-data/raw/  →  [source scripts]  →  data/cleaned/  →  feature_align.py  →  features_aligned.csv
+data/raw/  →  [source scripts]  →  data/cleaned/  →  feature_align.py  →  features_aligned.csv        (MCO included)
+                                                            │             features_aligned_no_mco.csv   (MCO excluded)
                                                             ↓
-                                                  sequence_builder.py
+                                                  sequence_builder.py  (called twice per lookback)
                                                             ↓
-                                          data/sequences/{lstm|lookback_28|lookback_56}/
+                                          data/sequences/{lstm|lookback_28|lookback_56}/      (no MCO)
+                                          data/sequences/{lstm_mco|lookback_28_mco|…}/        (with MCO)
 ```
 
 The feature matrix contains five column groups:
@@ -284,7 +286,7 @@ This choice keeps the population signal simple (single national-level indicator)
 
 ## Feature Alignment (`feature_align.py`)
 
-After all eight sources are cleaned, `feature_align.py` merges them onto a master daily index (2022-01-01 → 2025-12-31, 1,461 days).
+After all eight sources are cleaned, `feature_align.py` merges them onto a master daily index (2022-01-01 → 2025-12-31, 1,461 days) and exports **two** feature matrices in a single run.
 
 ### Merge Strategy
 
@@ -298,6 +300,17 @@ After all eight sources are cleaned, `feature_align.py` merges them onto a maste
 | GTFS static | scalar broadcast | no nulls (computed from clean tables) |
 | OSM POI | scalar broadcast | no nulls (mean across stops) |
 | GADM | scalar broadcast | no nulls (computed from clean boundaries) |
+
+### MCO Split
+
+After the merge, a second matrix is derived by dropping the MCO anomaly period (2020-03-18 – 2021-12-31):
+
+| Output file | MCO rows | Day count |
+|-------------|----------|-----------|
+| `features_aligned.csv` | included | 1,461 |
+| `features_aligned_no_mco.csv` | excluded | ~1,097 |
+
+A metadata JSON is written for each file (`feature_metadata.json` / `feature_metadata_no_mco.json`).
 
 ### Null Audit
 
@@ -319,11 +332,11 @@ Ridership lags (`ridership_lag_7`, `ridership_lag_14`, `ridership_lag_28`) are c
 
 ## Sequence Assembly (`sequence_builder.py`)
 
-Converts `features_aligned.csv` into model-ready tensors.
+Converts a pre-filtered features CSV into model-ready tensors. MCO filtering is **not** performed here — it is handled upstream by `feature_align.py`. `sequence_builder.py` simply loads whichever file it is pointed at via `--features-path`.
 
 ### Key Design Decisions from EDA
 
-**MCO exclusion.** MCO-period rows (2020-03-18 – 2021-12-31) are excluded from sequences by default (`--include-mco` flag to override). The 2022-01-01 master start date means the MCO period falls entirely outside the master window anyway — this flag guards against future date-range extensions.
+**MCO split moved upstream.** `feature_align.py` produces `features_aligned.csv` (MCO included) and `features_aligned_no_mco.csv` (MCO excluded). `run_pipeline.py` calls `sequence_builder.py` twice per lookback — once per file — writing to sibling output directories. This ensures both experimental conditions are always in sync.
 
 **Pre-launch zero-fill.** `df.fillna(0.0)` converts all remaining structural nulls (pre-launch ridership columns) to zero. This is semantically correct and avoids `NaN` propagation into the sliding-window arrays.
 
@@ -333,10 +346,13 @@ Converts `features_aligned.csv` into model-ready tensors.
 
 **Storage.** Arrays are cast to `float16` by default. For MinMax-scaled `[0, 1]` data, `float16` precision loss (≈ 0.001) is negligible. This halves disk and memory footprint. Optional `--compress` flag writes `.npz` for an additional 1.5–3× reduction.
 
-**Three lookback variants.** Three sequence directories are produced to support the lookback ablation study:
+**Six lookback directories** (three windows × two MCO conditions) are produced by `run_pipeline.py` step 3:
 
-| Flag | Output Dir | T_in |
-|------|-----------|------|
-| (default) | `data/sequences/lstm/` | 14 |
-| `--T-in 28` | `data/sequences/lookback_28/` | 28 |
-| `--T-in 56` | `data/sequences/lookback_56/` | 56 |
+| Features file | Output dir | T_in | MCO rows |
+|---------------|-----------|------|----------|
+| `features_aligned_no_mco.csv` | `data/sequences/lstm/` | 14 | excluded |
+| `features_aligned.csv` | `data/sequences/lstm_mco/` | 14 | included |
+| `features_aligned_no_mco.csv` | `data/sequences/lookback_28/` | 28 | excluded |
+| `features_aligned.csv` | `data/sequences/lookback_28_mco/` | 28 | included |
+| `features_aligned_no_mco.csv` | `data/sequences/lookback_56/` | 56 | excluded |
+| `features_aligned.csv` | `data/sequences/lookback_56_mco/` | 56 | included |

@@ -63,7 +63,6 @@ DEFAULTS = dict(
     train_frac    = 0.70,
     val_frac      = 0.15,    # remaining 0.15 → test
     target_col    = "total_ridership",
-    include_mco   = False,
     dtype         = "float16",   # "float16" or "float32"
     compress      = False,
 )
@@ -193,12 +192,7 @@ def build_sequences(cfg: dict) -> None:
 
     df = load_aligned(cfg["features_path"])
     df = df.drop(columns=[c for c in ["is_mco"] if c in df.columns])
-
-    if not cfg["include_mco"]:
-        mco_start = pd.Timestamp("2020-03-18")
-        mco_end   = pd.Timestamp("2021-12-31")
-        df = df[(df.index < mco_start) | (df.index > mco_end)]
-        print(f"MCO rows excluded — {len(df)} rows remaining")
+    print(f"Loaded {len(df)} rows from {cfg['features_path']}")
 
     # Pre-launch structural nulls (rail lines not yet operational) → 0
     df = df.fillna(0.0)
@@ -316,8 +310,6 @@ def parse_args():
     p.add_argument("--target",  default=DEFAULTS["target_col"])
     p.add_argument("--train-frac", type=float, default=DEFAULTS["train_frac"])
     p.add_argument("--val-frac",   type=float, default=DEFAULTS["val_frac"])
-    p.add_argument("--include-mco", action="store_true",
-                   help="Include MCO-period rows in sequences (default: exclude)")
     p.add_argument("--out-dir", default=None,
                    help="Override output directory (default: data/sequences/lstm for T_in=14, "
                         "data/sequences/lookback_{N} otherwise)")
@@ -339,7 +331,6 @@ if __name__ == "__main__":
         "target_col":    args.target,
         "train_frac":    args.train_frac,
         "val_frac":      args.val_frac,
-        "include_mco":   args.include_mco,
         "out_dir":       args.out_dir,
         "dtype":         args.dtype,
         "compress":      args.compress,

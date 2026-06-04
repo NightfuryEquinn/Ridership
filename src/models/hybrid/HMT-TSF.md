@@ -232,18 +232,22 @@ All configurations comfortably fit on the A100 32GB with batch size 32 and T_inâ
 
 ## Lookback Window Guidance
 
-| Lookback | Seq Dir                    | Best For                           |
-|----------|----------------------------|------------------------------------|
-| 7        | `data/sequences/lookback_7/`  | Weekly patterns, low latency    |
-| 14       | `data/sequences/lstm/`        | Default; holiday cycle capture  |
-| 28       | `data/sequences/lookback_28/` | Monthly seasonality             |
-| 56       | `data/sequences/lookback_56/` | Bi-monthly; enables Scale 2+3   |
-| 84       | `data/sequences/lookback_84/` | Quarterly; maximum context      |
+Each lookback window has two sequence directories â€” MCO excluded (default training) and MCO included.
 
-Sequence directories for lookback 7 and 84 must be built first:
+| Lookback | No-MCO dir | MCO dir | Best For |
+|----------|-----------|---------|----------|
+| 7  | `data/sequences/lookback_7/`  | `data/sequences/lookback_7_mco/`  | Weekly patterns, low latency |
+| 14 | `data/sequences/lstm/`        | `data/sequences/lstm_mco/`        | Default; holiday cycle capture |
+| 28 | `data/sequences/lookback_28/` | `data/sequences/lookback_28_mco/` | Monthly seasonality |
+| 56 | `data/sequences/lookback_56/` | `data/sequences/lookback_56_mco/` | Bi-monthly; enables Scale 2+3 |
+| 84 | `data/sequences/lookback_84/` | `data/sequences/lookback_84_mco/` | Quarterly; maximum context |
+
+Sequence directories for lookback 7 and 84 must be built first (both MCO conditions):
 ```bash
-python src/features/sequence_builder.py --T-in 7
-python src/features/sequence_builder.py --T-in 84
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 7  --out-dir data/sequences/lookback_7
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 7  --out-dir data/sequences/lookback_7_mco
+python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 84 --out-dir data/sequences/lookback_84
+python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 84 --out-dir data/sequences/lookback_84_mco
 ```
 
 ---
