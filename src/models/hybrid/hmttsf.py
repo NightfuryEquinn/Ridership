@@ -1367,6 +1367,9 @@ def parse_args():
                    help="Attention heads in the temporal Transformer block")
     p.add_argument("--no-revin",     action="store_true",
                    help="Disable RevIN instance normalisation")
+    p.add_argument("--no-feat-reduce", action="store_true",
+                   help="Disable SHAP-derived feature reduction; train on all 79 features. "
+                        "Output goes to src/outputs/hmttsf/ (default: hmttsf_feat_reduced/)")
 
     # Training
     p.add_argument("--batch-size",    type=int,   default=32)
@@ -1486,25 +1489,30 @@ def main():
                         - split_meta.get("temporal_feat_start", 13))
 
     # ── SHAP-derived feature reduction: 79 → 53 features ─────────────────────
-    # Applied here so no other model script is affected. The 26 dropped features
-    # have zero (or near-zero) SHAP importance across all 10 HMT-TSF configs;
+    # Applied unless --no-feat-reduce is set. The 26 dropped features have
+    # zero (or near-zero) SHAP importance across all 10 HMT-TSF configs;
     # see HMT-TSF-RESULTS.md §10 for the full removal rationale.
-    print(f"\nFeature reduction: retaining {len(_KEPT_FEAT_INDICES)}/{n_features} features "
-          f"({len(_DROPPED_FEAT_INDICES)} zero-importance features dropped)")
-    _kept_t = torch.tensor(_KEPT_FEAT_INDICES, device=device)
-    X_tr = X_tr[:, :, _kept_t]
-    X_va = X_va[:, :, _kept_t]
-    X_te = X_te[:, :, _kept_t]
-    n_features = X_tr.shape[2]  # 53
+    if not args.no_feat_reduce:
+        print(f"\nFeature reduction: retaining {len(_KEPT_FEAT_INDICES)}/{n_features} features "
+              f"({len(_DROPPED_FEAT_INDICES)} zero-importance features dropped)")
+        _kept_t = torch.tensor(_KEPT_FEAT_INDICES, device=device)
+        X_tr = X_tr[:, :, _kept_t]
+        X_va = X_va[:, :, _kept_t]
+        X_te = X_te[:, :, _kept_t]
+        n_features = X_tr.shape[2]  # 53
 
-    if has_future and len(_KEPT_TEMPORAL_POSITIONS) < n_temporal_feats:
-        _ktp = torch.tensor(_KEPT_TEMPORAL_POSITIONS, device=device)
-        Xf_tr = Xf_tr[:, :, _ktp]
-        if Xf_va is not None:
-            Xf_va = Xf_va[:, :, _ktp]
-        if Xf_te is not None:
-            Xf_te = Xf_te[:, :, _ktp]
-    n_temporal_feats = len(_KEPT_TEMPORAL_POSITIONS)  # 10
+        if has_future and len(_KEPT_TEMPORAL_POSITIONS) < n_temporal_feats:
+            _ktp = torch.tensor(_KEPT_TEMPORAL_POSITIONS, device=device)
+            Xf_tr = Xf_tr[:, :, _ktp]
+            if Xf_va is not None:
+                Xf_va = Xf_va[:, :, _ktp]
+            if Xf_te is not None:
+                Xf_te = Xf_te[:, :, _ktp]
+        n_temporal_feats = len(_KEPT_TEMPORAL_POSITIONS)  # 10
+        feat_groups = _REDUCED_FEAT_GROUPS
+    else:
+        print(f"\nFeature reduction disabled — using all {n_features} features.")
+        feat_groups = FEAT_GROUPS
 
     def _make_ds(*tensors):
         return TensorDataset(*[t for t in tensors if t is not None])
@@ -1544,7 +1552,7 @@ def main():
         target_idx       = args.target_idx,
         use_revin        = not args.no_revin,
         n_temporal_feats = n_temporal_feats,
-        feat_groups      = _REDUCED_FEAT_GROUPS,
+        feat_groups      = feat_groups,
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -1742,8 +1750,9 @@ def main():
               f"Combined={r['Combined']:.2f}%  R²={r['R2']:.4f}")
 
     # ── save artefacts ────────────────────────────────────────────────────────
-    run_id  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = f"src/outputs/hmttsf/{run_id}"
+    run_id   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    _out_label = "hmttsf" if args.no_feat_reduce else "hmttsf_feat_reduced"
+    out_dir  = f"src/outputs/{_out_label}/{run_id}"
     os.makedirs(out_dir, exist_ok=True)
 
     torch.save(model.state_dict(), f"{out_dir}/model.pt")

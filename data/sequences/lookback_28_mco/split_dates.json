@@ -1,0 +1,23 @@
+{
+  "train": {
+    "start": "2019-01-01",
+    "end": "2023-11-24"
+  },
+  "val": {
+    "start": "2023-11-25",
+    "end": "2024-12-12"
+  },
+  "test": {
+    "start": "2024-12-13",
+    "end": "2025-12-31"
+  },
+  "T_in": 28,
+  "T_out": 7,
+  "n_features": 79,
+  "target_col": "total_ridership",
+  "target_col_idx": 12,
+  "dtype": "float16",
+  "compressed": false,
+  "temporal_feat_start": 13,
+  "temporal_feat_end": 29
+}

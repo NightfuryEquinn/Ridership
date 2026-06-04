@@ -257,8 +257,10 @@ def build_sequences(cfg: dict) -> None:
     print(f"  X_future_train: {Xf_tr.shape}  (temporal cols 13–28, future T_out steps)")
 
     T_in_val = cfg["T_in"]
-    out = ("data/sequences/lstm" if T_in_val == 14
-           else f"data/sequences/lookback_{T_in_val}")  # e.g. lookback_7, lookback_28, lookback_56, lookback_84
+    out = cfg.get("out_dir") or (
+        "data/sequences/lstm" if T_in_val == 14
+        else f"data/sequences/lookback_{T_in_val}"
+    )
     os.makedirs(out, exist_ok=True)
     ext = ".npz" if compress else ".npy"
     _save(f"{out}/X_train",        X_tr,  compress, dtype)
@@ -316,6 +318,9 @@ def parse_args():
     p.add_argument("--val-frac",   type=float, default=DEFAULTS["val_frac"])
     p.add_argument("--include-mco", action="store_true",
                    help="Include MCO-period rows in sequences (default: exclude)")
+    p.add_argument("--out-dir", default=None,
+                   help="Override output directory (default: data/sequences/lstm for T_in=14, "
+                        "data/sequences/lookback_{N} otherwise)")
     p.add_argument("--dtype", choices=["float16", "float32"], default=DEFAULTS["dtype"],
                    help="Storage dtype. float16 halves file size with negligible precision "
                         "loss for MinMax-scaled [0,1] data (default: float16).")
@@ -335,6 +340,7 @@ if __name__ == "__main__":
         "train_frac":    args.train_frac,
         "val_frac":      args.val_frac,
         "include_mco":   args.include_mco,
+        "out_dir":       args.out_dir,
         "dtype":         args.dtype,
         "compress":      args.compress,
     }
