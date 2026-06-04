@@ -59,16 +59,16 @@ Graph-based models suffer the most under MCO: their static Pearson-correlation a
 
 Eight independent raw sources are integrated through the feature pipeline.
 
-| # | Source | Raw File / Directory | Temporal Coverage | Content |
-|---|--------|---------------------|-------------------|---------|
-| 1 | **Ridership** | `data/raw/ridership_headline.csv` | 2019-01-01 – present | Daily passenger counts for 12 transit services + total |
-| 2 | **Fuel Price** | `data/raw/fuelprice.csv` | 2017-03-30 – present | Weekly retail prices for 6 fuel types (level + weekly change) |
-| 3 | **Public & School Holidays** | `data/raw/school_public_holiday.csv` | 2019–2026 | Date-range calendar of public and academic break periods |
-| 4 | **Rainfall** | `data/raw/mys_rainfall_subnat_2019_2026.csv` | 2019-01-01 – 2026 | Daily precipitation at state level; 9 metrics including accumulation and anomaly indices |
-| 5 | **Population Density** | `data/raw/malaysia_population_density_2020.csv` | 2020 (static) | ~1 km² gridded raster of population density across Malaysia |
-| 6 | **GADM Administrative Boundaries** | `data/raw/gadm_mys_l1.json` | 2020 (static) | GeoJSON polygons for 16 Malaysian states (Level-1 admin divisions) |
-| 7 | **GTFS Transit Network** | `data/raw/gtfs_*/` (4 operators) | Snapshot | Standard GTFS files for Rapid Rail KL, RapidBus KL, RapidBus Penang, KTMB |
-| 8 | **OSM Points of Interest** | `data/raw/osm_pois.json` | Snapshot | OpenStreetMap POI extract; 7 categories (transport, food, retail, education, healthcare, leisure, other) |
+| # | Source | Raw File / Directory | Temporal Coverage | Content | Why Used |
+|---|--------|---------------------|-------------------|---------|----------|
+| 1 | [**Ridership**](https://data.gov.my) | `data/raw/ridership_headline.csv` | 2019-01-01 – present | Daily passenger counts for 12 transit services + total | Primary forecast target; provides the 13 output variables (12 service lines + total) the models are trained to predict |
+| 2 | [**Fuel Price**](https://data.gov.my) | `data/raw/fuelprice.csv` | 2017-03-30 – present | Weekly retail prices for 6 fuel types (level + weekly change) | Demand driver; EDA confirms higher fuel prices correlate with increased transit use, capturing modal substitution behaviour |
+| 3 | [**Public & School Holidays**](https://www.timeanddate.com) | `data/raw/school_public_holiday.csv` | 2019–2026 | Date-range calendar of public and academic break periods | Demand modifier; holidays cause systematic ridership drops; lead/lag features capture anticipation dips and post-holiday return surges |
+| 4 | [**Rainfall**](https://data.humdata.org) | `data/raw/mys_rainfall_subnat_2019_2026.csv` | 2019-01-01 – 2026 | Daily precipitation at state level; 9 metrics including accumulation and anomaly indices | Weather covariate; state-level daily precipitation adds a spatially-varying external signal that influences travel mode choice |
+| 5 | [**Population Density**](https://hub.worldpop.org) | `data/raw/malaysia_population_density_2020.csv` | 2020 (static) | ~1 km² gridded raster of population density across Malaysia | Spatial context; residential density is a static proxy for transit catchment potential and latent demand at each stop |
+| 6 | [**GADM Administrative Boundaries**](https://gadm.org) | `data/raw/gadm_mys_l1.json` | 2020 (static) | GeoJSON polygons for 16 Malaysian states (Level-1 admin divisions) | Spatial structure; state boundary polygons are used to spatially aggregate features by administrative region and derive inter-state adjacency weights |
+| 7 | [**GTFS Transit Network**](https://data.gov.my) | `data/raw/gtfs_*/` (4 operators) | Snapshot | Standard GTFS files for Rapid Rail KL, RapidBus KL, RapidBus Penang, KTMB | Network topology; stop counts, route density, and travel-time edges quantify transit supply and accessibility per region |
+| 8 | [**OSM Points of Interest**](https://overpass-api.de) | `data/raw/osm_pois.json` | Snapshot | OpenStreetMap POI extract; 7 categories (transport, food, retail, education, healthcare, leisure, other) | Land-use context; POI category counts within a 500 m catchment of each stop capture activity generators that drive trip origins and destinations |
 
 ---
 

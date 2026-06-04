@@ -58,17 +58,20 @@ def load_indexed(path: str, date_col: str = "date") -> pd.DataFrame:
 
 def main():
     p = argparse.ArgumentParser(description="Align all cleaned features onto a daily date index")
-    p.add_argument("--date-start",  default="2022-01-01",
-                   help="Start of master date range (default: 2022-01-01)")
-    p.add_argument("--date-end",    default="2025-12-31",
+    p.add_argument("--date-start",       default="2019-01-01",
+                   help="Start of master date range for MCO-included output (default: 2019-01-01)")
+    p.add_argument("--date-end",         default="2025-12-31",
                    help="End of master date range (default: 2025-12-31)")
-    p.add_argument("--output-dir",  default="data/features",
+    p.add_argument("--date-start-nomco", default="2022-01-01",
+                   help="Start of date range for MCO-excluded output (default: 2022-01-01)")
+    p.add_argument("--output-dir",       default="data/features",
                    help="Directory for output files (default: data/features)")
     args = p.parse_args()
 
-    DATE_START = args.date_start
-    DATE_END   = args.date_end
-    OUT_DIR    = args.output_dir
+    DATE_START       = args.date_start
+    DATE_END         = args.date_end
+    DATE_START_NOMCO = args.date_start_nomco
+    OUT_DIR          = args.output_dir
 
     os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -286,13 +289,18 @@ def main():
     # ── MCO-excluded variant ───────────────────────────────────────────────────────
     _mco_start = pd.Timestamp("2020-03-18")
     _mco_end   = pd.Timestamp("2021-12-31")
-    aligned_no_mco = aligned[(aligned.index < _mco_start) | (aligned.index > _mco_end)]
-    print(f"\nMCO rows excluded: {len(aligned) - len(aligned_no_mco)} rows removed "
-          f"({_mco_start.date()} – {_mco_end.date()}), "
+    _nomco_start = pd.Timestamp(DATE_START_NOMCO)
+    aligned_no_mco = aligned[
+        (aligned.index >= _nomco_start) &
+        ((aligned.index < _mco_start) | (aligned.index > _mco_end))
+    ]
+    print(f"\nMCO-excluded variant: start={DATE_START_NOMCO}, "
+          f"MCO rows removed ({_mco_start.date()} – {_mco_end.date()}), "
           f"{len(aligned_no_mco)} rows remaining")
 
     metadata_no_mco = {**metadata,
-                       "total_days": int(len(aligned_no_mco)),
+                       "date_range":  {"start": DATE_START_NOMCO, "end": DATE_END},
+                       "total_days":  int(len(aligned_no_mco)),
                        "mco_excluded": True}
 
     with open(f"{OUT_DIR}/feature_metadata_no_mco.json", "w") as f:

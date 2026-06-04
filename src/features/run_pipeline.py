@@ -23,8 +23,9 @@ Flags
   --skip-clean        Skip cleaning steps 1a–1h
   --skip-align        Skip feature alignment (step 2)
   --skip-sequences    Skip sequence building (step 3)
-  --date-start DATE   feature_align --date-start  (default: 2022-01-01)
-  --date-end   DATE   feature_align --date-end    (default: 2025-12-31)
+  --date-start       DATE   feature_align --date-start       (default: 2019-01-01, MCO-included)
+  --date-start-nomco DATE   feature_align --date-start-nomco (default: 2022-01-01, MCO-excluded)
+  --date-end         DATE   feature_align --date-end         (default: 2025-12-31)
   --output-dir DIR    feature_align --output-dir  (default: data/features)
                       also sets --features-path for sequence_builder
   --T-out N           Forecast horizon in days    (default: 7)
@@ -81,9 +82,11 @@ def main() -> None:
     parser.add_argument("--skip-sequences", action="store_true", help="Skip sequence building (step 3)")
 
     # feature_align arguments
-    parser.add_argument("--date-start", default="2022-01-01", metavar="DATE",
-                        help="feature_align start date (default: %(default)s)")
-    parser.add_argument("--date-end",   default="2025-12-31", metavar="DATE",
+    parser.add_argument("--date-start",       default="2019-01-01", metavar="DATE",
+                        help="MCO-included start date (default: %(default)s)")
+    parser.add_argument("--date-start-nomco", default="2022-01-01", metavar="DATE",
+                        help="MCO-excluded start date (default: %(default)s)")
+    parser.add_argument("--date-end",         default="2025-12-31", metavar="DATE",
                         help="feature_align end date (default: %(default)s)")
     parser.add_argument("--output-dir", default="data/features", metavar="DIR",
                         help="feature_align output directory (default: %(default)s)")
@@ -144,9 +147,10 @@ def main() -> None:
     if not args.skip_align:
         run(
             [py, "src/features/feature_align.py",
-             "--date-start", args.date_start,
-             "--date-end",   args.date_end,
-             "--output-dir", args.output_dir],
+             "--date-start",       args.date_start,
+             "--date-start-nomco", args.date_start_nomco,
+             "--date-end",         args.date_end,
+             "--output-dir",       args.output_dir],
             "2   Feature Alignment  (8 sources + lag + trend → daily matrix)",
         )
 
