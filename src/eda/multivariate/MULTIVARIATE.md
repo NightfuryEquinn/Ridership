@@ -1,16 +1,26 @@
 # Multivariate EDA Results
 
-> Last updated: 2026-05-22
+> Last updated: 2026-06-04
 
-Multi-source analyses combining two or more of the eight feature groups to understand higher-order interactions relevant to Malaysian transit ridership forecasting. All analyses use the 79-feature aligned matrix (`features_aligned.csv`, 2022-01-01 – 2025-12-31) unless noted.
+Multi-source analyses combining two or more of the eight feature groups to understand higher-order interactions relevant to Malaysian transit ridership forecasting. All analyses use the 79-feature aligned matrix (`features_aligned.csv`, 2019-01-01 – 2025-12-31) unless noted.
 
 ---
 
 ## Feature Space Analyses
 
 ### full_demand_correlation_matrix.png
-**What:** Full 79×79 Pearson correlation matrix of all features in `features_aligned.csv`, computed on the training split.
-**Analysis:** This is the adjacency source used by all graph-based models and HMT-TSF (threshold |corr| ≥ 0.1). Expected block structure: (1) all 13 ridership columns (targets + lags) form a dense high-correlation block (~0.85–0.99 within-block); (2) fuel price levels cluster within fuel types; (3) adjacent state rainfall columns show moderate inter-state correlation (~0.3–0.6); (4) temporal/cyclical features (`dow_sin`, `dow_cos`, `is_weekend`) correlate with ridership targets due to weekly periodicity; (5) static features (population, GTFS, GADM, OSM) are near-zero correlated with everything else (constant columns have zero variance → zero Pearson correlation). The sparsity of the correlation matrix after thresholding justifies the fixed-graph GCN approach over a fully dense adjacency.
+**What:** Full 79×79 Pearson correlation matrix of all features in `features_aligned.csv`, loaded directly from the merged feature matrix (all 8 sources, full date range 2019–2025).
+**Analysis:** The image reveals five visually distinct blocks along the diagonal:
+
+1. **Ridership target block** (top-left, ~13 columns): The densest and darkest red block in the matrix. All 13 service lines (`total_ridership`, `bus_rkl`, `bus_rpn`, `rail_*`, and the 3 lag features) are strongly mutually correlated. Within-block correlations are visually near-uniform dark red, consistent with the expected ~0.85–0.99 range. The 3 lag features (`ridership_lag_7/14/28`) attach directly to this block with only slightly cooler red, confirming the strong autoregressive signal.
+
+2. **Temporal block** (second block): Moderately structured. Cyclical features (`dow_sin`, `dow_cos`, `month_sin`, `month_cos`) show strong within-pair correlations (sin/cos pairs of the same period). `is_weekend` and `day_of_week` show visible negative cross-correlations (blue patches) with the ridership target block — confirming that weekends suppress commuter ridership. Holiday lead/lag columns (`days_to_next_public_hol`, `days_since_last_public_hol`) show weaker but visible blue patches against targets, reflecting the holiday suppression effect.
+
+3. **External block** (fuel + rainfall, ~30 columns): Two visible sub-clusters. Fuel level columns (`fp_lv_*`) form a tight red sub-block — all Malaysian fuel prices move together under the administered pricing regime. Fuel change columns (`fp_chg_*`) form a separate sub-cluster with weaker internal correlation. The 15 rainfall columns (`rainfall_mm__MY*`) are mostly light/near-zero against each other (geographically dispersed stations) with mild positive inter-state correlation for adjacent states. The rainfall block is largely white against the ridership and fuel blocks (low cross-group correlation).
+
+4. **Static block** (population, GTFS, OSM, GADM, ~17 columns): Entirely white against all dynamic feature groups — near-zero Pearson correlation with ridership, temporal, and external features. This is expected: these features are essentially constant across the time dimension (no day-to-day variation), so their Pearson correlation with time-varying features is zero by construction. Within the static block a small red cluster is visible among correlated infrastructure measures (`gtfs_n_stops`, `gtfs_n_routes`, `gtfs_n_directed_edges`).
+
+**Graph construction implication:** After thresholding at |corr| ≥ 0.1, the adjacency is dominated by the ridership and fuel sub-graphs. The static feature nodes are effectively isolated (no edges to dynamic nodes), behaving as self-loop-only nodes in GCN layers — motivating MTGNN's learned adjacency as an alternative that can discover non-Pearson structural relationships.
 
 ### full_demand_multicollinearity_diagnostics.png
 **What:** Variance Inflation Factor (VIF) bar chart or condition number analysis for the 79 features.

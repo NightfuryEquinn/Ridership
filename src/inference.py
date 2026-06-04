@@ -386,40 +386,69 @@ def run_inference(
 # Historical service-line share computation
 # ══════════════════════════════════════════════════════════════════════════════
 
-def compute_service_shares(df: pd.DataFrame, hist_year: int) -> pd.Series:
+def compute_service_shares(
+    df: pd.DataFrame,
+    hist_year: int,
+    cutoff_date: "pd.Timestamp | None" = None,
+) -> tuple["pd.Series", list[str], list[str]]:
     """
     For each of the 12 service lines, compute its average daily share of
-    total_ridership across hist_year.
+    total ridership across hist_year, restricted to services that have at
+    least one non-null, non-zero record at or before cutoff_date.
 
     Steps
     -----
-    1. Filter to hist_year rows where total_ridership > 0 and all 12 services
-       are non-null (excludes pre-launch periods automatically).
-    2. Compute daily fraction = service_i / total_ridership.
-    3. Average across the year then re-normalise to sum exactly to 1.0.
+    1. Determine active services: those with any non-null, non-zero ridership
+       in df at or before cutoff_date (or all 12 if cutoff_date is None).
+    2. Filter to hist_year rows where the active services are all non-null and
+       their combined ridership is > 0.
+    3. Compute daily fraction = service_i / sum(active services).
+    4. Average across the year then re-normalise to sum exactly to 1.0.
 
-    Returns a pd.Series indexed by SERVICE_COLS.
+    Returns
+    -------
+    shares         : pd.Series indexed by SERVICE_COLS (0.0 for inactive services)
+    active_services: list of service columns included in the distribution
+    excluded       : list of service columns with no data before cutoff_date
     """
+    if cutoff_date is not None:
+        df_before = df[df.index <= cutoff_date]
+        active_services = [
+            c for c in SERVICE_COLS
+            if c in df_before.columns
+            and (df_before[c].notna() & (df_before[c] > 0)).any()
+        ]
+        excluded = [c for c in SERVICE_COLS if c not in active_services]
+    else:
+        active_services = list(SERVICE_COLS)
+        excluded = []
+
     yr = df[df.index.year == hist_year].copy()
 
-    missing = [c for c in SERVICE_COLS + ["total_ridership"] if c not in yr.columns]
+    missing = [c for c in active_services if c not in yr.columns]
     if missing:
         raise ValueError(f"Missing columns in features_aligned.csv: {missing}")
 
     if yr.empty:
         raise ValueError(f"No rows found for year {hist_year} in features_aligned.csv.")
 
-    # Remove days where a service was not yet operational or total is zero
-    yr = yr[yr["total_ridership"] > 0].dropna(subset=SERVICE_COLS)
+    # Keep rows where every active service has a value and their sum is positive
+    yr = yr.dropna(subset=active_services)
+    yr_active_total = yr[active_services].sum(axis=1)
+    yr = yr[yr_active_total > 0]
     if yr.empty:
         raise ValueError(
-            f"No complete rows (all 12 services non-null, total > 0) for {hist_year}."
+            f"No complete rows (all active services non-null, sum > 0) for {hist_year}."
         )
 
-    fractions = yr[SERVICE_COLS].div(yr["total_ridership"], axis=0)
-    shares    = fractions.mean()
-    shares    = shares / shares.sum()   # re-normalise
-    return shares
+    active_total = yr[active_services].sum(axis=1)
+    fractions    = yr[active_services].div(active_total, axis=0)
+    shares_active = fractions.mean()
+    shares_active = shares_active / shares_active.sum()   # re-normalise
+
+    shares = pd.Series(0.0, index=SERVICE_COLS)
+    shares[active_services] = shares_active
+    return shares, active_services, excluded
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -503,8 +532,12 @@ def print_forecast_table(
     hist_year: int,
     shares: pd.Series,
     actuals: "pd.DataFrame | None" = None,
+    active_services: "list[str] | None" = None,
+    excluded_services: "list[str] | None" = None,
 ) -> None:
     has_actuals = actuals is not None
+    active_services   = active_services   or list(SERVICE_COLS)
+    excluded_services = excluded_services or []
 
     W = 88
     print(f"\n{'=' * W}")
@@ -603,10 +636,15 @@ def print_forecast_table(
     # ── share legend ──────────────────────────────────────────────────────
     print(f"\n{'-' * W}")
     print(f"  {hist_year} historical service shares (used for Pred distribution):\n")
-    for col in SERVICE_COLS:
-        label   = _SERVICE_LABELS.get(col, col)
-        bar     = "#" * int(shares[col] * 200)
+    for col in active_services:
+        label = _SERVICE_LABELS.get(col, col)
+        bar   = "#" * int(shares[col] * 200)
         print(f"    {label:<18}  {shares[col] * 100:5.2f}%  {bar}")
+    if excluded_services:
+        print(f"\n  Services excluded (no data before forecast window):")
+        for col in excluded_services:
+            label = _SERVICE_LABELS.get(col, col)
+            print(f"    {label:<18}   0.00%  (not yet launched)")
     print(f"\n{'=' * W}\n")
 
 
@@ -750,7 +788,16 @@ def main() -> None:
 
     # ── historical shares ─────────────────────────────────────────────────
     print(f"[inference]  computing {args.hist_year} service shares …")
-    shares = compute_service_shares(df, args.hist_year)
+    shares, active_services, excluded_services = compute_service_shares(
+        df, args.hist_year, cutoff_date=start_date
+    )
+    if excluded_services:
+        excl_labels = [_SERVICE_LABELS.get(c, c) for c in excluded_services]
+        print(
+            f"[inference]  WARNING: {len(excluded_services)} service(s) have no data "
+            f"before {start_date.date()} and are excluded from distribution:\n"
+            + "".join(f"             - {lbl}\n" for lbl in excl_labels)
+        )
 
     # ── distribute total ridership across 12 services ─────────────────────
     service_preds = pd.DataFrame(
@@ -769,6 +816,8 @@ def main() -> None:
         forecast_dates, total_pred, service_preds,
         run=run, hist_year=args.hist_year, shares=shares,
         actuals=actuals,
+        active_services=active_services,
+        excluded_services=excluded_services,
     )
 
     # ── optional CSV export ───────────────────────────────────────────────
