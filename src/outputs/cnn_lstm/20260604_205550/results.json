@@ -1,0 +1,405 @@
+{
+  "run_id": "20260604_205550",
+  "model": "CNNLSTMForecaster",
+  "hparams": {
+    "mode": "sequential",
+    "cnn_filters": 32,
+    "cnn_layers": 2,
+    "cnn_kernel_size": 3,
+    "hidden": 64,
+    "lstm_layers": 1,
+    "dropout": 0.1,
+    "T_in": 14,
+    "T_out": 7,
+    "n_features": 79,
+    "batch_size": 32,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "loss": "huber",
+    "warmup_epochs": 5
+  },
+  "training": {
+    "best_epoch": 31,
+    "best_val_loss": 0.00613475,
+    "total_epochs": 46
+  },
+  "fit_diagnosis": {
+    "verdict": "overfit",
+    "val_drift_pct": 3.77,
+    "gap_ratio": 4.2059,
+    "val_trend": "falling",
+    "early_stop": false,
+    "best_epoch": 31,
+    "total_epochs": 46,
+    "notes": [
+      "Val drift +3.8% above best \u2014 within normal patience-window oscillation (threshold 25%).",
+      "Val/train gap 4.21\u00d7 exceeds 3\u00d7 (min_train=0.00146, best_val=0.00613) \u2014 significant memorisation of training data."
+    ]
+  },
+  "split_dates": {
+    "train": {
+      "start": "2022-01-01",
+      "end": "2024-10-18"
+    },
+    "val": {
+      "start": "2024-10-19",
+      "end": "2025-05-25"
+    },
+    "test": {
+      "start": "2025-05-26",
+      "end": "2025-12-31"
+    },
+    "T_in": 14,
+    "T_out": 7,
+    "n_features": 79,
+    "target_col": "total_ridership",
+    "target_col_idx": 12,
+    "dtype": "float16",
+    "compressed": false,
+    "temporal_feat_start": 13,
+    "temporal_feat_end": 29
+  },
+  "test_metrics": {
+    "overall": {
+      "Combined": 77.6418,
+      "MAPE": 6.9212,
+      "MAE_pct": 6.3158,
+      "RMSE_pct": 9.1212,
+      "R2": 0.7523,
+      "MAE": 79374.828,
+      "RMSE": 114632.2594
+    },
+    "per_step": [
+      {
+        "Combined": 76.859,
+        "MAPE": 6.9503,
+        "MAE_pct": 6.8138,
+        "RMSE_pct": 9.3769,
+        "R2": 0.7341,
+        "MAE": 85867.5134,
+        "RMSE": 118168.4124
+      },
+      {
+        "Combined": 78.9212,
+        "MAPE": 6.2878,
+        "MAE_pct": 5.899,
+        "RMSE_pct": 8.892,
+        "R2": 0.7611,
+        "MAE": 74317.8763,
+        "RMSE": 112025.2255
+      },
+      {
+        "Combined": 78.8367,
+        "MAPE": 6.6255,
+        "MAE_pct": 5.8876,
+        "RMSE_pct": 8.6502,
+        "R2": 0.7758,
+        "MAE": 74042.3303,
+        "RMSE": 108784.0233
+      },
+      {
+        "Combined": 78.709,
+        "MAPE": 6.5389,
+        "MAE_pct": 5.8454,
+        "RMSE_pct": 8.9066,
+        "R2": 0.7659,
+        "MAE": 73350.6775,
+        "RMSE": 111763.7393
+      },
+      {
+        "Combined": 79.3776,
+        "MAPE": 6.2578,
+        "MAE_pct": 5.6277,
+        "RMSE_pct": 8.7369,
+        "R2": 0.7746,
+        "MAE": 70573.4859,
+        "RMSE": 109564.1859
+      },
+      {
+        "Combined": 76.484,
+        "MAPE": 7.4804,
+        "MAE_pct": 6.7933,
+        "RMSE_pct": 9.2424,
+        "R2": 0.7476,
+        "MAE": 85154.1319,
+        "RMSE": 115853.8982
+      },
+      {
+        "Combined": 74.3784,
+        "MAPE": 8.3075,
+        "MAE_pct": 7.3425,
+        "RMSE_pct": 9.9717,
+        "R2": 0.7074,
+        "MAE": 92317.7809,
+        "RMSE": 125375.1396
+      }
+    ]
+  },
+  "naive_persistence": {
+    "metrics": {
+      "Combined": 34.8314,
+      "MAPE": 20.8994,
+      "MAE_pct": 18.6033,
+      "RMSE_pct": 25.666,
+      "R2": -0.9609,
+      "MAE": 233799.1786,
+      "RMSE": 322560.0827
+    },
+    "delta_combined": 42.8104,
+    "delta_mape": 13.9782,
+    "delta_r2": 1.7132
+  },
+  "comparison": {
+    "lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "bilstm": {
+      "run_id": "20260604_205148",
+      "overall": {
+        "Combined": 72.6171,
+        "MAPE": 8.7934,
+        "MAE_pct": 8.2367,
+        "RMSE_pct": 10.3528,
+        "R2": 0.7026,
+        "MAE": 102218.2829,
+        "RMSE": 128478.6604
+      }
+    },
+    "tpa_lstm": {
+      "run_id": "20260604_175244",
+      "overall": {
+        "Combined": 63.6055,
+        "MAPE": 11.5307,
+        "MAE_pct": 11.6318,
+        "RMSE_pct": 13.2321,
+        "R2": 0.5141,
+        "MAE": 144350.9454,
+        "RMSE": 164210.5885
+      }
+    },
+    "cnn_bilstm": {
+      "run_id": "20260604_205347",
+      "overall": {
+        "Combined": 47.5611,
+        "MAPE": 16.1929,
+        "MAE_pct": 16.8959,
+        "RMSE_pct": 19.3502,
+        "R2": -0.039,
+        "MAE": 209678.6319,
+        "RMSE": 240136.7977
+      }
+    },
+    "st_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "stgcn": {
+      "run_id": "20260604_192025",
+      "overall": {
+        "Combined": 63.6346,
+        "MAPE": 11.5412,
+        "MAE_pct": 11.2979,
+        "RMSE_pct": 13.5263,
+        "R2": 0.4923,
+        "MAE": 140207.6949,
+        "RMSE": 167862.593
+      }
+    },
+    "mtgnn": {
+      "run_id": "20260604_190137",
+      "overall": {
+        "Combined": 47.5087,
+        "MAPE": 16.2603,
+        "MAE_pct": 16.8719,
+        "RMSE_pct": 19.3592,
+        "R2": -0.04,
+        "MAE": 209380.5531,
+        "RMSE": 240248.1315
+      }
+    },
+    "stsgcn": {
+      "run_id": "20260604_193447",
+      "overall": {
+        "Combined": 60.4658,
+        "MAPE": 12.5278,
+        "MAE_pct": 12.4147,
+        "RMSE_pct": 14.5916,
+        "R2": 0.4092,
+        "MAE": 154067.1628,
+        "RMSE": 181082.6484
+      }
+    },
+    "stfgnn": {
+      "run_id": "20260604_191545",
+      "overall": {
+        "Combined": 40.7861,
+        "MAPE": 20.2316,
+        "MAE_pct": 18.9813,
+        "RMSE_pct": 20.0009,
+        "R2": -0.1101,
+        "MAE": 235559.1126,
+        "RMSE": 248211.8671
+      }
+    },
+    "pdr_stgcn": {
+      "run_id": "20260604_191004",
+      "overall": {
+        "Combined": 65.187,
+        "MAPE": 11.2999,
+        "MAE_pct": 10.5023,
+        "RMSE_pct": 13.0108,
+        "R2": 0.5303,
+        "MAE": 130333.8907,
+        "RMSE": 161464.9783
+      }
+    },
+    "astgcn": {
+      "run_id": "20260604_170817",
+      "overall": {
+        "Combined": 39.0479,
+        "MAPE": 18.6752,
+        "MAE_pct": 19.8348,
+        "RMSE_pct": 22.4421,
+        "R2": -0.3976,
+        "MAE": 246150.3883,
+        "RMSE": 278508.0708
+      }
+    },
+    "autoformer": {
+      "run_id": "20260604_174429",
+      "overall": {
+        "Combined": 60.7316,
+        "MAPE": 12.4166,
+        "MAE_pct": 12.5053,
+        "RMSE_pct": 14.3465,
+        "R2": 0.4289,
+        "MAE": 155191.415,
+        "RMSE": 178041.1007
+      }
+    },
+    "informer": {
+      "run_id": "20260604_174927",
+      "overall": {
+        "Combined": 72.654,
+        "MAPE": 8.7924,
+        "MAE_pct": 8.2196,
+        "RMSE_pct": 10.3339,
+        "R2": 0.7037,
+        "MAE": 102005.6043,
+        "RMSE": 128244.6504
+      }
+    },
+    "cnn_lstm": {
+      "run_id": "20260604_205550",
+      "overall": {
+        "Combined": 77.6418,
+        "MAPE": 6.9212,
+        "MAE_pct": 6.3158,
+        "RMSE_pct": 9.1212,
+        "R2": 0.7523,
+        "MAE": 79374.828,
+        "RMSE": 114632.2594
+      }
+    },
+    "delta_vs_bilstm": {
+      "Combined": 5.0247,
+      "MAPE": -1.8722,
+      "MAE_pct": -1.9209,
+      "RMSE_pct": -1.2316,
+      "R2": 0.0497,
+      "MAE": -22843.4549,
+      "RMSE": -13846.401
+    },
+    "delta_vs_tpa_lstm": {
+      "Combined": 14.0363,
+      "MAPE": -4.6095,
+      "MAE_pct": -5.316,
+      "RMSE_pct": -4.1109,
+      "R2": 0.2382,
+      "MAE": -64976.1174,
+      "RMSE": -49578.3291
+    },
+    "delta_vs_cnn_bilstm": {
+      "Combined": 30.0807,
+      "MAPE": -9.2717,
+      "MAE_pct": -10.5801,
+      "RMSE_pct": -10.229,
+      "R2": 0.7913,
+      "MAE": -130303.8039,
+      "RMSE": -125504.5383
+    },
+    "delta_vs_stgcn": {
+      "Combined": 14.0072,
+      "MAPE": -4.62,
+      "MAE_pct": -4.9821,
+      "RMSE_pct": -4.4051,
+      "R2": 0.26,
+      "MAE": -60832.8669,
+      "RMSE": -53230.3336
+    },
+    "delta_vs_mtgnn": {
+      "Combined": 30.1331,
+      "MAPE": -9.3391,
+      "MAE_pct": -10.5561,
+      "RMSE_pct": -10.238,
+      "R2": 0.7923,
+      "MAE": -130005.7251,
+      "RMSE": -125615.8721
+    },
+    "delta_vs_stsgcn": {
+      "Combined": 17.176,
+      "MAPE": -5.6066,
+      "MAE_pct": -6.0989,
+      "RMSE_pct": -5.4704,
+      "R2": 0.3431,
+      "MAE": -74692.3348,
+      "RMSE": -66450.389
+    },
+    "delta_vs_stfgnn": {
+      "Combined": 36.8557,
+      "MAPE": -13.3104,
+      "MAE_pct": -12.6655,
+      "RMSE_pct": -10.8797,
+      "R2": 0.8624,
+      "MAE": -156184.2846,
+      "RMSE": -133579.6077
+    },
+    "delta_vs_pdr_stgcn": {
+      "Combined": 12.4548,
+      "MAPE": -4.3787,
+      "MAE_pct": -4.1865,
+      "RMSE_pct": -3.8896,
+      "R2": 0.222,
+      "MAE": -50959.0627,
+      "RMSE": -46832.7189
+    },
+    "delta_vs_astgcn": {
+      "Combined": 38.5939,
+      "MAPE": -11.754,
+      "MAE_pct": -13.519,
+      "RMSE_pct": -13.3209,
+      "R2": 1.1499,
+      "MAE": -166775.5603,
+      "RMSE": -163875.8114
+    },
+    "delta_vs_autoformer": {
+      "Combined": 16.9102,
+      "MAPE": -5.4954,
+      "MAE_pct": -6.1895,
+      "RMSE_pct": -5.2253,
+      "R2": 0.3234,
+      "MAE": -75816.587,
+      "RMSE": -63408.8413
+    },
+    "delta_vs_informer": {
+      "Combined": 4.9878,
+      "MAPE": -1.8712,
+      "MAE_pct": -1.9038,
+      "RMSE_pct": -1.2127,
+      "R2": 0.0486,
+      "MAE": -22630.7763,
+      "RMSE": -13612.391
+    }
+  }
+}

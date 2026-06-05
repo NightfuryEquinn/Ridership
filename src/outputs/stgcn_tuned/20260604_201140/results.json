@@ -1,0 +1,356 @@
+{
+  "run_id": "20260604_201140",
+  "model": "STGCNForecaster",
+  "hparams": {
+    "hidden": 256,
+    "cheb_k": 3,
+    "kt": 3,
+    "n_blocks": 2,
+    "adj_threshold": 0.1,
+    "dropout": 0.25,
+    "weight_decay": 0.0003,
+    "T_in": 56,
+    "T_out": 7,
+    "n_features": 79,
+    "n_graph_nodes": 79,
+    "n_edges": 697,
+    "batch_size": 32,
+    "lr": 0.001,
+    "loss": "huber",
+    "warmup_epochs": 5
+  },
+  "training": {
+    "best_epoch": 9,
+    "best_val_loss": 0.00472626,
+    "total_epochs": 24
+  },
+  "fit_diagnosis": {
+    "verdict": "overfit",
+    "val_drift_pct": 102.25,
+    "gap_ratio": 9.3754,
+    "val_trend": "falling",
+    "early_stop": false,
+    "best_epoch": 9,
+    "total_epochs": 24,
+    "notes": [
+      "Val loss drifted +102.2% above its best ...",
+      "Val/train gap 9.38\u00d7 exceeds ...",
+      "Training loss still declining in final 10 epochs ..."
+    ]
+  },
+  "split_dates": {
+    "train": {
+      "start": "2019-01-01",
+      "end": "2023-11-24"
+    },
+    "val": {
+      "start": "2023-11-25",
+      "end": "2024-12-12"
+    },
+    "test": {
+      "start": "2024-12-13",
+      "end": "2025-12-31"
+    },
+    "T_in": 56,
+    "T_out": 7,
+    "n_features": 79,
+    "target_col": "total_ridership",
+    "target_col_idx": 12,
+    "dtype": "float16",
+    "compressed": false,
+    "temporal_feat_start": 13,
+    "temporal_feat_end": 29
+  },
+  "test_metrics": {
+    "overall": {
+      "Combined": 62.4112,
+      "MAPE": 12.0098,
+      "MAE_pct": 11.9101,
+      "RMSE_pct": 13.6689,
+      "R2": 0.4815,
+      "MAE": 147805.3621,
+      "RMSE": 169632.1588
+    },
+    "per_step": [
+      {
+        "Combined": 63.865,
+        "MAPE": 11.5922,
+        "MAE_pct": 11.4458,
+        "RMSE_pct": 13.0969,
+        "R2": 0.5231,
+        "MAE": 142100.6636,
+        "RMSE": 162599.0186
+      },
+      {
+        "Combined": 52.4639,
+        "MAPE": 14.8309,
+        "MAE_pct": 15.448,
+        "RMSE_pct": 17.2573,
+        "R2": 0.1722,
+        "MAE": 191699.5712,
+        "RMSE": 214151.9863
+      },
+      {
+        "Combined": 63.7841,
+        "MAPE": 11.5571,
+        "MAE_pct": 11.5404,
+        "RMSE_pct": 13.1184,
+        "R2": 0.5222,
+        "MAE": 143197.2042,
+        "RMSE": 162776.7246
+      },
+      {
+        "Combined": 64.0312,
+        "MAPE": 11.4819,
+        "MAE_pct": 11.4345,
+        "RMSE_pct": 13.0524,
+        "R2": 0.5284,
+        "MAE": 141858.3616,
+        "RMSE": 161929.6165
+      },
+      {
+        "Combined": 63.3928,
+        "MAPE": 11.7751,
+        "MAE_pct": 11.6115,
+        "RMSE_pct": 13.2206,
+        "R2": 0.5158,
+        "MAE": 143995.8067,
+        "RMSE": 163949.7624
+      },
+      {
+        "Combined": 62.836,
+        "MAPE": 12.0033,
+        "MAE_pct": 11.8163,
+        "RMSE_pct": 13.3445,
+        "R2": 0.5037,
+        "MAE": 146652.6809,
+        "RMSE": 165619.2024
+      },
+      {
+        "Combined": 67.1264,
+        "MAPE": 10.8279,
+        "MAE_pct": 10.0757,
+        "RMSE_pct": 11.97,
+        "R2": 0.6041,
+        "MAE": 125133.2461,
+        "RMSE": 148658.2105
+      }
+    ]
+  },
+  "naive_persistence": {
+    "metrics": {
+      "Combined": 25.617,
+      "MAPE": 24.702,
+      "MAE_pct": 21.7981,
+      "RMSE_pct": 27.8829,
+      "R2": -1.1574,
+      "MAE": 270515.6226,
+      "RMSE": 346027.9057
+    },
+    "delta_combined": 36.7942,
+    "delta_mape": 12.6923,
+    "delta_r2": 1.6389
+  },
+  "comparison": {
+    "lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "bilstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "tpa_lstm": {
+      "run_id": "20260604_175244",
+      "overall": {
+        "Combined": 63.6055,
+        "MAPE": 11.5307,
+        "MAE_pct": 11.6318,
+        "RMSE_pct": 13.2321,
+        "R2": 0.5141,
+        "MAE": 144350.9454,
+        "RMSE": 164210.5885
+      }
+    },
+    "cnn_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "cnn_bilstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "st_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "mtgnn": {
+      "run_id": "20260604_190137",
+      "overall": {
+        "Combined": 47.5087,
+        "MAPE": 16.2603,
+        "MAE_pct": 16.8719,
+        "RMSE_pct": 19.3592,
+        "R2": -0.04,
+        "MAE": 209380.5531,
+        "RMSE": 240248.1315
+      }
+    },
+    "stsgcn": {
+      "run_id": "20260604_193447",
+      "overall": {
+        "Combined": 60.4658,
+        "MAPE": 12.5278,
+        "MAE_pct": 12.4147,
+        "RMSE_pct": 14.5916,
+        "R2": 0.4092,
+        "MAE": 154067.1628,
+        "RMSE": 181082.6484
+      }
+    },
+    "stfgnn": {
+      "run_id": "20260604_191545",
+      "overall": {
+        "Combined": 40.7861,
+        "MAPE": 20.2316,
+        "MAE_pct": 18.9813,
+        "RMSE_pct": 20.0009,
+        "R2": -0.1101,
+        "MAE": 235559.1126,
+        "RMSE": 248211.8671
+      }
+    },
+    "pdr_stgcn": {
+      "run_id": "20260604_191004",
+      "overall": {
+        "Combined": 65.187,
+        "MAPE": 11.2999,
+        "MAE_pct": 10.5023,
+        "RMSE_pct": 13.0108,
+        "R2": 0.5303,
+        "MAE": 130333.8907,
+        "RMSE": 161464.9783
+      }
+    },
+    "astgcn": {
+      "run_id": "20260604_170817",
+      "overall": {
+        "Combined": 39.0479,
+        "MAPE": 18.6752,
+        "MAE_pct": 19.8348,
+        "RMSE_pct": 22.4421,
+        "R2": -0.3976,
+        "MAE": 246150.3883,
+        "RMSE": 278508.0708
+      }
+    },
+    "autoformer": {
+      "run_id": "20260604_174429",
+      "overall": {
+        "Combined": 60.7316,
+        "MAPE": 12.4166,
+        "MAE_pct": 12.5053,
+        "RMSE_pct": 14.3465,
+        "R2": 0.4289,
+        "MAE": 155191.415,
+        "RMSE": 178041.1007
+      }
+    },
+    "informer": {
+      "run_id": "20260604_174927",
+      "overall": {
+        "Combined": 72.654,
+        "MAPE": 8.7924,
+        "MAE_pct": 8.2196,
+        "RMSE_pct": 10.3339,
+        "R2": 0.7037,
+        "MAE": 102005.6043,
+        "RMSE": 128244.6504
+      }
+    },
+    "stgcn": {
+      "run_id": "20260604_201140",
+      "overall": {
+        "Combined": 62.4112,
+        "MAPE": 12.0098,
+        "MAE_pct": 11.9101,
+        "RMSE_pct": 13.6689,
+        "R2": 0.4815,
+        "MAE": 147805.3621,
+        "RMSE": 169632.1588
+      }
+    },
+    "delta_vs_tpa_lstm": {
+      "Combined": -1.1943,
+      "MAPE": 0.4791,
+      "MAE_pct": 0.2783,
+      "RMSE_pct": 0.4368,
+      "R2": -0.0326,
+      "MAE": 3454.4167,
+      "RMSE": 5421.5703
+    },
+    "delta_vs_mtgnn": {
+      "Combined": 14.9025,
+      "MAPE": -4.2505,
+      "MAE_pct": -4.9618,
+      "RMSE_pct": -5.6903,
+      "R2": 0.5215,
+      "MAE": -61575.191,
+      "RMSE": -70615.9727
+    },
+    "delta_vs_stsgcn": {
+      "Combined": 1.9454,
+      "MAPE": -0.518,
+      "MAE_pct": -0.5046,
+      "RMSE_pct": -0.9227,
+      "R2": 0.0723,
+      "MAE": -6261.8007,
+      "RMSE": -11450.4896
+    },
+    "delta_vs_stfgnn": {
+      "Combined": 21.6251,
+      "MAPE": -8.2218,
+      "MAE_pct": -7.0712,
+      "RMSE_pct": -6.332,
+      "R2": 0.5916,
+      "MAE": -87753.7505,
+      "RMSE": -78579.7083
+    },
+    "delta_vs_pdr_stgcn": {
+      "Combined": -2.7758,
+      "MAPE": 0.7099,
+      "MAE_pct": 1.4078,
+      "RMSE_pct": 0.6581,
+      "R2": -0.0488,
+      "MAE": 17471.4714,
+      "RMSE": 8167.1805
+    },
+    "delta_vs_astgcn": {
+      "Combined": 23.3633,
+      "MAPE": -6.6654,
+      "MAE_pct": -7.9247,
+      "RMSE_pct": -8.7732,
+      "R2": 0.8791,
+      "MAE": -98345.0262,
+      "RMSE": -108875.912
+    },
+    "delta_vs_autoformer": {
+      "Combined": 1.6796,
+      "MAPE": -0.4068,
+      "MAE_pct": -0.5952,
+      "RMSE_pct": -0.6776,
+      "R2": 0.0526,
+      "MAE": -7386.0529,
+      "RMSE": -8408.9419
+    },
+    "delta_vs_informer": {
+      "Combined": -10.2428,
+      "MAPE": 3.2174,
+      "MAE_pct": 3.6905,
+      "RMSE_pct": 3.335,
+      "R2": -0.2222,
+      "MAE": 45799.7578,
+      "RMSE": 41387.5084
+    }
+  }
+}
