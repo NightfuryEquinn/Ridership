@@ -39,6 +39,8 @@ References
 Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction
 via a hybrid CPO-CNN-LSTM-attention architecture. Smart Cities, 8(5), 148.
 DOI: https://doi.org/10.3390/smartcities8050148
+
+Forecasting Public Transport Ridership: Management of Information Systems using CNN and LSTM Architectures
 """
 
 import os

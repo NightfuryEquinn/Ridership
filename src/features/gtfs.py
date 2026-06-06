@@ -320,9 +320,10 @@ def clean_stop_times(df, trip_ids, stop_ids, freq_trip_ids, preset):
         df = df[~bad_seq]
     df = df.sort_values(["trip_id", "stop_sequence"]).reset_index(drop=True)
     trip_stop_counts = df.groupby("trip_id")["stop_id"].count()
-    single_stop_trips = trip_stop_counts[trip_stop_counts < 2].index.tolist()
-    if single_stop_trips:
-        log.warning(f"  {len(single_stop_trips)} trip(s) with < 2 stops: {single_stop_trips}")
+    unusable = trip_stop_counts[trip_stop_counts < 2].index.tolist()
+    if unusable:
+        log.warning(f"  {len(unusable)} trip(s) with < 2 stops — dropped: {unusable}")
+        df = df[~df["trip_id"].isin(unusable)]
     log.info(f"  {len(df):,} stop_time rows")
     return df
 
@@ -505,6 +506,14 @@ def run(input_dir, output_dir, operator):
     freq_trip_ids  = set(frequencies_df["trip_id"]) if frequencies_df is not None else None
 
     stop_times_df  = clean_stop_times(stop_times_df, trip_ids, stop_ids, freq_trip_ids, preset)
+
+    surviving_trip_ids = set(stop_times_df["trip_id"])
+    dropped_trips = trip_ids - surviving_trip_ids
+    if dropped_trips:
+        log.warning(f"  {len(dropped_trips)} trip(s) with no surviving stop_time rows — dropped from trips")
+        trips_df = trips_df[trips_df["trip_id"].isin(surviving_trip_ids)]
+        trip_ids = surviving_trip_ids
+
     transfers_df   = clean_transfers(transfers_df, stop_ids)
 
     integrity_report(

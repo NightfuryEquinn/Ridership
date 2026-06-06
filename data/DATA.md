@@ -109,6 +109,42 @@ Four mirrored subdirectories — one per operator — each containing the standa
 
 Operator tags: `ktmb`, `rapid_rail_kl`, `rapidbus_kl`, `rapidbus_penang`.
 
+#### GTFS Validation Findings
+
+Reports generated with the GTFS validator are in `gtfs_reports/`. Per-operator summary:
+
+| Operator | Total notices | Errors | Warnings | Infos |
+|----------|--------------|--------|----------|-------|
+| KTMB | 510 | 2 | 508 | 0 |
+| Rapid Rail KL | 137 | 0 | 127 | 10 |
+| RapidBus KL | 5,064 | 0 | 5,064 | 0 |
+| RapidBus Penang | 6,038 | 0 | 6,038 | 0 |
+
+**Fixed in `src/features/gtfs.py`:**
+
+| Issue | Operator(s) | Count | Resolution |
+|-------|-------------|-------|------------|
+| `foreign_key_violation` — stop_id in stop_times not in stops | KTMB | 2 | `clean_stop_times()` drops rows with unknown stop_id |
+| `unknown_column` — non-standard columns in stops/routes/stop_times | Rapid Rail KL | 10 (INFO) | `drop_nonstandard()` removes all 10 via per-operator preset |
+| `unusable_trip` — trip has fewer than 2 usable stop_time rows | KTMB (67), RapidBus KL (11) | 78 | `clean_stop_times()` drops the rows; `run()` then prunes the trip_ids from `trips_df` |
+| `unused_trip` — trip defined but has no stop_time rows at all | KTMB (67), RapidBus KL (11) | 78 | `run()` prunes any trip_id absent from the cleaned stop_times after all cleaning passes |
+
+**Intentionally ignored (no modelling impact):**
+
+| Issue | Operator(s) | Count | Reason ignored |
+|-------|-------------|-------|----------------|
+| `mixed_case_recommended_field` — stop names / headsigns in ALL CAPS | All 4 | 10,970 | Stop names are not model features; display-only |
+| `expired_calendar` — service date range in the past | KTMB, RapidRail, RapidBus KL | 5 | Static historical dataset; expiry is expected and irrelevant to topology extraction |
+| `fast_travel_between_consecutive_stops` / `fast_travel_between_far_stops` | KTMB (313), RapidBus KL (189) | 502 | Affects `travel_time_s` in edge table; graph models use Pearson-correlation adjacency, not travel-time weights |
+| `stop_without_stop_time` — stop defined but never served | KTMB | 8 | Produces isolated node with no edges; negligible effect on stop-count static feature |
+| `stop_too_far_from_shape` — stop >100 m from route polyline | RapidRail (2), RapidBus KL (27), Penang (1) | 30 | Shapes not used in feature pipeline or adjacency construction |
+| `stops_match_shape_out_of_order` | RapidBus KL | 6 | Shapes not used in feature pipeline |
+| `route_color_contrast` — insufficient colour contrast | Rapid Rail KL | 1 | UI/accessibility concern; not a model feature |
+| `route_long_name_contains_short_name` | RapidRail (1), Penang (47) | 48 | Route names not used as model features |
+| `route_short_name_too_long` | KTMB (3), RapidBus KL (2) | 5 | Route names not used as model features |
+| `missing_recommended_file` — feed_info.txt absent | All 4 | 4 | Publisher metadata; not consumed by any pipeline script |
+| `trip_coverage_not_active_for_next7_days` | KTMB | 1 | Live-feed validator artefact; inapplicable to static historical snapshot |
+
 ### Population
 
 | File | Description |
