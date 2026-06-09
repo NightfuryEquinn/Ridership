@@ -175,8 +175,8 @@ Output of `src/features/feature_align.py`. This is the single source of truth fo
 
 | File | Description |
 |------|-------------|
-| `features_aligned.csv` | Daily feature matrix with **MCO period included** (2020-03-18 – 2021-12-31 retained). ~79 columns (see breakdown below). Fed to `sequence_builder.py` for the MCO-included sequence variant. |
-| `features_aligned_no_mco.csv` | Same matrix with MCO rows dropped. Fed to `sequence_builder.py` for the MCO-excluded (default) sequence variant. |
+| `features_aligned.csv` | Daily feature matrix, **MCO period included**. 79 columns × 2,557 days (2019-01-01 – 2025-12-31). Fed to `sequence_builder.py` for MCO-inclusive experiments. |
+| `features_aligned_no_mco.csv` | Same matrix with MCO rows (2020-03-18 – 2021-12-31) and pre-2022 rows dropped. 79 columns × 1,461 days (2022-01-01 – 2025-12-31). Default model training input. |
 | `feature_metadata.json` | JSON schema for `features_aligned.csv`: column groups, source list, null counts. |
 | `feature_metadata_no_mco.json` | Same as above but with the day count after MCO exclusion. |
 

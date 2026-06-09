@@ -186,8 +186,8 @@ data/raw/                      8 raw sources
     └── src/features/          cleaning scripts (one per source)
 data/cleaned/                  cleaned CSVs, GeoJSONs, .npy adjacency matrices
     └── feature_align.py       merges onto daily index; also derives lag + trend features
-                               → features_aligned.csv        (MCO included, 1 461 days)
-                               → features_aligned_no_mco.csv (MCO excluded, ~1 097 days)
+                               → features_aligned.csv        (MCO included, 2,557 days, 2019-01-01 – 2025-12-31)
+                               → features_aligned_no_mco.csv (MCO excluded, 1,461 days, 2022-01-01 – 2025-12-31)
 data/features/                 both aligned CSVs + feature_metadata{,_no_mco}.json (79 cols)
     └── sequence_builder.py    called twice per lookback (once per MCO condition)
 data/sequences/lstm/           lookback=14, MCO excluded: X/y_train/val/test.npy, scalers, split_dates.json

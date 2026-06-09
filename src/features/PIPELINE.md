@@ -232,10 +232,10 @@ python src/features/feature_align.py \
 ```
 
 Outputs:
-- `data/features/features_aligned.csv` — daily matrix with MCO period included
-- `data/features/features_aligned_no_mco.csv` — same matrix with MCO rows (2020-03-18 – 2021-12-31) dropped
+- `data/features/features_aligned.csv` — MCO included, 79 columns × 2,557 days (2019-01-01 – 2025-12-31)
+- `data/features/features_aligned_no_mco.csv` — MCO excluded, 79 columns × 1,461 days (2022-01-01 – 2025-12-31)
 - `data/features/feature_metadata.json` — column groups, source list, null counts (MCO included)
-- `data/features/feature_metadata_no_mco.json` — same metadata with adjusted day count (MCO excluded)
+- `data/features/feature_metadata_no_mco.json` — same metadata for the MCO-excluded window
 
 The terminal output reports the total feature count and a breakdown by group
 (targets, temporal, external, lag, static). Feature sources included are listed

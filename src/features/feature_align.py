@@ -301,6 +301,7 @@ def main():
     metadata_no_mco = {**metadata,
                        "date_range":  {"start": DATE_START_NOMCO, "end": DATE_END},
                        "total_days":  int(len(aligned_no_mco)),
+                       "null_counts": {col: int(v) for col, v in aligned_no_mco.isnull().sum().items() if v > 0},
                        "mco_excluded": True}
 
     with open(f"{OUT_DIR}/feature_metadata_no_mco.json", "w") as f:

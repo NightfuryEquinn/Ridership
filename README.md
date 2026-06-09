@@ -112,12 +112,12 @@ Eight independent raw sources are integrated through the feature pipeline.
 
 ### 2.2 Feature Alignment (`src/features/feature_align.py`)
 
-All 8 cleaned sources are merged onto a master daily index (2022-01-01 – 2025-12-31, 1 461 days). Two output files are produced in a single run:
+All 8 cleaned sources are merged and two output files are produced in a single run:
 
-| Output | MCO rows | Days |
-|--------|----------|------|
-| `data/features/features_aligned.csv` | included | 1 461 |
-| `data/features/features_aligned_no_mco.csv` | excluded (2020-03-18 – 2021-12-31) | ~1 097 |
+| Output | MCO rows | Date range | Days |
+|--------|----------|-----------|------|
+| `data/features/features_aligned.csv` | included | 2019-01-01 – 2025-12-31 | 2,557 |
+| `data/features/features_aligned_no_mco.csv` | excluded (2020-03-18 – 2021-12-31) | 2022-01-01 – 2025-12-31 | 1,461 |
 
 **79-column feature matrix breakdown:**
 
@@ -269,8 +269,8 @@ python src/features/osm.py
 ```bash
 python src/features/feature_align.py
 # Produces:
-#   data/features/features_aligned.csv            ← MCO included (1 461 days)
-#   data/features/features_aligned_no_mco.csv     ← MCO excluded (~1 097 days)
+#   data/features/features_aligned.csv            ← MCO included (2,557 days, 2019-01-01 – 2025-12-31)
+#   data/features/features_aligned_no_mco.csv     ← MCO excluded (1,461 days, 2022-01-01 – 2025-12-31)
 #   data/features/feature_metadata.json
 #   data/features/feature_metadata_no_mco.json
 ```
