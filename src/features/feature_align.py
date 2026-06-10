@@ -115,6 +115,8 @@ def main():
             lag_series          = total_full.shift(lag)
             col_name            = f"ridership_lag_{lag}"
             lag_series.name     = col_name
+            # Known artifact: .bfill() fills the first ≤28 days of 2019 from
+            # future values (MCO-included dataset only, train split, negligible).
             aligned[col_name]   = lag_series.reindex(master_idx).bfill()
             lag_cols.append(col_name)
         print(f"  Lag features added: {lag_cols}")

@@ -66,7 +66,7 @@ flowchart LR
 
 **Script:** `src/models/spatio-temporal-tuned/lstm.py`
 
-Hyperparameter changes: `hidden 64→128`, `layers 1→2`, `dropout 0.10→0.15`. The flowchart structure is unchanged; doubled hidden size and additional stacked layer increase sequential representational capacity. Dropout of 0.15 provides regularisation for the added depth.
+Hyperparameter changes: `hidden 64→128`, `layers 1→2`, `dropout 0.10→0.20`, `weight_decay 1e-4→2e-4`. The flowchart structure is unchanged; doubled hidden size and additional stacked layer increase sequential representational capacity. Dropout of 0.20 provides regularisation for the added depth.
 
 #### Strengths
 
@@ -120,7 +120,7 @@ flowchart LR
 
 **Script:** `src/models/spatio-temporal-tuned/bilstm.py`
 
-Hyperparameter changes: `hidden 64→128`, `layers 1→2`, `dropout 0.10→0.15`. MLP head input dimension doubles to 256. Structure unchanged.
+Hyperparameter changes: `hidden 64→256`, `layers 1→3`, dropout unchanged at 0.10. MLP head input dimension grows to 512 (bidirectional concatenation). Structure unchanged.
 
 #### Strengths
 
@@ -184,7 +184,7 @@ flowchart TD
 
 **Script:** `src/models/attention-tuned/tpalstm.py`
 
-Hyperparameter changes: `hidden 64→128`, `filters 32→64`, `dropout 0.10→0.15`. Larger hidden and filter dimensions expand the pattern vocabulary and representational depth without changing the flowchart structure.
+Hyperparameter changes: `hidden 64→256`, `filters 32→128`, `dropout 0.10→0.15`. Larger hidden and filter dimensions expand the pattern vocabulary and representational depth without changing the flowchart structure.
 
 #### Strengths
 
@@ -311,7 +311,7 @@ flowchart LR
 
 **Script:** `src/models/spatio-temporal-tuned/cnnbilstm.py`
 
-Hyperparameter changes: `hidden 64→128`, `cnn_filters 32→64`, `dropout 0.10→0.25`. MLP head input doubles to 256. The high tuned dropout (0.25) addresses the model's observed high variance across look-back window configurations.
+Hyperparameter changes: `hidden 64→128`, `cnn_filters 32→64`, `cnn_layers 2→1`, `dropout 0.10→0.25`. MLP head input doubles to 256. The high tuned dropout (0.25) addresses the model's observed high variance across look-back window configurations; the shallower single CNN block compensates for the wider filter bank.
 
 #### Strengths
 
@@ -368,7 +368,7 @@ flowchart TD
 
 **Script:** `src/models/spatio-temporal-tuned/stlstm.py`
 
-Hyperparameter changes: `hidden 64→128`, `spatial_hidden 32→64`, `dropout 0.10→0.20`. Both streams enlarged proportionally. Structure unchanged.
+Hyperparameter changes: `hidden 64→128`, `spatial_hidden 32→128`, `dropout 0.10→0.30`. Both streams enlarged, with the spatial stream quadrupled to give the cross-feature summary equal weight in the MLP head. Structure unchanged.
 
 #### Strengths
 
@@ -434,7 +434,7 @@ flowchart TD
 
 **Script:** `src/models/graph-tuned/stgcn.py`
 
-Hyperparameter changes: `hidden 128→256`, `n_blocks 2→3`, `kt 3→2`, `dropout 0.10→0.25`. **The kt reduction from 3→2 is a structural requirement for correctness**: with n_blocks=3 on T_in=14, kt=3 shrinks the temporal dimension by 2 per block, leaving T=14−2−2−2=8 inputs to the output layer — valid but marginal. Reducing kt to 2 at greater depth preserves temporal resolution while maintaining three-block stacking.
+Hyperparameter changes: `hidden 128→256`, `dropout 0.20→0.25`, `weight_decay 2e-4→3e-4`. Block depth and temporal kernel are unchanged (`n_blocks=2`, `kt=3`); the tuning relies on doubled channel width with slightly stronger regularisation.
 
 #### Strengths
 
@@ -491,7 +491,7 @@ flowchart TD
 
 **Script:** `src/models/attention-tuned/astgcn.py`
 
-Hyperparameter changes: `d_model 64→128`, `n_heads 4→8`, `n_blocks 2→3`, `dropout 0.10→0.20`. Doubled model dimension and additional block substantially increase attention capacity. Structure unchanged.
+Hyperparameter changes: `d_model 64→128`, `n_heads 4→8`, `n_blocks 2→3`, `dropout 0.15→0.20`, `weight_decay 2e-4→1e-4`. Doubled model dimension and additional block substantially increase attention capacity. Structure unchanged.
 
 #### Strengths
 
@@ -524,12 +524,12 @@ The 3N×3N synchronous graph (STSG) encodes both spatial adjacency (A_spa within
 ```mermaid
 flowchart TD
     X["**Input X**\n(B, T_in, N=79)"]
-    PROJ["Input projection\n(B, T_in, N, hidden=64)"]
+    PROJ["Input projection\n(B, T_in, N, hidden=96)"]
     STSG["**STSG Matrix (3N×3N)**\n[[A_spa, I, 0],\n [I, A_spa, I],\n [0, I, A_spa]]\nencodes spatial + temporal edges"]
 
-    subgraph STSGCL["STSGCL Layer (×n_layers=2)"]
+    subgraph STSGCL["STSGCL Layer (×n_layers=3)"]
         UNFOLD["unfold T into windows of 3\n(B, T−2, 3N, hidden)"]
-        CHEB["**ChebConv on STSG** K=2\n+ GLU gating\n→ (B, T−2, 3N, hidden)"]
+        CHEB["**ChebConv on STSG** K=3\n+ GLU gating\n→ (B, T−2, 3N, hidden)"]
         CENTRE["extract centre N nodes\n→ (B, T−2, N, hidden)"]
     end
 
@@ -547,7 +547,7 @@ flowchart TD
 
 **Script:** `src/models/graph-tuned/stsgcn.py`
 
-Hyperparameter changes: `hidden 64→128`, `n_layers 2→3`, `dropout 0.10→0.25`, `epochs 150→200`, `patience 15→25`. Deeper synchronous graph benefits from larger hidden dimension and extended training convergence. Structure unchanged.
+Hyperparameter changes: `hidden 96→128`, `dropout 0.10→0.25`, `weight_decay 1e-4→2e-4`, `lr 5e-4→1e-3`. Layer depth is unchanged (`n_layers=3`), and the extended training schedule (`epochs=200`, `patience=25`) is shared with the base script. Structure unchanged.
 
 #### Strengths
 
@@ -605,7 +605,7 @@ flowchart TD
 
 **Script:** `src/models/graph-tuned/stfgnn.py`
 
-Hyperparameter changes: `hidden 64→128`, `n_layers 3→4`, `dropout 0.10→0.35`, `adj_threshold 0.10→0.15`. High dropout (0.35) addresses the model's MED-HIGH variance; stricter adjacency threshold (0.15) reduces noisy weak edges in both graphs. Structure unchanged.
+Hyperparameter changes: `hidden 64→128`, `dropout 0.20→0.35`, `adj_threshold 0.10→0.15`. Layer depth is unchanged (`n_layers=3`). High dropout (0.35) addresses the model's MED-HIGH variance; stricter adjacency threshold (0.15) reduces noisy weak edges in both graphs. Structure unchanged.
 
 #### Strengths
 
@@ -669,7 +669,9 @@ flowchart TD
 
 **Script:** `src/models/graph-tuned/pdr_stgcn.py`
 
-Hyperparameter changes: `hidden 128→256`, `n_blocks 2→3`, `kt 3→2`, `dk 32→64`, `dropout 0.10→0.25`. As with STGCN tuned, kt must decrease from 3→2 to maintain temporal dimension validity at three blocks on T_in=14. Larger dk enables richer attention key and query projections in the dynamic graph path.
+Hyperparameter changes: `hidden 160→256`, `n_blocks 2→3`, `kt 3→2`, `dk 48→64`, `dropout 0.15→0.25`. kt decreases from 3→2 to maintain temporal dimension validity at three blocks on T_in=14. Larger dk enables richer attention key and query projections in the dynamic graph path.
+
+> **Known caveat (initial-run results):** the six published *base* PDR-STGCN runs were executed with `--period` set equal to the look-back window (14/28/56) rather than the weekly default 7. Because the periodic diff encoder zero-pads for t < period, the second input channel was all zeros in those runs — i.e. the periodicity encoding was effectively disabled at base. The tuned runs used `period=7` correctly, so part of the base→tuned improvement reflects re-enabling the periodic channel rather than capacity tuning alone.
 
 #### Strengths
 
@@ -680,7 +682,7 @@ Hyperparameter changes: `hidden 128→256`, `n_blocks 2→3`, `kt 3→2`, `dk 32
 #### Weaknesses
 
 - Dynamic attention adjacency scales as O(N²·T) per block; at N=79 this is tractable but limits scalability to larger feature sets
-- At base capacity (hidden=128, dk=32), the dynamic attention path may lack expressiveness — the large tuning gain observed suggests significant underparameterisation at base
+- At base capacity (hidden=160, dk=48), the dynamic attention path may lack expressiveness — the large tuning gain observed suggests significant underparameterisation at base
 - λ is a layer-level scalar: it cannot adapt the static/dynamic mixture ratio per individual input sample
 
 ---
@@ -727,7 +729,7 @@ flowchart TD
 
 **Script:** `src/models/graph-tuned/mtgnn.py`
 
-Hyperparameter changes: `hidden 32→64`, `skip_ch 64→128`, `n_layers 3→4`, `dropout 0.10→0.30`. High tuned dropout (0.30) and the observed slight regression in tuned results (−0.17 pp) suggest the learned adjacency is already near-optimal at base capacity; additional layers and higher dropout introduce noise rather than improvement.
+Hyperparameter changes: `hidden 32→64`, `d_emb 10→7`, `dropout 0.10→0.30`, `weight_decay 1e-4→3e-4`. Skip channels and layer depth are unchanged (`skip_ch=64`, `n_layers=3`). High tuned dropout (0.30) and the observed slight regression in tuned results (−0.17 pp) suggest the learned adjacency is already near-optimal at base capacity; the added width and regularisation introduce noise rather than improvement.
 
 #### Strengths
 
@@ -800,7 +802,7 @@ flowchart TD
 
 **Script:** `src/models/attention-tuned/autoformer.py`
 
-Hyperparameter changes: `d_model 64→128`, `n_heads 4→8`, `e_layers 2→3`, `d_ff 128→256`, `dropout 0.10→0.25`. Deeper encoder and larger model dimension enhance decomposition quality and seasonal pattern vocabulary. Structure unchanged.
+Hyperparameter changes: `d_model 64→128`, `n_heads 4→8`, `e_layers 2→3`, `d_ff 128→256`, `dropout 0.15→0.25`. Deeper encoder and larger model dimension enhance decomposition quality and seasonal pattern vocabulary. Structure unchanged.
 
 #### Strengths
 
@@ -860,7 +862,7 @@ flowchart TD
 
 **Script:** `src/models/attention-tuned/informer.py`
 
-Hyperparameter changes: `d_model 64→128`, `n_heads 4→8`, `e_layers 2→3`, `d_ff 128→256`, `dropout 0.10→0.15`. Low tuned dropout (0.15) reflects ProbSparse attention's inherent regularisation from sparse query selection. Structure unchanged.
+Hyperparameter changes: `d_model 64→256`, `n_heads 4→16`, `e_layers 2→3`, `d_ff 128→512`, dropout unchanged at 0.10. The low dropout reflects ProbSparse attention's inherent regularisation from sparse query selection. Structure unchanged.
 
 #### Strengths
 

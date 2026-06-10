@@ -307,7 +307,6 @@ All 14 baseline models use a consistent interface from the repository root:
 # Spatio-temporal models
 python src/models/spatio-temporal-based/lstm.py
 python src/models/spatio-temporal-based/bilstm.py
-python src/models/spatio-temporal-based/tpalstm.py
 python src/models/spatio-temporal-based/cnnlstm.py
 python src/models/spatio-temporal-based/cnnbilstm.py
 python src/models/spatio-temporal-based/stlstm.py
@@ -320,6 +319,7 @@ python src/models/graph-based/stfgnn.py
 python src/models/graph-based/pdr_stgcn.py
 
 # Attention-based models
+python src/models/attention-based/tpalstm.py
 python src/models/attention-based/astgcn.py
 python src/models/attention-based/autoformer.py
 python src/models/attention-based/informer.py

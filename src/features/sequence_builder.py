@@ -2,7 +2,7 @@
 sequence_builder.py  — Sequence & Tensor Assembly for All Models
 
 Consumes features_aligned.csv (all 8 spatio-temporal feature sources) and
-produces ready-to-train sliding-window sequences for all 14 models in the stack.
+produces ready-to-train sliding-window sequences for every model in the stack.
 
 All models load from data/sequences/lstm/:
   LSTM-family      : LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM
@@ -31,7 +31,9 @@ Design notes
 ────────────
 • Scaler is fitted on TRAIN sequences ONLY (no future leakage).
 • Temporal split is chronological (no shuffle): 70 / 15 / 15.
-• MCO-gap rows excluded by default (--include-mco to override).
+• MCO condition is decided upstream in feature_align.py: pass
+  features_aligned_no_mco.csv (MCO excluded) or features_aligned.csv
+  (MCO included) via --features-path.
 • Pre-launch structural nulls (rail services not yet running) filled
   with 0.0 — not median — because no service = zero ridership.
 • Static features (population, GTFS, OSM POI, GADM) are broadcast to all

@@ -132,7 +132,7 @@ Output is written to `src/outputs/hmttsf/{YYYYMMDD_HHMMSS}/`. Full architecture 
 
 ## Running a Tuned Model
 
-Fine-tuned variants of all 15 models are in three mirrored folders. Run from the repo root:
+Fine-tuned variants of all 14 base models are in three mirrored folders (HMT-TSF has no separate tuned variant). Run from the repo root:
 
 ```bash
 # Spatio-temporal tuned
@@ -214,9 +214,11 @@ src/outputs/{model}/           timestamped run dirs with results.json, plots, mo
 
 | Series | Location | Models |
 |---|---|---|
-| Spatio-temporal (LSTM-family) | `src/models/spatio-temporal-based/` | LSTM, BiLSTM, TPA-LSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
+| Spatio-temporal (LSTM-family) | `src/models/spatio-temporal-based/` | LSTM, BiLSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
 | Graph-based | `src/models/graph-based/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
 | Attention-based | `src/models/attention-based/` | TPA-LSTM, ASTGCN, Autoformer, Informer |
+
+(TPA-LSTM is architecturally LSTM-family but its script lives only in `src/models/attention-based/tpalstm.py`.)
 | Hybrid SOTA | `src/models/hybrid/` | HMT-TSF |
 
 ### The Three Tuned Series
@@ -282,48 +284,52 @@ All models use the following improved training setup (structural changes only â€
 | Loss | `MSELoss` | `HuberLoss(delta=1.0)` (default) | Robust to ridership outliers; selectable via `--loss` |
 | LR schedule | `ReduceLROnPlateau` only | Linear warmup â†’ `ReduceLROnPlateau` | Avoids unstable early updates; warmup via `--warmup-epochs` (default 5 for 15 base models, 8 for HMT-TSF) |
 
-### Standardised Initial-Run (No Fine-Tuning) Hyperparameters
+### Initial-Run (No Fine-Tuning) Hyperparameters
 
-All 15 models share the same training schedule for the initial baseline comparison run. These values are baked in as argparse defaults and must not be changed per-model without explicit justification.
+Shared baseline training schedule (argparse defaults): `epochs=150`, `batch_size=32`, `lr=1e-3`, `patience=15`, `dropout=0.1`, `weight_decay=1e-4`, `warmup_epochs=5`. Per-model deviations baked into the base scripts:
 
-| Parameter | Value | Applies to |
-|-----------|-------|------------|
-| `epochs` | 150 | all models |
-| `batch_size` | 32 | all models |
-| `lr` | 1e-3 | all models |
-| `patience` | 15 | all 15 base/tuned models (HMT-TSF uses 20) |
-| `dropout` | 0.1 | all models |
-| `weight_decay` | 1e-4 | all models |
+| Model | Deviations from shared values |
+|-------|-------------------------------|
+| STGCN | `dropout=0.20`, `weight_decay=2e-4` |
+| STSGCN | `epochs=200`, `lr=5e-4`, `patience=25` |
+| STFGNN | `dropout=0.20`, `weight_decay=3e-4` |
+| PDR-STGCN | `dropout=0.15`, `weight_decay=2e-4` |
+| ASTGCN | `dropout=0.15`, `weight_decay=2e-4` |
+| Autoformer | `dropout=0.15`, `weight_decay=2e-4` |
+| HMT-TSF | `patience=20`, `warmup_epochs=8`, `weight_decay=1e-3` |
 
-Architecture defaults (per-model, aligned with MODEL.md):
-- LSTM / BiLSTM / TPA-LSTM: `hidden=64`, `layers=1`
+All other models (LSTM, BiLSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM, TPA-LSTM, MTGNN, Informer) use the shared values exactly.
+
+Architecture defaults (per-model, aligned with the argparse defaults):
+- LSTM / BiLSTM / TPA-LSTM: `hidden=64`, `layers=1` (TPA-LSTM also `filters=32`)
 - CNN-LSTM / CNN-BiLSTM: `hidden=64`, `cnn_filters=32`, `cnn_layers=2`
 - ST-LSTM: `hidden=64`, `spatial_hidden=32`
-- STGCN / PDR-STGCN: `hidden=128`, `kt=3`, `n_blocks=2`
+- STGCN: `hidden=128`, `kt=3`, `n_blocks=2`, `cheb_k=3`
+- PDR-STGCN: `hidden=160`, `kt=3`, `n_blocks=2`, `dk=48`, `period=7`
 - MTGNN: `hidden=32`, `skip_ch=64`, `n_layers=3`, `d_emb=10`, `d_hop=2`
-- STSGCN: `hidden=64`, `n_layers=2`, `cheb_k=2`
+- STSGCN: `hidden=96`, `n_layers=3`, `cheb_k=3`
 - STFGNN: `hidden=64`, `n_layers=3`
 - ASTGCN / Autoformer / Informer: `d_model=64`, `n_heads=4`
 
 ### Tuned Architecture Defaults (Fine-Tuned Variants)
 
-Architecture hyperparameters changed in the tuned scripts (training params unchanged):
+Hyperparameters changed in the tuned scripts (values are the actual argparse defaults; anything not listed is unchanged from the base script):
 
 | Model | Tuned Defaults |
 |-------|---------------|
 | LSTM (tuned) | `hidden=128`, `layers=2`, `dropout=0.20`, `weight_decay=2e-4` |
-| BiLSTM (tuned) | `hidden=128`, `layers=2`, `dropout=0.15` |
+| BiLSTM (tuned) | `hidden=256`, `layers=3`, `dropout=0.1`, `weight_decay=1e-4` |
 | CNN-LSTM (tuned) | `cnn_filters=64`, `dropout=0.20` (hidden/layers unchanged) |
-| CNN-BiLSTM (tuned) | `hidden=128`, `cnn_filters=64`, `dropout=0.25` |
-| ST-LSTM (tuned) | `hidden=128`, `spatial_hidden=64`, `dropout=0.20` |
-| STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=3`, `dropout=0.25`, `weight_decay=3e-4` |
+| CNN-BiLSTM (tuned) | `hidden=128`, `cnn_filters=64`, `cnn_layers=1`, `dropout=0.25` |
+| ST-LSTM (tuned) | `hidden=128`, `spatial_hidden=128`, `dropout=0.30`, `weight_decay=1e-4` |
+| STGCN (tuned) | `hidden=256`, `n_blocks=2`, `kt=3`, `dropout=0.25`, `weight_decay=3e-4` |
 | MTGNN (tuned) | `hidden=64`, `skip_ch=64`, `n_layers=3`, `d_emb=7`, `dropout=0.30`, `weight_decay=3e-4` |
-| STSGCN (tuned) | `hidden=128`, `n_layers=3`, `dropout=0.25`, `weight_decay=2e-4`, `epochs=200`, `patience=25` |
+| STSGCN (tuned) | `hidden=128`, `n_layers=3`, `dropout=0.25`, `weight_decay=2e-4`, `lr=1e-3`, `epochs=200`, `patience=25` |
 | STFGNN (tuned) | `hidden=128`, `n_layers=3`, `dropout=0.35`, `weight_decay=3e-4`, `adj_threshold=0.15` |
 | PDR-STGCN (tuned) | `hidden=256`, `n_blocks=3`, `kt=2`, `dk=64`, `period=7`, `dropout=0.25`, `weight_decay=2e-4` |
-| TPA-LSTM (tuned) | `hidden=128`, `filters=64`, `dropout=0.15` |
-| ASTGCN (tuned) | `d_model=128`, `n_heads=8`, `n_blocks=3`, `dropout=0.20` |
+| TPA-LSTM (tuned) | `hidden=256`, `filters=128`, `dropout=0.15`, `weight_decay=1e-4` |
+| ASTGCN (tuned) | `d_model=128`, `n_heads=8`, `n_blocks=3`, `dropout=0.20`, `weight_decay=1e-4` |
 | Autoformer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.25`, `weight_decay=2e-4` |
-| Informer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.15` |
+| Informer (tuned) | `d_model=256`, `n_heads=16`, `e_layers=3`, `d_ff=512`, `dropout=0.1`, `weight_decay=1e-4` |
 
 Full per-model rationale is in `src/models/MODEL.md`.
