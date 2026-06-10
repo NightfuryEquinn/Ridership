@@ -65,7 +65,7 @@ Pre-launch nulls are left as `NaN` (correct — no service). Post-launch nulls (
 
 **Chronological split (no leakage).** Post-MCO data is split 70/15/15 by index position (no shuffle). A `MinMaxScaler` is fitted on the train portion only and saved to `data/scalers/ridership_scaler.pkl`. Fitting on the full dataset would leak val/test statistics into training, inflating reported performance.
 
-**Sanity checks.** Null percentage per column is printed post-cleaning. MCO-flagged row count (~650 rows, ~30% of the full series) is logged to confirm the flag was applied correctly.
+**Sanity checks.** Null percentage per column is printed post-cleaning. MCO-flagged row count (~650 rows, ~25% of the full series) is logged to confirm the flag was applied correctly.
 
 ---
 
@@ -380,7 +380,7 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Evidence.** Change-point detection (binary segmentation, 5 breakpoints) applied to the `total_ridership` series identifies four distinct phases: pre-MCO baseline, lockdown trough, phased-reopening recovery, and stable post-MCO trend. Per-service collapse percentages and post-MCO recovery slopes were computed as `(ridership_post − ridership_trough) / ridership_pre × 100`. The MCO flag (`is_mco=1`) was applied to 650 rows (~25% of the full 2019–2025 series).
 
-**Analysis.** The structural break invalidates any model assumption of temporal stationarity (Lee et al., 2024). Static graph adjacency matrices fitted solely on post-MCO training data fail to generalise across the break — this is the primary driver of the large MCO-to-no-MCO degradation observed in graph-based models (STGCN: −22.54 pp). HMT-TSF's regime-gating component was designed explicitly to detect and adapt to this kind of distributional shift. Retaining MCO rows with a binary flag rather than removing them preserves sequence continuity for LSTM sliding windows while enabling the model to learn the break.
+**Analysis.** The structural break invalidates any model assumption of temporal stationarity (Lee et al., 2024). Static graph adjacency matrices fitted on training data that spans the break encode correlation structure that does not hold across regimes — this is the primary driver of the large no-MCO-to-MCO degradation observed in graph-based models (STGCN: −8.27 pp base, −13.87 pp tuned). HMT-TSF's regime-gating component was designed explicitly to detect and adapt to this kind of distributional shift. Retaining MCO rows with a binary flag rather than removing them preserves sequence continuity for LSTM sliding windows while enabling the model to learn the break.
 
 **Figures.**
 - `src/eda/ridership/results/changepoint_detection.png` — binary-segmentation breakpoints on the total ridership series
@@ -578,7 +578,7 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Evidence.** Full 79×79 correlation matrix computed on the no-MCO feature matrix. Top correlations with `total_ridership`: `ridership_lag_7` (r = 0.94), `ridership_lag_14` (r = 0.91), `ridership_lag_28` (r = 0.87). Static features: `gtfs_n_stops` (r = 0.00, by construction — constant column), `osm_poi_total_mean` (r ≈ 0.00), `gadm_n_states` (r = 0.00). Eigenvalue decomposition confirms that the first principal component (≈ 72% of variance) is dominated by the lag trio.
 
-**Analysis.** The near-zero linear correlation of static features does not mean they are uninformative — constant-valued columns have zero variance and thus zero correlation by definition. Their value lies in providing fixed reference context that allows models to calibrate absolute scale (network size, urban density) rather than contributing time-varying signal. The lag dominance confirms that models should incorporate autoregressive structure; the lag trio is the strongest set of input features regardless of model architecture (Wu et al., 2023; Guo et al., 2025). This also implies that a naive persistence baseline (forecast = lag_7) would achieve moderate performance, which is the practical floor that all 15 models need to exceed.
+**Analysis.** The near-zero linear correlation of static features does not mean they are uninformative — constant-valued columns have zero variance and thus zero correlation by definition. Their value lies in providing fixed reference context that allows models to calibrate absolute scale (network size, urban density) rather than contributing time-varying signal. The lag dominance confirms that models should incorporate autoregressive structure; the lag trio is the strongest set of input features regardless of model architecture (Wu et al., 2023; Guo et al., 2025). This also implies that a naive persistence baseline (forecast = lag_7) would achieve moderate performance, which is the practical floor that all 15 evaluated architectures (14 baselines plus HMT-TSF) need to exceed.
 
 **Figures.**
 - `src/eda/multivariate/results/full_demand_correlation_matrix.png` — full 79×79 Pearson correlation heatmap with lag feature dominance visible in the ridership target row

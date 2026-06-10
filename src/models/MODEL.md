@@ -916,13 +916,13 @@ All 79 input features (or 53 in the SHAP-reduced FR variant) are organised into 
 
 **Target context (13 features):** The 12 individual service-line ridership values encode autoregressive signals at the granularity of each transit line rather than only aggregate demand. Malaysian transit networks exhibit inter-line demand spillover: when one rail corridor is disrupted or operating below capacity, complementary bus routes and adjacent rail lines absorb excess demand. Including all 12 lines allows the model to learn these cross-line demand propagation patterns directly from historical co-movements. The total_ridership aggregate provides a system-wide baseline that contextualises individual line trajectories and serves as the primary forecast target.
 
-**Temporal/cyclical features (16/10 features):** Malaysian public holidays — including Hari Raya Aidilfitri, Hari Raya Aidiladha, Chinese New Year, Deepavali, National Day, and state-specific gazetted holidays — cause ridership swings of 30–80% relative to normal days, fluctuations that cannot be inferred from historical ridership signals alone. Lead-lag holiday encoding (−3 to +3 day flags around each holiday) captures the gradual departure pattern before and the return surge after major holidays. Cyclical sin/cos encodings of day-of-week and month prevent discontinuities at boundaries (Saturday=0 and Sunday=6 are equally adjacent to Monday=1, rather than artificially far apart in linear encoding). Year and day_of_year capture secular ridership growth and annual seasonal patterns not fully covered by cyclical encodings. In the FR variant, SHAP identified six temporal features with near-zero importance — likely redundant or correlated encodings — and dropped them.
+**Temporal/cyclical features (16/10 features):** Malaysian public holidays — including Hari Raya Aidilfitri, Hari Raya Aidiladha, Chinese New Year, Deepavali, National Day, and state-specific gazetted holidays — cause ridership swings of 30–80% relative to normal days, fluctuations that cannot be inferred from historical ridership signals alone. Continuous lead-lag holiday counters (`days_to_next` / `days_since_last` for both public and school holidays) capture the gradual departure pattern before and the return surge after major holidays. Cyclical sin/cos encodings of day-of-week and month prevent discontinuities at boundaries (Saturday=0 and Sunday=6 are equally adjacent to Monday=1, rather than artificially far apart in linear encoding). Year and day_of_year capture secular ridership growth and annual seasonal patterns not fully covered by cyclical encodings. In the FR variant, SHAP identified six temporal features with near-zero importance — likely redundant or correlated encodings — and dropped them.
 
-**External features (30/27 features):** Malaysian fuel prices are periodically adjusted by the government under a managed float mechanism. When RON95 or diesel prices rise sharply, mode-switching effects increase public transit demand as motorists temporarily substitute transit for private vehicle travel. Fifteen fuel-related features covering multiple fuel grades and both absolute levels and change indicators allow the model to learn both level effects and price-change velocity effects. Rainfall features from 15 regional stations across the Klang Valley capture the first-last-mile access suppression effect: heavy rain reduces walkability and cycling access to transit stations, temporarily suppressing ridership even when service levels are unchanged. Three absolute fuel-level features were dropped in the FR variant (SHAP ≈ 0), likely because the fuel change-rate features already encode the predictive information contained in absolute levels more efficiently.
+**External features (30/27 features):** Malaysian fuel prices are periodically adjusted by the government under a managed float mechanism. When RON95 or diesel prices rise sharply, mode-switching effects increase public transit demand as motorists temporarily substitute transit for private vehicle travel. Fifteen fuel-related features covering multiple fuel grades and both absolute levels and change indicators allow the model to learn both level effects and price-change velocity effects. Fifteen per-state rainfall columns (one daily rainfall aggregate per Malaysian state/territory) capture the first-last-mile access suppression effect: heavy rain reduces walkability and cycling access to transit stations, temporarily suppressing ridership even when service levels are unchanged. Three absolute fuel-level features were dropped in the FR variant (SHAP ≈ 0), likely because the fuel change-rate features already encode the predictive information contained in absolute levels more efficiently.
 
 **Lag features (3 features):** ridership_lag_7, ridership_lag_14, and ridership_lag_28 provide explicit autoregressive reference values at weekly, bi-weekly, and monthly offsets. These are complementary to the continuous temporal window that the TCN encoder processes: they provide hard-coded point-in-time reference values at historically meaningful periodicities that remain available as isolated features to the Feature Graph Encoder even after temporal pooling. For example, ridership_lag_7 directly encodes what total ridership was exactly one week ago — the most important single periodic baseline for a transit system with strong weekly regularity.
 
-**Static features (17 features / 0 in FR):** Population estimates in transit catchment areas, GTFS-derived route count and stop density per catchment zone, OSM-derived points-of-interest counts (retail, education, healthcare, recreation), and GADM administrative region encodings represent time-invariant supply-side structural capacity. A station catchment with high residential population density, dense transit network coverage, and proximate commercial destinations has structurally higher ridership potential than a low-density terminal. These features are constant across the 2019–2025 study period. SHAP analysis found all 17 static features contributing zero importance in the FR variant — the likely explanation is that historical ridership signals in the target context group already implicitly encode structural capacity: high-capacity corridors consistently exhibit high ridership throughout the study period, making the static spatial descriptors redundant given sufficient look-back context.
+**Static features (17 features / 0 in FR):** National-level population density medians, GTFS-derived network totals (stop, route, and directed-edge counts; mean segment travel time), OSM-derived points-of-interest means (retail, education, healthcare, leisure, and other categories), and GADM administrative summaries (state count, border statistics) represent time-invariant supply-side structural capacity, broadcast as constant scalar values across all days. A network with high residential population density, dense transit coverage, and abundant commercial destinations has structurally higher ridership potential than a sparse one. These features are constant across the 2019–2025 study period. SHAP analysis found all 17 static features contributing zero importance in the FR variant — the likely explanation is that historical ridership signals in the target context group already implicitly encode structural capacity: high-capacity corridors consistently exhibit high ridership throughout the study period, making the static spatial descriptors redundant given sufficient look-back context.
 
 #### How Features Are Used
 
@@ -1050,7 +1050,7 @@ After neural training, a CatBoost (or sklearn MLP) model is fitted on training-s
 ```mermaid
 flowchart TD
     IN79["Input X · (B, T_in, F=79) · MinMax-scaled"]
-    SHAP["SHAP Reduction (default ON)\n79 → 53 features\n−6 temporal · −3 fuel-level · −17 static\n(--no-feat-reduce retains F=79)"]
+    SHAP["SHAP Reduction (script default ON → FR variant)\n79 → 53 features\n−6 temporal · −3 fuel-level · −17 static\n(--no-feat-reduce retains F=79 —\nthe headline configuration reported in Chapter 4)"]
     IN53["Input X · (B, T_in, F=53 or 79)"]
     REVIN["RevIN\nx̂ = (x−μ)/σ × γ + β\nper-sample · per-feature\nlearnable γ, β per feature"]
 
@@ -1112,7 +1112,7 @@ Fourteen mirrored fine-tuned variants of the 14 baseline models are located in t
 | `src/models/graph-tuned/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
 | `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, Autoformer, Informer |
 
-**Tuning strategy (Option C):** Best-configuration selection (MCO-exclusion setting + look-back window) combined with revised architecture hyperparameters. Training hyperparameters (`epochs`, `batch_size`, `lr`, `patience`, `weight_decay`) are unchanged across all 16 tuned variants.
+**Tuning strategy (Option C):** Best-configuration selection (MCO-exclusion setting + look-back window) combined with revised architecture hyperparameters. The training schedule (`epochs`, `batch_size`, `patience`) is unchanged across all 16 tuned variants; regularisation values (`dropout`, `weight_decay`) are revised per model as listed below, and STSGCN's learning rate rises from 5e-4 to 1e-3.
 
 **Output directories** use the `_tuned` suffix: `src/outputs/{model_name}_tuned/`.
 
@@ -1120,28 +1120,28 @@ Fourteen mirrored fine-tuned variants of the 14 baseline models are located in t
 
 ### Architecture Changes at a Glance (16 Tuned Variants)
 
-CNN-LSTM is split into three independently tuned variants — one per mode — each with its own canonical look-back window. All other changes are architecture-only; training hyperparameters are unchanged. Parameters that did not change from base are omitted from the Key Changes column.
+CNN-LSTM is split into three independently tuned variants — one per mode — each with its own canonical look-back window. The training schedule (epochs, batch_size, patience) is unchanged from base (STSGCN retains its base 200-epoch / 25-patience schedule); STSGCN additionally raises lr from 5e-4 to 1e-3. Parameters that did not change from base are omitted from the Key Changes column. All values below are the actual argparse defaults of the tuned scripts.
 
 | Model | Variant / Lookback | Key Changes (base → tuned) | Dropout Rationale |
 |-------|-------------------|---------------------------|-------------------|
-| LSTM | — / 14 | hidden 64→128, layers 1→2, dropout 0.10→0.15 | 2-layer regularisation |
-| BiLSTM | — / 14 | hidden 64→128, layers 1→2, dropout 0.10→0.15 | expanded recurrent capacity |
+| LSTM | — / 14 | hidden 64→128, layers 1→2, dropout 0.10→0.20, weight_decay 1e-4→2e-4 | 2-layer regularisation |
+| BiLSTM | — / 14 | hidden 64→256, layers 1→3 | expanded recurrent capacity; base dropout retained |
 | CNN-LSTM | sequential / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| CNN-LSTM | parallel / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
+| CNN-LSTM | parallel / 28 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
 | CNN-LSTM | augmented / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| CNN-BiLSTM | — / 14 | hidden 64→128, cnn_filters 32→64, dropout 0.10→0.25 | HIGH variance across lookbacks |
-| ST-LSTM | — / 14 | hidden 64→128, spatial_hidden 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| STGCN | — / 14 | hidden 128→256, n_blocks 2→3, kt 3→2 ¹, dropout 0.10→0.25 | LOW variance, stable with more filters |
-| MTGNN | — / 14 | hidden 32→64, skip_ch 64→128, n_layers 3→4, dropout 0.10→0.30 | HIGH variance across lookbacks |
-| STSGCN | — / 14 | hidden 64→128, n_layers 2→3, dropout 0.10→0.25, epochs 150→200, patience 15→25 | LOW variance, synchronous graph benefits |
-| STFGNN | — / 14 | hidden 64→128, n_layers 3→4, adj_threshold 0.10→0.15, dropout 0.10→0.35 | MED-HIGH variance across lookbacks |
-| PDR-STGCN | — / 14 | hidden 128→256, n_blocks 2→3, kt 3→2 ¹, dk 32→64, dropout 0.10→0.25 | MED variance across lookbacks |
-| TPA-LSTM | — / 14 | hidden 64→128, filters 32→64, dropout 0.10→0.15 | moderate variance across lookbacks |
-| ASTGCN | — / 14 | d_model 64→128, n_heads 4→8, n_blocks 2→3, dropout 0.10→0.20 | moderate variance across lookbacks |
-| Autoformer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.25 | moderate variance across lookbacks |
-| Informer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.10→0.15 | LOW variance, sparse attention stable |
+| CNN-BiLSTM | — / 14 | hidden 64→128, cnn_filters 32→64, cnn_layers 2→1, dropout 0.10→0.25 | HIGH variance across lookbacks |
+| ST-LSTM | — / 14 | hidden 64→128, spatial_hidden 32→128, dropout 0.10→0.30 | MED-HIGH variance across lookbacks |
+| STGCN | — / 14 | hidden 128→256, dropout 0.20→0.25, weight_decay 2e-4→3e-4 | LOW variance, stable with more filters; n_blocks=2, kt=3 unchanged |
+| MTGNN | — / 14 | hidden 32→64, d_emb 10→7, dropout 0.10→0.30, weight_decay 1e-4→3e-4 | HIGH variance across lookbacks |
+| STSGCN | — / 14 | hidden 96→128, dropout 0.10→0.25, weight_decay 1e-4→2e-4, lr 5e-4→1e-3 | LOW variance, synchronous graph benefits |
+| STFGNN | — / 14 | hidden 64→128, adj_threshold 0.10→0.15, dropout 0.20→0.35 | MED-HIGH variance across lookbacks |
+| PDR-STGCN | — / 14 | hidden 160→256, n_blocks 2→3, kt 3→2 ¹, dk 48→64, dropout 0.15→0.25 | MED variance across lookbacks |
+| TPA-LSTM | — / 14 | hidden 64→256, filters 32→128, dropout 0.10→0.15 | moderate variance across lookbacks |
+| ASTGCN | — / 14 | d_model 64→128, n_heads 4→8, n_blocks 2→3, dropout 0.15→0.20, weight_decay 2e-4→1e-4 | moderate variance across lookbacks |
+| Autoformer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.15→0.25 | moderate variance across lookbacks |
+| Informer | — / 14 | d_model 64→256, n_heads 4→16, e_layers 2→3, d_ff 128→512 | LOW variance, sparse attention stable; base dropout retained |
 
-> ¹ `kt` reduction is required for correctness: with deeper `n_blocks` stacking on T_in=14, `kt=3` shrinks the temporal dimension to zero before the output layer. `kt=2` restores validity while maintaining the increased depth.
+> ¹ `kt` reduction is required for correctness in PDR-STGCN: with deeper `n_blocks` stacking on T_in=14, `kt=3` shrinks the temporal dimension to zero before the output layer. `kt=2` restores validity while maintaining the increased depth.
 
 ---
 
@@ -1225,98 +1225,102 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 | dropout | 0.1 |
 | weight_decay | 1e-4 |
 
+> Per-model deviations baked into the base scripts: STGCN (`dropout=0.20`, `weight_decay=2e-4`), STSGCN (`epochs=200`, `lr=5e-4`, `patience=25`), STFGNN (`dropout=0.20`, `weight_decay=3e-4`), PDR-STGCN (`dropout=0.15`, `weight_decay=2e-4`), ASTGCN (`dropout=0.15`, `weight_decay=2e-4`), Autoformer (`dropout=0.15`, `weight_decay=2e-4`).
+
 ### Baseline Performance (No Tuning) — No-MCO, Lookback 14
 
 | Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
 |------|-------|-----------|-------|------|-------|-----|-----|------|
-| 1 | Informer | 79.13 | 6.58 | 5.52 | 8.76 | 0.772 | 69,415 | 110,069 |
+| 1 | Informer | 79.13 | 6.59 | 5.53 | 8.76 | 0.772 | 69,476 | 110,050 |
 | 2 | BiLSTM | 79.04 | 6.52 | 5.77 | 8.67 | 0.776 | 72,460 | 109,007 |
 | 3 | TPA-LSTM | 78.67 | 6.62 | 6.04 | 8.67 | 0.776 | 75,871 | 109,009 |
-| 4 | LSTM | 78.13 | 6.71 | 6.18 | 8.98 | 0.760 | 77,719 | 112,801 |
-| 5 | CNN-BiLSTM | 78.18 | 6.81 | 6.12 | 8.89 | 0.765 | 76,884 | 111,782 |
+| 4 | CNN-BiLSTM | 78.18 | 6.81 | 6.12 | 8.89 | 0.764 | 76,884 | 111,782 |
+| 5 | LSTM | 78.13 | 6.71 | 6.18 | 8.98 | 0.760 | 77,719 | 112,801 |
 | 6 | ST-LSTM | 78.01 | 6.93 | 6.27 | 8.79 | 0.770 | 78,779 | 110,453 |
-| 7 | CNN-LSTM | 77.64 | 6.92 | 6.32 | 9.12 | 0.752 | 79,375 | 114,632 |
-| 8 | MTGNN | 77.62 | 7.02 | 6.47 | 8.90 | 0.764 | 81,289 | 111,802 |
-| 9 | STGCN | 77.44 | 6.99 | 6.46 | 9.11 | 0.753 | 81,203 | 114,496 |
-| 10 | Autoformer | 76.71 | 7.15 | 6.82 | 9.33 | 0.741 | 85,660 | 117,208 |
-| 11 | STFGNN | 75.89 | 7.58 | 6.86 | 9.66 | 0.722 | 86,240 | 121,428 |
+| 7 | MTGNN | 77.93 | 6.91 | 6.47 | 8.69 | 0.775 | 81,292 | 109,185 |
+| 8 | CNN-LSTM | 77.64 | 6.92 | 6.32 | 9.12 | 0.752 | 79,375 | 114,632 |
+| 9 | STSGCN | 76.97 | 7.18 | 6.42 | 9.42 | 0.736 | 80,703 | 118,391 |
+| 10 | STGCN | 76.81 | 7.24 | 6.77 | 9.17 | 0.750 | 85,077 | 115,297 |
+| 11 | ASTGCN | 75.69 | 7.42 | 6.89 | 9.99 | 0.703 | 86,631 | 125,606 |
 | 12 | CNN-LSTM-Augmented | 75.36 | 7.77 | 7.19 | 9.68 | 0.721 | 90,356 | 121,639 |
-| 13 | CNN-LSTM-Parallel | 74.78 | 8.01 | 7.46 | 9.75 | 0.717 | 93,780 | 122,536 |
-| 14 | ASTGCN | 74.34 | 7.98 | 7.54 | 10.14 | 0.694 | 94,737 | 127,449 |
-| 15 | STSGCN | 73.33 | 8.60 | 7.77 | 10.30 | 0.684 | 97,689 | 129,451 |
-| 16 | PDR-STGCN | 67.75 | 10.26 | 9.98 | 12.01 | 0.571 | 125,481 | 150,877 |
+| 13 | Autoformer | 74.73 | 7.86 | 7.51 | 9.90 | 0.708 | 94,414 | 124,408 |
+| 14 | CNN-LSTM-Parallel | 74.18 | 8.18 | 7.68 | 9.97 | 0.704 | 96,477 | 125,240 |
+| 15 | STFGNN | 73.94 | 8.21 | 7.60 | 10.25 | 0.688 | 95,547 | 128,777 |
+| 16 | PDR-STGCN | 73.91 | 8.15 | 7.70 | 10.24 | 0.688 | 96,801 | 128,694 |
 
 ### Tuned Performance — No-MCO, Lookback 14
 
 | Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE | Δ Combined% |
 |------|-------|-----------|-------|------|-------|-----|-----|------|-------------|
-| 1 | LSTM | 81.04 | 5.70 | 5.02 | 8.24 | 0.798 | 63,117 | 103,516 | +2.91 |
-| 2 | Informer | 79.99 | 6.16 | 5.20 | 8.64 | 0.778 | 65,360 | 108,628 | +0.86 |
-| 3 | TPA-LSTM | 79.95 | 6.19 | 5.31 | 8.55 | 0.782 | 66,703 | 107,475 | +1.28 |
-| 4 | BiLSTM | 79.44 | 6.39 | 5.85 | 8.33 | 0.794 | 73,516 | 104,667 | +0.40 |
-| 5 | Autoformer | 79.27 | 6.37 | 5.63 | 8.74 | 0.773 | 70,733 | 109,856 | +2.55 |
-| 6 | ST-LSTM | 79.13 | 6.51 | 5.63 | 8.72 | 0.774 | 70,796 | 109,604 | +1.12 |
-| 7 | ASTGCN | 78.82 | 6.35 | 5.73 | 9.09 | 0.754 | 72,053 | 114,259 | +4.48 |
-| 8 | CNN-LSTM-Augmented | 78.57 | 6.57 | 5.85 | 9.01 | 0.758 | 73,464 | 113,271 | +3.21 |
-| 9 | CNN-BiLSTM | 78.53 | 6.78 | 6.01 | 8.68 | 0.776 | 75,520 | 109,064 | +0.35 |
-| 10 | CNN-LSTM | 78.52 | 6.64 | 6.02 | 8.82 | 0.768 | 75,654 | 110,907 | +0.88 |
-| 11 | CNN-LSTM-Parallel | 77.52 | 6.89 | 6.14 | 9.45 | 0.734 | 77,128 | 118,805 | +2.74 |
-| 12 | PDR-STGCN | 77.78 | 6.73 | 6.22 | 9.26 | 0.745 | 78,230 | 116,379 | +10.03 |
-| 13 | MTGNN | 77.44 | 7.02 | 6.46 | 9.08 | 0.755 | 81,209 | 114,079 | −0.17 |
-| 14 | STSGCN | 77.14 | 7.04 | 6.33 | 9.49 | 0.732 | 79,494 | 119,266 | +3.81 |
-| 15 | STGCN | 76.33 | 7.39 | 7.02 | 9.26 | 0.745 | 88,235 | 116,410 | −1.11 |
-| 16 | STFGNN | 74.55 | 8.03 | 7.42 | 10.00 | 0.702 | 93,248 | 125,728 | −1.35 |
+| 1 | Informer | 79.99 | 6.16 | 5.20 | 8.64 | 0.778 | 65,360 | 108,628 | +0.87 |
+| 2 | TPA-LSTM | 79.95 | 6.19 | 5.31 | 8.55 | 0.782 | 66,703 | 107,475 | +1.28 |
+| 3 | BiLSTM | 79.44 | 6.39 | 5.85 | 8.33 | 0.793 | 73,516 | 104,667 | +0.40 |
+| 4 | ST-LSTM | 79.13 | 6.51 | 5.63 | 8.72 | 0.774 | 70,796 | 109,604 | +1.12 |
+| 5 | ASTGCN | 78.82 | 6.35 | 5.73 | 9.09 | 0.754 | 72,053 | 114,259 | +3.13 |
+| 6 | LSTM | 78.43 | 6.69 | 6.23 | 8.65 | 0.777 | 78,339 | 108,676 | +0.30 |
+| 7 | STGCN | 78.39 | 6.68 | 6.20 | 8.73 | 0.773 | 77,898 | 109,768 | +1.58 |
+| 8 | CNN-LSTM-Augmented | 77.10 | 7.13 | 6.68 | 9.09 | 0.754 | 83,948 | 114,264 | +1.74 |
+| 9 | MTGNN | 76.40 | 7.36 | 6.92 | 9.32 | 0.742 | 87,002 | 117,096 | −1.54 |
+| 10 | CNN-BiLSTM | 76.12 | 7.59 | 7.07 | 9.21 | 0.747 | 88,852 | 115,807 | −2.06 |
+| 11 | PDR-STGCN | 75.56 | 7.60 | 7.24 | 9.61 | 0.725 | 90,960 | 120,750 | +1.65 |
+| 12 | Autoformer | 75.21 | 7.77 | 6.77 | 10.26 | 0.687 | 85,023 | 128,947 | +0.48 |
+| 13 | STSGCN | 73.65 | 8.45 | 7.18 | 10.73 | 0.658 | 90,204 | 134,797 | −3.33 |
+| 14 | CNN-LSTM | 73.36 | 8.41 | 8.06 | 10.17 | 0.692 | 101,280 | 127,827 | −4.28 |
+| 15 | CNN-LSTM-Parallel | 72.53 | 8.75 | 8.24 | 10.48 | 0.673 | 103,551 | 131,732 | −1.65 |
+| 16 | STFGNN | 65.47 | 11.48 | 10.06 | 12.99 | 0.498 | 126,411 | 163,230 | −8.47 |
 
 ### Tuned Performance — MCO-Inclusive, Lookback 14
 
 | Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE | Δ vs no-MCO |
 |------|-------|-----------|-------|------|-------|-----|-----|------|-------------|
-| 1 | Informer | 75.35 | 7.68 | 7.21 | 9.76 | 0.738 | 88,924 | 120,400 | −4.64 |
-| 2 | ST-LSTM | 75.05 | 7.93 | 7.05 | 9.98 | 0.726 | 86,892 | 123,067 | −4.08 |
-| 3 | TPA-LSTM | 74.36 | 8.13 | 7.38 | 10.14 | 0.718 | 90,972 | 125,010 | −5.59 |
-| 4 | CNN-LSTM-Parallel | 72.00 | 8.76 | 8.17 | 11.06 | 0.664 | 100,763 | 136,434 | −5.52 |
-| 5 | LSTM | 71.84 | 8.96 | 8.55 | 10.66 | 0.688 | 105,421 | 131,404 | −9.20 |
-| 6 | BiLSTM | 70.66 | 9.29 | 9.01 | 11.03 | 0.666 | 111,167 | 135,981 | −8.78 |
-| 7 | CNN-BiLSTM | 67.53 | 10.22 | 10.20 | 12.05 | 0.601 | 125,837 | 148,570 | −11.00 |
-| 8 | CNN-LSTM-Augmented | 67.30 | 10.26 | 10.26 | 12.18 | 0.593 | 126,532 | 150,165 | −11.27 |
-| 9 | Autoformer | 66.40 | 10.75 | 10.40 | 12.45 | 0.574 | 128,254 | 153,503 | −12.87 |
-| 10 | STFGNN | 63.62 | 11.53 | 11.23 | 13.62 | 0.490 | 138,496 | 167,971 | −10.93 |
-| 11 | MTGNN | 63.06 | 12.30 | 11.02 | 13.62 | 0.490 | 135,907 | 167,969 | −14.38 |
-| 12 | CNN-LSTM | 61.75 | 12.11 | 12.28 | 13.87 | 0.472 | 151,387 | 170,989 | −16.77 |
-| 13 | ASTGCN | 60.50 | 12.63 | 12.50 | 14.37 | 0.433 | 154,102 | 177,240 | −18.32 |
-| 14 | PDR-STGCN | 59.77 | 13.25 | 12.46 | 14.52 | 0.421 | 153,661 | 179,039 | −18.01 |
-| 15 | STSGCN | 55.18 | 14.29 | 14.36 | 16.17 | 0.281 | 177,109 | 199,452 | −21.96 |
-| 16 | STGCN | 53.79 | 14.42 | 14.96 | 16.84 | 0.221 | 184,451 | 207,637 | −22.54 |
+| 1 | Informer | 75.79 | 7.57 | 6.94 | 9.70 | 0.742 | 85,636 | 119,628 | −4.20 |
+| 2 | ST-LSTM | 75.05 | 7.93 | 7.05 | 9.98 | 0.726 | 86,892 | 123,067 | −4.09 |
+| 3 | TPA-LSTM | 74.77 | 8.02 | 7.13 | 10.08 | 0.721 | 87,921 | 124,327 | −5.19 |
+| 4 | BiLSTM | 70.66 | 9.29 | 9.01 | 11.03 | 0.666 | 111,167 | 135,981 | −8.77 |
+| 5 | MTGNN | 68.22 | 10.38 | 9.46 | 11.94 | 0.609 | 116,720 | 147,209 | −8.18 |
+| 6 | CNN-LSTM-Parallel | 67.98 | 10.53 | 9.34 | 12.15 | 0.594 | 115,158 | 149,853 | −4.55 |
+| 7 | CNN-BiLSTM | 67.28 | 10.29 | 10.29 | 12.13 | 0.596 | 126,953 | 149,610 | −8.84 |
+| 8 | CNN-LSTM-Augmented | 66.98 | 10.50 | 10.16 | 12.36 | 0.581 | 125,325 | 152,394 | −10.12 |
+| 9 | LSTM | 66.23 | 10.80 | 10.62 | 12.35 | 0.581 | 130,969 | 152,325 | −12.20 |
+| 10 | STGCN | 64.52 | 11.29 | 11.17 | 13.02 | 0.534 | 137,757 | 160,522 | −13.87 |
+| 11 | STSGCN | 61.33 | 12.35 | 12.17 | 14.15 | 0.450 | 150,058 | 174,473 | −12.31 |
+| 12 | PDR-STGCN | 61.14 | 12.87 | 12.28 | 13.72 | 0.483 | 151,397 | 169,173 | −14.42 |
+| 13 | Autoformer | 60.64 | 12.49 | 11.87 | 15.00 | 0.382 | 146,439 | 184,919 | −14.57 |
+| 14 | ASTGCN | 60.50 | 12.63 | 12.50 | 14.37 | 0.432 | 154,102 | 177,240 | −18.32 |
+| 15 | CNN-LSTM | 48.90 | 16.18 | 16.54 | 18.38 | 0.072 | 203,993 | 226,622 | −24.45 |
+| 16 | STFGNN | 42.46 | 18.38 | 18.25 | 20.91 | −0.201 | 225,079 | 257,858 | −23.01 |
 
 ### Cross-Lookback Analysis — Tuned No-MCO
 
 | Model | lb14 Combined% | lb28 Combined% | lb56 Combined% | Best |
 |-------|----------------|----------------|----------------|------|
-| LSTM | 81.04 | 79.79 | 79.24 | **14** |
-| Informer | 79.99 | **80.08** | 77.51 | **28** |
-| TPA-LSTM | 79.95 | 79.41 | 79.33 | **14** |
-| BiLSTM | 79.44 | 78.33 | 75.90 | **14** |
-| Autoformer | 79.27 | 74.65 | 58.59 | **14** |
-| ST-LSTM | 79.13 | 77.85 | 78.51 | **14** |
-| ASTGCN | 78.82 | 68.22 | 73.60 | **14** |
-| CNN-BiLSTM | 78.53 | 75.16 | 55.14 | **14** |
-| CNN-LSTM | 78.52 | 76.60 | 77.83 | **14** |
-| PDR-STGCN | 77.78 | 76.10 | 52.13 | **14** |
-| MTGNN | 77.44 | 77.35 | **78.13** | **56** |
-| STSGCN | 77.14 | 73.53 | 50.13 | **14** |
-| STGCN | 76.33 | **77.17** | 74.52 | **28** |
-| STFGNN | 74.55 | 72.59 | 42.19 | **14** |
+| Informer | **79.99** | 78.73 | 77.51 | **14** |
+| TPA-LSTM | **79.95** | 79.30 | 79.33 | **14** |
+| BiLSTM | **79.44** | 78.33 | 75.90 | **14** |
+| ST-LSTM | **79.13** | 77.85 | 78.51 | **14** |
+| ASTGCN | **78.82** | 68.22 | 73.60 | **14** |
+| LSTM | **78.43** | 77.27 | 73.93 | **14** |
+| STGCN | **78.39** | 76.68 | 73.04 | **14** |
+| CNN-LSTM-Augmented | 77.10 | **77.30** | 74.22 | **28** |
+| MTGNN | **76.40** | 74.51 | 74.20 | **14** |
+| CNN-BiLSTM | **76.12** | 75.00 | 75.65 | **14** |
+| PDR-STGCN | 75.56 | **75.64** | 69.97 | **28** |
+| Autoformer | 75.21 | **76.66** | 70.98 | **28** |
+| STSGCN | 73.65 | 74.67 | **76.31** | **56** |
+| CNN-LSTM | 73.36 | 74.99 | **75.29** | **56** |
+| CNN-LSTM-Parallel | 72.53 | **74.39** | 72.59 | **28** |
+| STFGNN | **65.47** | 46.34 | 45.83 | **14** |
 
 ### HMT-TSF vs Best Tuned Baselines
 
 | Condition | Model | Combined% | R² | Δ vs Best Baseline |
 |-----------|-------|-----------|-----|-------------------|
-| No-MCO, lb14 | **HMT-TSF-FR** | **81.62** | **0.807** | **+1.63 pp** vs Informer tuned (79.99) |
-| No-MCO, lb14 | HMT-TSF | 81.46 | 0.797 | +1.47 pp vs Informer tuned (79.99) |
+| No-MCO, lb14 | **HMT-TSF** | **81.82** | 0.802 | **+1.83 pp** vs Informer tuned (79.99) |
+| No-MCO, lb14 | HMT-TSF-FR | 81.77 | **0.805** | +1.78 pp vs Informer tuned (79.99) |
 | No-MCO, lb14 | Informer (tuned) | 79.99 | 0.778 | — best baseline |
+| MCO, lb14 | HMT-TSF | 76.11 | 0.729 | +0.32 pp vs Informer tuned (75.79) |
 | MCO, lb14 | Informer (tuned) | 75.79 | 0.742 | — best baseline |
-| MCO, lb14 | HMT-TSF | 75.66 | 0.724 | −0.13 pp vs Informer tuned |
-| MCO, lb14 | HMT-TSF-FR | 75.66 | 0.708 | −0.13 pp vs Informer tuned |
+| MCO, lb14 | HMT-TSF-FR | 75.59 | 0.712 | −0.20 pp vs Informer tuned |
 
 **Metric definitions:** Combined% = max(0, 100 − MAPE − MAE% − RMSE%); all percentage terms use mean-demand normalisation. Targets: Combined% ≥ 75%, R² ≥ 0.70.
 
