@@ -5,10 +5,11 @@ Loads every shap_values.npy under a model output directory and reports:
   - Universal zero features (zero in every run)
   - Near-universal zeros (zero in >= `near_universal_frac` of runs)
   - Consensus top features (ranked by how many runs include them in their top-K)
+  - Exports a unified CSV report summarizing metrics across all features.
 
 Run standalone:
     python src/utils/shap_crossrun.py
-    python src/utils/shap_crossrun.py --model-dir src/outputs/hmttsf --top-k 15
+    python src/utils/shap_crossrun.py --model-dir src/outputs/hmttsf --top-k 15 --output-csv summary.csv
 """
 
 import os
@@ -16,8 +17,9 @@ import glob
 import argparse
 
 import numpy as np
+import pandas as pd
 
-from src.utils.shap_analysis import load_feature_names
+from shap_analysis import load_feature_names
 
 
 def compute_importance(npy_path: str) -> np.ndarray:
@@ -48,9 +50,10 @@ def cross_run_summary(
     zero_threshold: float = 1e-10,
     consensus_top_k: int = 15,
     near_universal_frac: float = 0.8,
+    output_csv: str = None,
 ) -> dict:
     """
-    Compute and print cross-run SHAP statistics.
+    Compute and print cross-run SHAP statistics, and optionally save to CSV.
 
     Parameters
     ----------
@@ -64,6 +67,8 @@ def cross_run_summary(
         Top-K cutoff used when counting how often each feature ranks highly.
     near_universal_frac : float
         Fraction of runs a feature must be zero in to qualify as near-universal.
+    output_csv : str, optional
+        Path where the generated cross-run summary CSV will be saved.
 
     Returns
     -------
@@ -115,6 +120,46 @@ def cross_run_summary(
         print(f"  feat_{idx:02d}  {labels[idx]:<40}  {count}/{n_runs} "
               f"({count / n_runs * 100:.0f}%)")
 
+    # --- CSV Export Logic ---
+    df_list = []
+    for idx in range(F):
+        status = "Normal"
+        if idx in universal:
+            status = "Universal Zero"
+        elif idx in near_univ:
+            status = "Near-Universal Zero"
+        
+        # Calculate cross-run average mean absolute SHAP importance
+        avg_imp = np.mean([imp[idx] for imp in importances.values()])
+        
+        df_list.append({
+            "feature_index": idx,
+            "feature_id": f"feat_{idx:02d}",
+            "feature_name": labels[idx],
+            "zero_runs_count": zero_counts[idx],
+            "zero_runs_fraction": zero_counts[idx] / n_runs,
+            "top_k_runs_count": top_k_counts[idx],
+            "top_k_runs_fraction": top_k_counts[idx] / n_runs,
+            "average_importance": avg_imp,
+            "status": status
+        })
+    
+    df_summary = pd.DataFrame(df_list)
+    # Sort logically: Most frequent Top-K features first, then break ties with average importance
+    df_summary = df_summary.sort_values(
+        by=["top_k_runs_count", "average_importance"], 
+        ascending=[False, False]
+    ).reset_index(drop=True)
+    
+    if output_csv:
+        # Create output directory if it doesn't exist
+        out_dir = os.path.dirname(output_csv)
+        if out_dir and not os.path.exists(out_dir):
+            os.makedirs(out_dir, exist_ok=True)
+            
+        df_summary.to_csv(output_csv, index=False)
+        print(f"\n[INFO] Cross-run SHAP summary exported to: {output_csv}")
+
     return {
         "universal_zeros": universal,
         "near_universal_zeros": near_univ,
@@ -122,6 +167,7 @@ def cross_run_summary(
         "zero_counts": zero_counts.tolist(),
         "n_runs": n_runs,
         "feature_names": labels,
+        "summary_df": df_summary
     }
 
 
@@ -133,8 +179,15 @@ if __name__ == "__main__":
                         help="Top-K cutoff for consensus ranking (default 15)")
     parser.add_argument("--metadata", default=None,
                         help="Path to feature_metadata.json (auto-detected if omitted)")
+    parser.add_argument("--output-csv", default="src/outputs/shap_crossrun_summary.csv",
+                        help="Path to save the summary CSV report")
     args = parser.parse_args()
 
     feat_names = load_feature_names(args.metadata) if args.metadata else load_feature_names()
     imps = load_all_importances(args.model_dir)
-    cross_run_summary(imps, feature_names=feat_names, consensus_top_k=args.top_k)
+    cross_run_summary(
+        imps, 
+        feature_names=feat_names, 
+        consensus_top_k=args.top_k, 
+        output_csv=args.output_csv
+    )

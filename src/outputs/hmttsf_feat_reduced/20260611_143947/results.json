@@ -1,0 +1,302 @@
+{
+  "run_id": "20260611_143947",
+  "model": "HMTTSFForecaster",
+  "hparams": {
+    "d_model": 32,
+    "n_tcn_blocks": 2,
+    "tcn_kernel": 3,
+    "graph_hidden": 32,
+    "n_regimes": 3,
+    "n_attn_heads": 4,
+    "adj_threshold": 0.1,
+    "use_revin": true,
+    "dropout": 0.35,
+    "drop_path": 0.3,
+    "T_in": 7,
+    "T_out": 7,
+    "n_features": 53,
+    "lookback": 7,
+    "batch_size": 32,
+    "lr": 0.0005,
+    "weight_decay": 0.02,
+    "loss": "huber",
+    "loss_decay": 0.9,
+    "smooth_weight": 0.03,
+    "warmup_epochs": 10,
+    "ema_decay": 0.995,
+    "no_boost": false,
+    "use_catboost": true,
+    "boost_applied": false
+  },
+  "training": {
+    "best_epoch": 65,
+    "best_val_loss": 0.00280905,
+    "total_epochs": 90,
+    "fit_diagnosis": {
+      "verdict": "good_fit",
+      "val_drift_pct": 2.69,
+      "gap_ratio": 1.6983,
+      "val_trend": "flat",
+      "early_stop": false,
+      "best_epoch": 65,
+      "total_epochs": 90,
+      "notes": [
+        "Val drift +2.7% above best \u2014 within normal patience-window oscillation (threshold 25%).",
+        "Val/train gap 1.70\u00d7 is within the 3\u00d7 threshold (accounts for dropout + input noise during training).",
+        "No overfitting or underfitting signals detected."
+      ]
+    }
+  },
+  "split_dates": {
+    "train": {
+      "start": "2019-01-01",
+      "end": "2023-11-24"
+    },
+    "val": {
+      "start": "2023-11-25",
+      "end": "2024-12-12"
+    },
+    "test": {
+      "start": "2024-12-13",
+      "end": "2025-12-31"
+    },
+    "T_in": 7,
+    "T_out": 7,
+    "n_features": 79,
+    "target_col": "total_ridership",
+    "target_col_idx": 12,
+    "dtype": "float16",
+    "compressed": false,
+    "temporal_feat_indices": [
+      16,
+      17,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46
+    ],
+    "temporal_feat_names": [
+      "year",
+      "day_of_year",
+      "is_public_holiday",
+      "is_school_holiday",
+      "is_holiday_any",
+      "days_to_next_public_hol",
+      "days_since_last_public_hol",
+      "days_to_next_school_hol",
+      "days_since_last_school_hol",
+      "day_of_week",
+      "month",
+      "is_weekend",
+      "dow_sin",
+      "dow_cos",
+      "month_sin",
+      "month_cos"
+    ]
+  },
+  "test_metrics": {
+    "overall": {
+      "Combined": 77.7583,
+      "MAPE": 6.9934,
+      "MAE_pct": 6.3595,
+      "RMSE_pct": 8.8888,
+      "R2": 0.7828,
+      "MAE": 78304.945,
+      "RMSE": 109447.6308
+    },
+    "per_step": [
+      {
+        "Combined": 81.7449,
+        "MAPE": 5.7075,
+        "MAE_pct": 5.0398,
+        "RMSE_pct": 7.5079,
+        "R2": 0.8443,
+        "MAE": 62089.733,
+        "RMSE": 92496.4571
+      },
+      {
+        "Combined": 79.83,
+        "MAPE": 6.3438,
+        "MAE_pct": 5.679,
+        "RMSE_pct": 8.1472,
+        "R2": 0.8166,
+        "MAE": 69930.9277,
+        "RMSE": 100324.269
+      },
+      {
+        "Combined": 78.2666,
+        "MAPE": 6.7782,
+        "MAE_pct": 6.2494,
+        "RMSE_pct": 8.7058,
+        "R2": 0.7911,
+        "MAE": 76941.4882,
+        "RMSE": 107185.1111
+      },
+      {
+        "Combined": 77.5858,
+        "MAPE": 7.1032,
+        "MAE_pct": 6.4546,
+        "RMSE_pct": 8.8564,
+        "R2": 0.7847,
+        "MAE": 79445.6843,
+        "RMSE": 109008.1215
+      },
+      {
+        "Combined": 76.5777,
+        "MAPE": 7.4473,
+        "MAE_pct": 6.7527,
+        "RMSE_pct": 9.2223,
+        "R2": 0.7665,
+        "MAE": 83106.6849,
+        "RMSE": 113500.533
+      },
+      {
+        "Combined": 75.5956,
+        "MAPE": 7.695,
+        "MAE_pct": 7.0416,
+        "RMSE_pct": 9.6677,
+        "R2": 0.7434,
+        "MAE": 86653.6843,
+        "RMSE": 118970.1422
+      },
+      {
+        "Combined": 74.9418,
+        "MAPE": 7.8789,
+        "MAE_pct": 7.3001,
+        "RMSE_pct": 9.8792,
+        "R2": 0.7337,
+        "MAE": 89966.4127,
+        "RMSE": 121750.7671
+      }
+    ],
+    "walk_forward": [
+      {
+        "block": 1,
+        "n_samples": 123,
+        "Combined": 69.6372,
+        "MAPE": 9.4097,
+        "MAE_pct": 8.9789,
+        "RMSE_pct": 11.9742,
+        "R2": 0.6447,
+        "MAE": 106588.1343,
+        "RMSE": 142144.6685
+      },
+      {
+        "block": 2,
+        "n_samples": 123,
+        "Combined": 84.7109,
+        "MAPE": 5.0414,
+        "MAE_pct": 4.4915,
+        "RMSE_pct": 5.7562,
+        "R2": 0.9014,
+        "MAE": 56677.4527,
+        "RMSE": 72637.8373
+      },
+      {
+        "block": 3,
+        "n_samples": 125,
+        "Combined": 79.4743,
+        "MAPE": 6.5365,
+        "MAE_pct": 5.7649,
+        "RMSE_pct": 8.2244,
+        "R2": 0.7987,
+        "MAE": 71755.7391,
+        "RMSE": 102368.7948
+      }
+    ]
+  },
+  "naive_persistence": {
+    "metrics": {
+      "Combined": 25.7256,
+      "MAPE": 24.6054,
+      "MAE_pct": 21.8224,
+      "RMSE_pct": 27.8466,
+      "R2": -1.1317,
+      "MAE": 268699.7844,
+      "RMSE": 342876.1168
+    },
+    "delta_combined": 52.0327,
+    "delta_mape": 17.612,
+    "delta_r2": 1.9145
+  },
+  "comparison": {
+    "lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "bilstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "tpa_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "cnn_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "cnn_bilstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "st_lstm": {
+      "run_id": null,
+      "overall": null
+    },
+    "stgcn": {
+      "run_id": null,
+      "overall": null
+    },
+    "mtgnn": {
+      "run_id": null,
+      "overall": null
+    },
+    "stsgcn": {
+      "run_id": null,
+      "overall": null
+    },
+    "stfgnn": {
+      "run_id": null,
+      "overall": null
+    },
+    "pdr_stgcn": {
+      "run_id": null,
+      "overall": null
+    },
+    "astgcn": {
+      "run_id": null,
+      "overall": null
+    },
+    "autoformer": {
+      "run_id": null,
+      "overall": null
+    },
+    "informer": {
+      "run_id": null,
+      "overall": null
+    },
+    "hmt_tsf": {
+      "run_id": "20260611_143947",
+      "overall": {
+        "Combined": 77.7583,
+        "MAPE": 6.9934,
+        "MAE_pct": 6.3595,
+        "RMSE_pct": 8.8888,
+        "R2": 0.7828,
+        "MAE": 78304.945,
+        "RMSE": 109447.6308
+      }
+    }
+  }
+}
