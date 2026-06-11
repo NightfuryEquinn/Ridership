@@ -90,9 +90,35 @@ def chronological_split(
     return df.iloc[:i_train], df.iloc[i_train:i_val], df.iloc[i_val:]
 
 
-_TEMPORAL_FEAT_SLICE = slice(13, 29)   # 16 temporal features, indices 13–28
-                                        # (is_public_holiday … day_of_year)
-                                        # Matches FEAT_GROUPS["temporal"] in hmttsf.py
+def resolve_temporal_indices(df: pd.DataFrame, features_path: str) -> list:
+    """
+    Resolve the column indices of the temporal feature group BY NAME from the
+    feature metadata written by feature_align.py. The group is non-contiguous
+    in the aligned column order (year/day_of_year sit apart from the holiday
+    and cyclical columns), so a hardcoded slice cannot be used — an earlier
+    slice-based version silently selected lag/trend/fuel columns instead.
+    Returns indices in ascending order; X_future columns follow this order.
+    """
+    meta_name = ("feature_metadata_no_mco.json" if "no_mco" in
+                 os.path.basename(features_path) else "feature_metadata.json")
+    meta_path = os.path.join(os.path.dirname(features_path), meta_name)
+    if not os.path.exists(meta_path):
+        raise FileNotFoundError(
+            f"{meta_path} not found — cannot resolve the temporal feature "
+            f"group. Run feature_align.py first."
+        )
+    with open(meta_path, encoding="utf-8") as f:
+        temporal_names = json.load(f)["column_groups"]["temporal"]
+    missing = [n for n in temporal_names if n not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Temporal features {missing} (from {meta_path}) are missing from "
+            f"{features_path} — feature_align.py and its metadata are out of sync."
+        )
+    idx = sorted(df.columns.get_loc(n) for n in temporal_names)
+    print(f"  Temporal group resolved by name: {len(idx)} features at "
+          f"column indices {idx[0]}–{idx[-1]} (non-contiguous).")
+    return idx
 
 
 def make_sliding_windows(
@@ -115,21 +141,24 @@ def make_sliding_windows(
     return np.array(X_list, dtype=np.float32), np.array(y_list, dtype=np.float32)
 
 
-def make_future_temporal(arr: np.ndarray, T_in: int, T_out: int) -> np.ndarray:
+def make_future_temporal(arr: np.ndarray, T_in: int, T_out: int,
+                         temporal_idx: list) -> np.ndarray:
     """
     For each sliding window of size T_in, extract the T_out future rows for
-    the temporal feature columns (day-of-week, weekend flag, holiday flags, etc.).
-    These features are deterministic for any calendar date, so they can be
-    provided to the model as known future context.
+    the temporal feature columns (day-of-week, weekend flag, holiday flags,
+    year, day_of_year, etc.). These features are deterministic for any
+    calendar date, so they can be provided to the model as known future
+    context.
 
-    Returns: (N_windows, T_out, 16)  — raw unscaled values, same window count
-             as make_sliding_windows.
+    Returns: (N_windows, T_out, len(temporal_idx)) — raw unscaled values,
+             same window count as make_sliding_windows.
     """
     total = arr.shape[0]
     n = total - T_in - T_out + 1
-    out = np.empty((n, T_out, 16), dtype=np.float32)
+    idx = np.asarray(temporal_idx, dtype=np.intp)
+    out = np.empty((n, T_out, len(idx)), dtype=np.float32)
     for i in range(n):
-        out[i] = arr[i + T_in : i + T_in + T_out, _TEMPORAL_FEAT_SLICE]
+        out[i] = arr[i + T_in : i + T_in + T_out][:, idx]
     return out
 
 
@@ -195,6 +224,7 @@ def build_sequences(cfg: dict) -> None:
     df = load_aligned(cfg["features_path"])
     df = df.drop(columns=[c for c in ["is_mco"] if c in df.columns])
     print(f"Loaded {len(df)} rows from {cfg['features_path']}")
+    temporal_idx = resolve_temporal_indices(df, cfg["features_path"])
 
     # Pre-launch structural nulls (rail lines not yet operational) → 0
     df = df.fillna(0.0)
@@ -231,17 +261,19 @@ def build_sequences(cfg: dict) -> None:
     y_tr, y_va, y_te, scaler_y = scale_targets(y_tr, y_va, y_te)
 
     # ── Future temporal features ──────────────────────────────────────────────
-    # Extract temporal-feature columns (indices 13–28) for the T_out forecast
-    # steps of each window.  Day-of-week, weekend flag, and holiday flags are
-    # fully deterministic for any future date, so they can be given to the
-    # model as known decoder context — fixing the flat weekend prediction issue.
-    Xf_tr = make_future_temporal(arr_train, T_in, T_out)
-    Xf_va = make_future_temporal(arr_val,   T_in, T_out)
-    Xf_te = make_future_temporal(arr_test,  T_in, T_out)
+    # Extract the temporal-feature columns (resolved by name above) for the
+    # T_out forecast steps of each window.  Day-of-week, weekend flag, holiday
+    # flags, year and day_of_year are fully deterministic for any future date,
+    # so they can be given to the model as known decoder context — fixing the
+    # flat weekend prediction issue.
+    Xf_tr = make_future_temporal(arr_train, T_in, T_out, temporal_idx)
+    Xf_va = make_future_temporal(arr_val,   T_in, T_out, temporal_idx)
+    Xf_te = make_future_temporal(arr_test,  T_in, T_out, temporal_idx)
 
-    # Scale with the same scaler as X (temporal-column slice only)
-    _t_scale = scaler_X.scale_[_TEMPORAL_FEAT_SLICE]  # (16,)
-    _t_min   = scaler_X.min_[_TEMPORAL_FEAT_SLICE]    # (16,)
+    # Scale with the same scaler as X (temporal columns only)
+    _t_idx   = np.asarray(temporal_idx, dtype=np.intp)
+    _t_scale = scaler_X.scale_[_t_idx]
+    _t_min   = scaler_X.min_[_t_idx]
     Xf_tr = Xf_tr * _t_scale + _t_min
     Xf_va = Xf_va * _t_scale + _t_min
     Xf_te = Xf_te * _t_scale + _t_min
@@ -250,7 +282,8 @@ def build_sequences(cfg: dict) -> None:
     print(f"  X_train: {X_tr.shape}   y_train: {y_tr.shape}")
     print(f"  X_val  : {X_va.shape}   y_val  : {y_va.shape}")
     print(f"  X_test : {X_te.shape}   y_test : {y_te.shape}")
-    print(f"  X_future_train: {Xf_tr.shape}  (temporal cols 13–28, future T_out steps)")
+    print(f"  X_future_train: {Xf_tr.shape}  "
+          f"({len(temporal_idx)} temporal cols, future T_out steps)")
 
     T_in_val = cfg["T_in"]
     out = cfg.get("out_dir") or (
@@ -281,8 +314,8 @@ def build_sequences(cfg: dict) -> None:
         "target_col_idx": int(target_idx),
         "dtype": str(dtype),
         "compressed": compress,
-        "temporal_feat_start": 13,
-        "temporal_feat_end":   29,   # exclusive; 16 temporal features (indices 13–28)
+        "temporal_feat_indices": [int(i) for i in temporal_idx],
+        "temporal_feat_names":   df.columns[temporal_idx].tolist(),
     }
     with open(f"{out}/split_dates.json", "w") as f:
         json.dump(split_dates, f, indent=2)

@@ -24,22 +24,51 @@ import matplotlib.gridspec as gridspec
 # Results loader
 # ══════════════════════════════════════════════════════════════════════════════
 
-def load_model_results(path, model_dir, label):
-    """Load results.json from an explicit path or the most recent run dir."""
+def load_model_results(path, model_dir, label, expect_lookback=None):
+    """
+    Load results.json from an explicit path or the most recent run dir.
+
+    Parameters
+    ----------
+    expect_lookback : int, optional
+        Lookback (T_in) of the run currently being evaluated. When given,
+        a warning is printed if the loaded results were produced with a
+        different lookback — comparing runs across lookbacks/MCO conditions
+        is not apples-to-apples.
+    """
     if path:
         if not os.path.exists(path):
             print(f"[WARN] {label} results not found at: {path}")
             return None
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            results = json.load(f)
+        _check_results_compat(results, label, expect_lookback)
+        return results
     candidates = sorted(glob.glob(f"{model_dir}/**/results.json", recursive=True))
     if not candidates:
         print(f"[INFO] No {label} results.json found under {model_dir} — skipping.")
         return None
     detected = candidates[-1]
-    print(f"[INFO] Auto-detected {label} results: {detected}")
     with open(detected, encoding="utf-8") as f:
-        return json.load(f)
+        results = json.load(f)
+    hp = results.get("hparams", {})
+    cfg = ", ".join(f"{k}={hp[k]}" for k in ("lookback", "T_in") if k in hp)
+    print(f"[INFO] Auto-detected {label} results: {detected}"
+          + (f"  ({cfg})" if cfg else ""))
+    _check_results_compat(results, label, expect_lookback)
+    return results
+
+
+def _check_results_compat(results, label, expect_lookback):
+    """Warn when a loaded run's lookback differs from the current run's."""
+    if expect_lookback is None:
+        return
+    hp = results.get("hparams", {})
+    found = hp.get("lookback", hp.get("T_in"))
+    if found is not None and int(found) != int(expect_lookback):
+        print(f"[WARN] {label} results were produced with lookback={found}, "
+              f"but the current run uses lookback={expect_lookback} — "
+              f"comparison is not like-for-like.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

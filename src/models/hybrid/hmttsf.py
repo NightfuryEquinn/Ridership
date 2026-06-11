@@ -38,11 +38,14 @@ Architecture Diagram
 
 Custom Loss = λ₁·WeightedHuber(step-decayed) + λ₂·TemporalSmoothness
 
-Feature Groups (79→53 after SHAP reduction; see _DROPPED_FEAT_INDICES):
-  Indices 0–12   : target context (13 service-line riderships)
-  Indices 13–22  : temporal/cyclical (10: 6 zero-importance features dropped)
-  Indices 23–49  : external (27: 3 collinear fuel-level features dropped)
-  Indices 50–52  : lag features (3: lag_7, lag_14, lag_28)
+Feature Groups (79→53 after SHAP reduction; see _DROPPED_FEAT_INDICES).
+Reduced-space layout (column order set by feature_align.py):
+  Indices 0–12   : target context (12 service lines + total_ridership)
+  Indices 13–15  : lag features (lag_7, lag_14, lag_28)
+  Indices 16–17  : year, day_of_year (temporal)
+  Indices 18–23  : external — fuel (6 kept of 15; 9 near-constant dropped)
+  Indices 24–37  : temporal — holiday flags / lead–lag / cyclical (14)
+  Indices 38–52  : external — rainfall (15)
   (static group eliminated — all 17 features had zero SHAP importance)
 
 Optimisation targets:
@@ -94,38 +97,61 @@ except ImportError:
     CATBOOST_AVAILABLE = False
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Feature group definitions (index ranges into the 79-feature vector)
+# Feature group definitions (index segments into the 79-feature vector)
+#
+# Column order is fixed by feature_align.py:
+#   0–12   12 service lines + total_ridership (index 12)
+#   13–15  ridership_lag_{7,14,28}
+#   16–17  year, day_of_year
+#   18–32  fuel prices (×15)
+#   33–46  holiday flags / lead–lag / cyclical encodings (×14)
+#   47–61  rainfall (×15)
+#   62–78  static: population, GTFS stats, OSM POI, GADM (×17)
+#
+# Each group is a tuple of (start, end) segments because two semantic groups
+# (temporal, external) are non-contiguous in that order.
 # ─────────────────────────────────────────────────────────────────────────────
 
 FEAT_GROUPS = {
-    "target":   (0,  13),   # 12 service lines + total_ridership
-    "temporal": (13, 29),   # holiday flags, cyclical encodings, year, day_of_year
-    "external": (29, 59),   # fuel prices (×15) + rainfall (×15)
-    "lag":      (59, 62),   # ridership_lag_{7,14,28}
-    "static":   (62, 79),   # population, GTFS stats, OSM POI, GADM
+    "target":   ((0, 13),),             # 12 service lines + total_ridership
+    "temporal": ((16, 18), (33, 47)),   # year/day_of_year + holiday/cyclical
+    "external": ((18, 33), (47, 62)),   # fuel prices (×15) + rainfall (×15)
+    "lag":      ((13, 16),),            # ridership_lag_{7,14,28}
+    "static":   ((62, 79),),            # population, GTFS stats, OSM POI, GADM
 }
+
+
+def _group_indices(segments) -> list:
+    """Flatten (start, end) segments into a sorted feature-index list."""
+    idx = []
+    for s, e in segments:
+        idx.extend(range(s, e))
+    return idx
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SHAP-derived feature reduction (applied at load time in main())
 #
 # 26 features with zero or near-zero importance across all 10 HMT-TSF runs
-# (see HMT-TSF-RESULTS.md §10).  Dropped indices are sourced from the original
-# 79-feature space; the 53 survivors are re-indexed contiguously and their
-# group boundaries are captured in _REDUCED_FEAT_GROUPS.
+# (see HMT-TSF-RESULTS.md §10): 9 fuel-price columns (largely administered/
+# frozen prices in the post-MCO window, hence near-constant) and all 17
+# static features (time-invariant, no day-to-day variance).  Dropped indices
+# are sourced from the original 79-feature space; the 53 survivors are
+# re-indexed contiguously and their group segments are derived in
+# _REDUCED_FEAT_GROUPS below.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DROPPED_FEAT_INDICES: frozenset = frozenset([
-    # Temporal — redundant or zero across all configs
-    18,             # days_to_next_school_hol (near-zero, 8/10 runs)
-    21,             # month (redundant with month_sin/cos)
-    22,             # is_weekend (subsumed by day_of_week)
-    23,             # dow_sin (raw day_of_week dominates)
-    24,             # dow_cos (near-zero, 8/10 runs)
-    27,             # year (near-zero, 8/10 runs)
-    # Fuel — collinear level features
-    30,             # fp_lv_ron97 (collinear with RON95)
-    31,             # fp_lv_diesel (collinear with diesel pct_chg)
-    32,             # fp_lv_diesel_eastmsia (East Malaysia, irrelevant)
+    # Fuel — administered prices, near-constant post-MCO
+    18,             # fp_lv_ron95 (frozen at RM2.05 across the training window)
+    21,             # fp_lv_diesel_eastmsia (East Malaysia, irrelevant to Klang Valley)
+    22,             # fp_lv_ron95_budi95
+    23,             # fp_lv_ron95_skps
+    24,             # fp_lv_ron95_pct_chg
+    27,             # fp_chg_ron95
+    30,             # fp_chg_diesel_eastmsia
+    31,             # fp_chg_ron95_budi95
+    32,             # fp_chg_ron95_skps
     # Static — time-invariant; no day-to-day variance
     62, 63,         # pop_density_median / log_median
     64, 65, 66, 67, # GTFS: n_stops, n_routes, n_directed_edges, avg_segment_s
@@ -135,25 +161,41 @@ _DROPPED_FEAT_INDICES: frozenset = frozenset([
 
 _KEPT_FEAT_INDICES: list = sorted(set(range(79)) - _DROPPED_FEAT_INDICES)  # 53 features
 
-# Re-mapped group slices for the 53-feature reduced input:
-#   target (0-12)   → 13 features, unchanged
-#   temporal (13-28)→ 10 kept (drop positions 5,8,9,10,11,14 within group)
-#   external (29-58)→ 27 kept (drop indices 30,31,32)
-#   lag (59-61)     → 3 features, unchanged
-#   static (62-78)  → 0 features (all dropped)
-_REDUCED_FEAT_GROUPS: dict = {
-    "target":   (0,  13),
-    "temporal": (13, 23),
-    "external": (23, 50),
-    "lag":      (50, 53),
-    "static":   (53, 53),  # empty — FeatureGroupFusion handles this gracefully
-}
 
-# Positions within the temporal group (0-indexed from feat 13) to retain in
-# X_future tensors (which carry only the temporal slice, not all 79 features).
-_DROPPED_TEMPORAL_POSITIONS: frozenset = frozenset(i - 13 for i in _DROPPED_FEAT_INDICES
-                                                    if 13 <= i <= 28)
-_KEPT_TEMPORAL_POSITIONS: list = sorted(set(range(16)) - _DROPPED_TEMPORAL_POSITIONS)  # 10
+def _reduce_groups(groups: dict, kept: list) -> dict:
+    """Re-map each group's segments onto the contiguous post-reduction space."""
+    new_pos = {old: new for new, old in enumerate(kept)}
+    reduced = {}
+    for key, segments in groups.items():
+        positions = sorted(new_pos[i] for i in _group_indices(segments)
+                           if i in new_pos)
+        segs, run_start, prev = [], None, None
+        for p in positions:
+            if run_start is None:
+                run_start = prev = p
+            elif p == prev + 1:
+                prev = p
+            else:
+                segs.append((run_start, prev + 1))
+                run_start = prev = p
+        if run_start is not None:
+            segs.append((run_start, prev + 1))
+        reduced[key] = tuple(segs)
+    return reduced
+
+
+_REDUCED_FEAT_GROUPS: dict = _reduce_groups(FEAT_GROUPS, _KEPT_FEAT_INDICES)
+
+# X_future tensors carry only the temporal group (in ascending feature-index
+# order, matching sequence_builder.py).  Positions of dropped temporal
+# features within that tensor — currently none are dropped, so all 16 are kept.
+_TEMPORAL_INDICES: list = _group_indices(FEAT_GROUPS["temporal"])
+_DROPPED_TEMPORAL_POSITIONS: frozenset = frozenset(
+    p for p, i in enumerate(_TEMPORAL_INDICES) if i in _DROPPED_FEAT_INDICES
+)
+_KEPT_TEMPORAL_POSITIONS: list = sorted(
+    set(range(len(_TEMPORAL_INDICES))) - _DROPPED_TEMPORAL_POSITIONS
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-lookback baseline defaults
@@ -243,13 +285,13 @@ class RevIN(nn.Module):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class FeatureGroupEncoder(nn.Module):
-    """Project a contiguous slice [start:end] of the feature dimension to d_out."""
+    """Project a feature group (one or more contiguous index segments) to d_out."""
 
-    def __init__(self, start: int, end: int, d_out: int, dropout: float = 0.1):
+    def __init__(self, segments, d_out: int, dropout: float = 0.1):
         super().__init__()
-        n = end - start
-        self.start = start
-        self.end   = end
+        idx = _group_indices(segments)
+        self.register_buffer("idx", torch.tensor(idx, dtype=torch.long))
+        n = len(idx)
         mid = max(n, d_out)
         self.proj = nn.Sequential(
             nn.Linear(n, mid),
@@ -261,7 +303,7 @@ class FeatureGroupEncoder(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, T, F) → (B, T, d_out)
-        return self.proj(x[..., self.start:self.end])
+        return self.proj(x.index_select(-1, self.idx))
 
 
 class FeatureGroupFusion(nn.Module):
@@ -275,14 +317,14 @@ class FeatureGroupFusion(nn.Module):
                  feat_groups: dict | None = None):
         super().__init__()
         g = feat_groups if feat_groups is not None else FEAT_GROUPS
-        # Clamp end indices to actual feature count
+        # Clamp segment indices to actual feature count
         def _enc(key):
-            s, e = g[key]
-            e = min(e, n_features)
-            s = min(s, n_features)
-            if s >= e:
+            segments = [(min(s, n_features), min(e, n_features))
+                        for s, e in g[key]]
+            segments = [(s, e) for s, e in segments if s < e]
+            if not segments:
                 return None, 0
-            return FeatureGroupEncoder(s, e, d_model // 2, dropout), d_model // 2
+            return FeatureGroupEncoder(segments, d_model // 2, dropout), d_model // 2
 
         self.enc_target,   d_tgt  = _enc("target")
         self.enc_temporal, d_tmp  = _enc("temporal")
@@ -1485,8 +1527,17 @@ def main():
     # Use target_col_idx from metadata if available
     if "target_col_idx" in split_meta:
         args.target_idx = split_meta["target_col_idx"]
-    n_temporal_feats = (split_meta.get("temporal_feat_end", 29)
-                        - split_meta.get("temporal_feat_start", 13))
+    if "temporal_feat_indices" in split_meta:
+        n_temporal_feats = len(split_meta["temporal_feat_indices"])
+    else:
+        # Legacy sequences (pre column-order fix): X_future was built from a
+        # contiguous slice that no longer matches the temporal group — rebuild
+        # sequences with the current sequence_builder.py for correct content.
+        n_temporal_feats = (split_meta.get("temporal_feat_end", 29)
+                            - split_meta.get("temporal_feat_start", 13))
+        print("[WARN] split_dates.json has no 'temporal_feat_indices' — these "
+              "sequences predate the feature-order fix; X_future content may "
+              "not be the temporal group. Rebuild with sequence_builder.py.")
 
     # ── SHAP-derived feature reduction: 79 → 53 features ─────────────────────
     # Applied unless --no-feat-reduce is set. The 26 dropped features have
@@ -1508,7 +1559,7 @@ def main():
                 Xf_va = Xf_va[:, :, _ktp]
             if Xf_te is not None:
                 Xf_te = Xf_te[:, :, _ktp]
-        n_temporal_feats = len(_KEPT_TEMPORAL_POSITIONS)  # 10
+        n_temporal_feats = len(_KEPT_TEMPORAL_POSITIONS)
         feat_groups = _REDUCED_FEAT_GROUPS
     else:
         print(f"\nFeature reduction disabled — using all {n_features} features.")
@@ -1679,7 +1730,11 @@ def main():
             np.nan_to_num(arr, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
     # ── residual boosting stage ───────────────────────────────────────────────
+    # The booster is fitted on TRAIN residuals and the apply/skip decision is
+    # gated on VALIDATION Combined% — the test set plays no role in the
+    # decision, so the boost cannot leak test information.
     boost_corrector = None
+    boost_applied   = False
     if not args.no_boost:
         print("\nFitting residual booster …")
         # Collect training predictions in original dataset order (no shuffle)
@@ -1703,18 +1758,30 @@ def main():
                 use_catboost=args.use_catboost,
                 seed=args.seed,
             )
-            X_te_np = X_te.cpu().numpy()
-            boost_correction = boost_corrector(X_te_np)   # (N_te, T_out)
-            y_pred_boosted   = y_pred + 0.5 * boost_correction
-            overall_plain    = compute_metrics(y_true.flatten(), y_pred.flatten())
-            overall_boosted  = compute_metrics(y_true.flatten(), y_pred_boosted.flatten())
-            if overall_boosted["Combined"] >= overall_plain["Combined"]:
-                y_pred = y_pred_boosted
-                print(f"  [Boost] Applied  — Combined {overall_plain['Combined']:.2f}% "
-                      f"→ {overall_boosted['Combined']:.2f}%")
+            # Gate on the validation split: apply the same correction to the
+            # validation predictions and only adopt the boost if it improves
+            # validation Combined%.
+            va_pred_s, va_true_s = collect_predictions(model, val_loader, use_amp)
+            if os.path.exists(scaler_y_path):
+                N_va, T_va = va_pred_s.shape
+                va_pred = scaler_y.inverse_transform(va_pred_s.reshape(-1, 1)).reshape(N_va, T_va)
+                va_true = scaler_y.inverse_transform(va_true_s.reshape(-1, 1)).reshape(N_va, T_va)
             else:
-                print(f"  [Boost] Skipped (no improvement): "
-                      f"{overall_plain['Combined']:.2f}% vs {overall_boosted['Combined']:.2f}%")
+                va_pred, va_true = va_pred_s, va_true_s
+
+            va_correction   = boost_corrector(X_va.cpu().numpy())   # (N_va, T_out)
+            va_pred_boosted = va_pred + 0.5 * va_correction
+            val_plain       = compute_metrics(va_true.flatten(), va_pred.flatten())
+            val_boosted     = compute_metrics(va_true.flatten(), va_pred_boosted.flatten())
+            if val_boosted["Combined"] >= val_plain["Combined"]:
+                boost_correction = boost_corrector(X_te.cpu().numpy())   # (N_te, T_out)
+                y_pred = y_pred + 0.5 * boost_correction
+                boost_applied = True
+                print(f"  [Boost] Applied  — val Combined {val_plain['Combined']:.2f}% "
+                      f"→ {val_boosted['Combined']:.2f}%")
+            else:
+                print(f"  [Boost] Skipped (no val improvement): "
+                      f"{val_plain['Combined']:.2f}% vs {val_boosted['Combined']:.2f}%")
         except Exception as e:
             print(f"  [Boost] Failed ({e}) — using neural predictions only.")
 
@@ -1784,6 +1851,9 @@ def main():
             "smooth_weight":args.smooth_weight,
             "warmup_epochs":args.warmup_epochs,
             "ema_decay":    args.ema_decay,
+            "no_boost":     args.no_boost,
+            "use_catboost": args.use_catboost,
+            "boost_applied":boost_applied,
         },
         "training": {
             "best_epoch":    best_epoch,
