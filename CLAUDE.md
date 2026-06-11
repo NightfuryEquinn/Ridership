@@ -1,8 +1,13 @@
 # CLAUDE.md
 
-> Last updated: 2026-06-05
+> Last updated: 2026-06-11
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+> **2026-06-11 revision notes** (full audit in `REVISION.md`):
+> - `cuda.py` was renamed `check_cuda.py` (the old name shadowed the `cuda.bindings` package that newer PyTorch builds import).
+> - `sequence_builder.py` now resolves the 16 `X_future` temporal columns **by name** from feature metadata (they are non-contiguous in the aligned column order); `split_dates.json` gains `temporal_feat_indices` / `temporal_feat_names`. Sequence sets built before this fix carry incorrect `X_future` content and must be rebuilt.
+> - HMT-TSF's `FEAT_GROUPS` now matches the actual `feature_align.py` column order (groups take tuples of index segments), and the residual-boost apply/skip decision is gated on **validation** metrics (was test). Existing HMT-TSF results pre-date these fixes.
 
 ## Project
 
@@ -20,7 +25,7 @@ Malaysian transit ridership forecasting research (Masters FYP). Compares 15 deep
 .venv\Scripts\activate
 
 # Verify GPU
-python cuda.py     # prints True if CUDA is available
+python check_cuda.py     # prints True if CUDA is available
 ```
 
 All scripts are run from the **repository root**. Each model file manually inserts the root onto `sys.path` at the top so that `src.utils` is importable without a package install.

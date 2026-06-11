@@ -275,6 +275,10 @@ def main():
         "total_features":  int(aligned.shape[1]),
         "total_days":      int(len(aligned)),
         "feature_sources": sources_present,
+        # Actual on-disk column order — the authoritative index→name mapping
+        # for sequence tensors and SHAP labels. column_groups below are
+        # semantic groupings and do NOT reflect column positions.
+        "column_order":    aligned.columns.tolist(),
         "column_groups": {
             "targets":    [c for c in target_cols    if c in aligned.columns],
             "temporal":   [c for c in temporal_cols  if c in aligned.columns],

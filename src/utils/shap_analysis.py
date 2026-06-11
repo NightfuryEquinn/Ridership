@@ -22,19 +22,37 @@ except ImportError:
     SHAP_AVAILABLE = False
 
 _METADATA_PATH = os.path.join("data", "features", "feature_metadata.json")
+_FEATURES_CSV  = os.path.join("data", "features", "features_aligned.csv")
 _GROUP_ORDER = ("targets", "temporal", "external", "lag", "static")
 
 
-def load_feature_names(metadata_path: str = _METADATA_PATH) -> list:
+def load_feature_names(metadata_path: str = _METADATA_PATH,
+                       features_csv: str = _FEATURES_CSV) -> list:
     """
-    Return the ordered feature name list from feature_metadata.json.
-    Matches the column order of sequence tensors (targets → temporal →
-    external → lag → static). Returns None if the file is not found.
+    Return feature names in the ACTUAL tensor column order.
+
+    The authoritative order is the CSV header written by feature_align.py
+    (sequence tensors are built straight from those columns). Falls back to
+    the "column_order" field of feature_metadata.json. The old behaviour —
+    concatenating column_groups in semantic order — does NOT match the
+    aligned column order and silently mislabelled every SHAP output; it is
+    kept only as a last resort and prints a warning.
     """
+    if os.path.exists(features_csv):
+        with open(features_csv, encoding="utf-8") as f:
+            header = f.readline().rstrip("\n").split(",")
+        names = [c for c in header if c not in ("date", "is_mco")]
+        if names:
+            return names
     if not os.path.exists(metadata_path):
         return None
     with open(metadata_path, encoding="utf-8") as f:
         meta = json.load(f)
+    if meta.get("column_order"):
+        return meta["column_order"]
+    print("[WARN] No features CSV or metadata column_order found — falling "
+          "back to semantic group concatenation, which does NOT match the "
+          "tensor column order. SHAP labels may be wrong.")
     groups = meta.get("column_groups", {})
     names = []
     for key in _GROUP_ORDER:

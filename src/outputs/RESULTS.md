@@ -3,6 +3,7 @@
 > Source: `src/outputs/aggregate_results.csv` · Generated 2026-06-05
 > Companion files: `HMT-TSF-RESULTS.md` (proposed model), `DIAGNOSTICS.md` (fit diagnostics)
 > Scope: 16 model variants × 12 configurations. HMT-TSF appears here **only as a reference row**; full treatment in `HMT-TSF-RESULTS.md`.
+> **Caveat:** all figures are single-run point estimates (seed=42) without confidence intervals or significance tests — treat sub-percentage-point ranking gaps as indicative (see `REVISION.md`). Baseline results are unaffected by the 2026-06-11 feature-order fix.
 
 ## 1. Scope & conventions
 
