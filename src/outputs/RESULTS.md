@@ -40,14 +40,14 @@ Sorted by Combined% (best → worst). HMT-TSF reference row appended.
 | 14 | CNN-LSTM-Parallel | 74.18 | 8.18 | 7.68 | 9.97 | 0.704 | 96,477 | 125,240 |
 | 15 | STFGNN | 73.94 | 8.21 | 7.60 | 10.25 | 0.688 | 95,547 | 128,777 |
 | 16 | PDR-STGCN | 73.91 | 8.15 | 7.70 | 10.24 | 0.688 | 96,801 | 128,694 |
-| — | **HMT-TSF (ref)** | **81.82** | **5.45** | **4.58** | **8.16** | **0.802** | **57,553** | **102,512** |
+| — | **HMT-TSF (ref)** | **85.78** | **4.39** | **3.97** | **5.87** | **0.897** | **49,897** | **73,757** |
 
 **Read-out:**
 - The default-config field is tight: ranks 1–8 sit inside a **1.5-point Combined% band (77.6–79.1)**. LSTM-family models (BiLSTM, TPA-LSTM, LSTM, ST-LSTM, CNN-BiLSTM) dominate the top alongside Informer and MTGNN.
 - **Informer** is the strongest non-LSTM baseline and the top baseline overall by Combined% (79.13); BiLSTM/TPA-LSTM edge it on R² (0.776 vs 0.772) and RMSE.
 - **MTGNN** (77.93) climbs to rank 7 and is competitive with the LSTM family; STGCN (76.81) also improved significantly versus earlier runs, now at rank 10.
 - The bottom of the table is split: graph-heavy PDR-STGCN (73.91) and STFGNN (73.94) are separated by only 0.03 Combined points. Autoformer (74.73) and CNN-LSTM-Parallel (74.18) also trail.
-- HMT-TSF leads the field by **+2.69 Combined points over the best baseline** (81.82 vs 79.13) and posts the lowest absolute MAE (57,553 vs Informer's 69,476, a **−17%** error reduction).
+- HMT-TSF (2026-06-11 regenerated runs) leads the field by **+6.65 Combined points over the best baseline** (85.78 vs 79.13) and posts the lowest absolute MAE (49,897 vs Informer's 69,476, a **−28%** error reduction); its feature-reduced variant extends this to 86.59 / 46,323 (see `HMT-TSF-RESULTS.md`). Note HMT-TSF additionally receives known-future calendar inputs (`X_future`) that no baseline consumes.
 
 ---
 
@@ -73,7 +73,7 @@ Sorted by Combined% (best → worst). HMT-TSF reference row appended.
 | STFGNN | 65.47 | 0.498 | **−8.47** |
 
 **Read-out:**
-- Best baseline number anywhere in `nomco` is **Informer tuned (79.99)** — still below HMT-TSF (81.82).
+- Best baseline number anywhere in `nomco` is **Informer tuned (79.99)** — still well below HMT-TSF (85.78; FR 86.59).
 - **Tuning is not uniformly beneficial.** Largest gains: ASTGCN (+3.13), STGCN (+1.58), CNN-LSTM-Augmented (+1.74). Largest regressions: **STFGNN (−8.47)**, CNN-LSTM (−4.28), STSGCN (−3.32). STFGNN's catastrophic tuning regression (65.47 from 73.94) is the most severe across the entire study.
 - MTGNN and CNN-BiLSTM also regress under tuning (−1.54, −2.06) — additional capacity hurts both.
 - PDR-STGCN gains +1.65 (previous runs showed +5.58; current results are more moderate).
@@ -136,14 +136,14 @@ Combined% at lb14 / lb28 / lb56 (best of the three **bold**).
 | CNN-LSTM | 77.64 | 45.58 | **−32.06** | −0.050 |
 | STFGNN | 73.94 | 41.00 | **−32.94** | −0.306 |
 | — | — | — | — | — |
-| **HMT-TSF (ref)** | **81.82** | **76.11** | **−5.71** | **0.729** |
+| **HMT-TSF (ref)** | **85.78** | **81.99** | **−3.79** | **0.859** |
 
 **Read-out:**
-- The MCO structural break punishes every model, but the spread is huge: **−5.71 (HMT-TSF) to −32.94 (STFGNN)**.
+- The MCO structural break punishes every model, but the spread is huge: **−3.79 (HMT-TSF) to −32.94 (STFGNN)**.
 - **CNN-LSTM (sequential) and STFGNN effectively fail under MCO** — both post R² near or below zero (−0.050 and −0.306 respectively), performing worse than naive persistence. STFGNN's MCO degradation (−32.94) now exceeds CNN-LSTM's (−32.06).
 - **STGCN is surprisingly MCO-robust** (−8.27, rank 5), significantly better than earlier runs suggested. CNN-LSTM-Parallel (−7.29) is also among the more robust baselines despite its weaker default-config accuracy.
 - Autoformer (R² 0.121) also degrades severely and sits near the fragile end.
-- **HMT-TSF is the most MCO-robust model in the study** (−5.71, edging Informer's −5.88) while retaining the highest absolute MCO performance (76.11 vs Informer 73.25). This is the central argument for its regime-aware design — see `HMT-TSF-RESULTS.md` §MCO.
+- **HMT-TSF is the most MCO-robust model in the study** (−3.79, ahead of Informer's −5.88) while retaining the highest absolute MCO performance (81.99 vs Informer 73.25). This is the central argument for its regime-aware design — see `HMT-TSF-RESULTS.md` §4.
 - The CNN-LSTM-Augmented variant (−10.86) is far more MCO-robust than the sequential CNN-LSTM (−32.06), confirming that the augmentation regularises against structural breaks.
 
 ---

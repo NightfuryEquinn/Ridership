@@ -13,13 +13,21 @@ Run standalone:
 """
 
 import os
+import sys
 import glob
 import argparse
 
 import numpy as np
 import pandas as pd
 
-from shap_analysis import load_feature_names
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+try:
+    from shap_analysis import load_feature_names          # run as script from src/utils
+except ImportError:
+    from src.utils.shap_analysis import load_feature_names  # imported as a module
 
 
 def compute_importance(npy_path: str) -> np.ndarray:
@@ -78,6 +86,17 @@ def cross_run_summary(
     run_ids = list(importances.keys())
     n_runs = len(run_ids)
     F = len(next(iter(importances.values())))
+    if feature_names and len(feature_names) != F:
+        # Feature-reduced runs (e.g. HMT-TSF-FR, F=53): shap_values are indexed
+        # in the reduced space — map names through the kept-index list so the
+        # report carries real feature names instead of feat_NN placeholders.
+        try:
+            from src.models.hybrid.hmttsf import _KEPT_FEAT_INDICES
+            if len(_KEPT_FEAT_INDICES) == F:
+                feature_names = [feature_names[i] for i in _KEPT_FEAT_INDICES]
+        except Exception as e:
+            print(f"[WARN] Could not map reduced-space feature names ({e}) — "
+                  f"falling back to feat_NN labels.")
     labels = (
         feature_names
         if (feature_names and len(feature_names) == F)

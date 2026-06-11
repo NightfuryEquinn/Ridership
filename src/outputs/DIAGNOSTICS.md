@@ -31,7 +31,7 @@ Config axes per model: `{base, tuned}` × `{exclude (nomco), include (mco)}` × 
 | lb14 (all) | 11 | 56 | 20% |
 | lb28 (all) | 11 | 56 | 20% |
 | lb56 (all) | 12 | 56 | 21% |
-| HMT-TSF (all) | 10 | 10 | **100%** |
+| HMT-TSF (full + FR) | 19 | 20 | **95%** |
 
 **Read-out:**
 - **MCO inclusion is the dominant driver of overfitting** — the good-fit rate falls from 30% (nomco) to 11% (mco), nearly a 3× increase in overfit incidence. The lockdown break makes validation loss diverge after the best checkpoint.
@@ -122,16 +122,16 @@ Largest validation-loss drift above the best checkpoint — the strongest "train
 
 ## 7. HMT-TSF (proposed model)
 
-HMT-TSF is `good_fit` on **all 10 configs** (the only model family with a perfect fit record). Full table in `HMT-TSF-RESULTS.md` §6.
+HMT-TSF (2026-06-11 regenerated runs — see `REVISION.md`) is `good_fit` on **9 of 10 configs**; the feature-reduced variant on **all 10** — a 19/20 record no baseline family approaches. Full tables in `HMT-TSF-RESULTS.md` §6 and §11.
 
-- **gap_ratio range 1.80× – 2.84×** — always under the 3× threshold, including all MCO-included configs. No memorisation signal in any configuration.
-- **val_drift ≤ 12.3%** — largest at nomco_lb56 (12.32%) but well under the 25% bar; mco configs stay ≤ 9.6%.
-- It is the **only architecture that holds `good_fit` under MCO** — where every baseline family above degrades — directly mirroring its MCO-accuracy robustness (`RESULTS.md` §5, `HMT-TSF-RESULTS.md` §4).
+- **gap_ratio range 1.57× – 2.72×** (both variants) — always under the 3× threshold, including all MCO-included configs. No memorisation signal in any configuration; the headline nomco_lb14 run posts the study's cleanest profile (1.57×, drift 0.61%).
+- **The sole exception is full-model nomco_lb84** — `overfit` on validation drift (+36.9% above its early best, epoch 18/48). The 84-day window over a 7-day horizon is the study's clearest "too much context" case; feature reduction repairs it (FR nomco_lb84 `good_fit`, drift 11.1%).
+- It is the **only architecture that holds `good_fit` under MCO in every configuration** — where every baseline family above degrades — directly mirroring its MCO-accuracy robustness (`RESULTS.md` §5, `HMT-TSF-RESULTS.md` §4).
 
-| Comparison | Chronic overfitters | Cleanest baseline (Informer) | HMT-TSF |
+| Comparison | Chronic overfitters | Cleanest baseline (Informer) | HMT-TSF (full / FR) |
 |---|---|---|---|
-| Gap-ratio range | 3.1 – 38.6× | 2.16 – 2.98× | 1.80 – 2.84× |
-| good_fit under MCO | none | 3/3 (base) | 5/5 |
-| good_fit overall | 0/12 | 6/12 | 10/10 |
+| Gap-ratio range | 3.1 – 38.6× | 2.16 – 2.98× | 1.57 – 2.64× / 1.66 – 2.72× |
+| good_fit under MCO | none | 3/3 (base) | 5/5 / 5/5 |
+| good_fit overall | 0/12 | 6/12 | 9/10 / 10/10 |
 
-> All verdicts, drift values, and gap ratios verified against `aggregate_diagnosis.csv` (rows 2–169) and the HMT-TSF diagnosis columns of `aggregate_hmttsf.csv` (row 2).
+> All verdicts, drift values, and gap ratios verified against `aggregate_diagnosis.csv` and the HMT-TSF diagnosis columns of `aggregate_hmttsf.csv` (regenerated 2026-06-11).

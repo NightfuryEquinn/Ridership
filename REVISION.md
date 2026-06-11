@@ -111,16 +111,37 @@ These are not fixed in this revision either because they would invalidate the 18
 
 ---
 
-## 3. Required local re-runs (A100)
+## 3. Local re-runs — COMPLETED 2026-06-11
 
-This environment has no GPU; the following must be regenerated locally to bring results in line with the fixed code:
+All 20 HMT-TSF configurations (full + FR × {nomco, mco} × {lb7…lb84}) were re-run on the A100 with the fixed pipeline and SHAP cross-run analysis (`develop` commit `fec94c3`). Outcomes:
 
-1. **Rebuild all sequence sets** (corrected `X_future`, new `split_dates.json` keys):
-   `python src/features/run_pipeline.py --skip-clean --skip-align`
-   (plus the lookback-7/84 builds in `PIPELINE.md` if HMT-TSF lb7/lb84 are kept.)
-2. **Re-run HMT-TSF and HMT-TSF-FR** across `{nomco, mco} × {lb7, lb14, lb28, lb56, lb84}` (± `--no-feat-reduce`), with `--shap` on the headline configs. Labels in SHAP outputs are correct automatically. Update `HMT-TSF-RESULTS.md`, `FINDING.md` §4.7–4.9, and the README headline tables from the new runs.
-3. **Baseline models do not need re-running** — they are unaffected by U1/U2.
-4. Optional but recommended while the GPU is warm: F1 (multi-seed) for the top-5 nomco·lb14 models.
+- **New study headline: HMT-TSF-FR nomco_lb14 = 86.59 Combined% / R² 0.906 / MAE 46,323** (full model: 85.78 / 0.897 / 49,897) — up from the pre-fix 81.8x. The corrected future-calendar conditioning is the plausible driver.
+- **FR now beats the full model at every nomco lookback ≥14** (up to +4.26 at lb84) but **loses every mco config** (−0.85 to −5.22): feature redundancy buys MCO robustness. Full model MCO lb14: 81.99 (Δ −3.79, study best); FR: 78.74 (Δ −7.85).
+- **Fit:** FR 10/10 `good_fit`; full 9/10 (nomco_lb84 `overfit`, val drift +36.9%). Residual boost (validation-gated) applied in only 5/20 runs, all at extreme lookbacks.
+- **SHAP (correctly labelled) re-validates the reduction set exactly**: the 26 zero/near-zero features in the new runs are precisely the 9 fuel + 17 static columns that `_DROPPED_FEAT_INDICES` removes. Top drivers: seasonal month encodings (magnitude), `total_ridership` (10/10 consistency), holiday lead–lag, unfrozen fuel grades (diesel/RON97), monsoon rainfall.
+- All results/findings docs were updated to the new numbers on 2026-06-11.
+
+### 3.1 Post-rerun artifact fixes (this revision)
+
+- **Uploaded sequence tensors were stale.** The `X_future_*.npy` files committed in `fec94c3` carry the *pre-fix* content (lag/trend/fuel columns — verified by column fingerprinting), and the committed `split_dates.json` files were old-format — even though the runs' own metadata proves they were trained on correctly rebuilt sequences (their results.json embeds `temporal_feat_indices`). The corrected `split_dates.json` files are committed in this revision; rebuilding here also verified the regenerated `X_train.npy` is byte-identical to the upload, confirming the committed CSVs reproduce the rerun inputs exactly. **The corrected `X_future_*.npy` binaries could not be pushed from this environment (Git-LFS upload is not authorised through the execution proxy) — regenerate and commit them locally:**
+  ```bash
+  python src/features/run_pipeline.py --skip-clean --skip-align   # lb 14/28/56, both MCO conditions
+  python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 7  --out-dir data/sequences/lookback_7
+  python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 7  --out-dir data/sequences/lookback_7_mco
+  python src/features/sequence_builder.py --features-path data/features/features_aligned_no_mco.csv --T-in 84 --out-dir data/sequences/lookback_84
+  python src/features/sequence_builder.py --features-path data/features/features_aligned.csv         --T-in 84 --out-dir data/sequences/lookback_84_mco
+  git add data/sequences && git commit -m "fix: regenerate X_future tensors with corrected temporal columns"
+  ```
+  (Only `X_future_*` content changes; `X/y` tensors and scalers are unaffected.)
+- **FR SHAP cross-run CSV had `feat_NN` placeholder names** (the 53-feature reduced space didn't match the 79-name list). `shap_crossrun.py` now maps reduced-space indices through `_KEPT_FEAT_INDICES`. The regenerated CSV is likewise LFS-blocked from here — regenerate locally:
+  ```bash
+  python src/utils/shap_crossrun.py --model-dir src/outputs/hmttsf_feat_reduced --output-csv src/outputs/shap_crossrun_summary_feat_reduced.csv
+  git add src/outputs/shap_crossrun_summary_feat_reduced.csv && git commit -m "fix: FR SHAP cross-run summary with real feature names"
+  ```
+  (Verified here: the relabelled FR ranking matches the full-model ranking — total_ridership 10/10, month_sin 9/10, fp_lv_ron97 8/10, ….)
+- Remaining cosmetic gap: `shap_importance.png` files inside run dirs are rendered by `hmttsf.py` at run time and are correct for the new runs.
+
+Still open from the original plan: F1 (multi-seed + significance testing) for the top configs.
 
 ---
 
