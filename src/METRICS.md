@@ -64,7 +64,7 @@ Combined% = max(0, 100 − MAPE% − MAE% − RMSE%)
 
 **Analysis:** The difference between MAPE and MAE% lies in their denominators: MAPE divides each error by the corresponding observed value $y_i$, while MAE% divides the sum of absolute errors by the sum of observed values $\sum y_i$ (equivalently, divides MAE by mean demand $\bar{y}$). This distinction matters when the target series is heteroscedastic: on low-ridership days (holidays, MCO period), MAPE assigns disproportionately high weight to the same absolute error that MAE% would treat as a small fraction of mean demand. The combined inclusion of both metrics in Combined% ensures that models are penalised for day-specific proportional failure (MAPE) as well as for average absolute error magnitude relative to system scale (MAE%).
 
-**Link:** MAE% enters Combined% alongside MAPE% and RMSE%. The raw absolute MAE in ridership counts (reported alongside Combined%) provides operational context: for example, HMT-TSF's MAE of 57,553 daily boardings versus Informer's MAE of 69,476 quantifies the improvement in actionable capacity planning terms, independent of the percentage-normalised Combined% comparison.
+**Link:** MAE% enters Combined% alongside MAPE% and RMSE%. The raw absolute MAE in ridership counts (reported alongside Combined%) provides operational context: for example, HMT-TSF's MAE of 49,897 daily boardings (46,323 for the feature-reduced variant) versus Informer's MAE of 69,476 quantifies the improvement in actionable capacity planning terms, independent of the percentage-normalised Combined% comparison.
 
 ---
 

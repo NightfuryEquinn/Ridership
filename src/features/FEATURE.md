@@ -1,6 +1,6 @@
 # Feature Engineering & EDA Analysis
 
-> Last updated: 2026-06-09 (17 EDA findings, figures added)
+> Last updated: 2026-06-11 (curated to the 10 most significant EDA findings; supporting analyses folded into their parent findings)
 
 Detailed account of all exploratory data analysis (EDA) and engineering decisions made across the eight spatio-temporal feature sources that feed the forecasting pipeline. The pipeline produces two aligned feature matrices: `features_aligned_no_mco.csv` — **79 features × 1,461 days** (2022-01-01 → 2025-12-31, MCO period excluded) used as the default model input — and `features_aligned.csv` — **79 features × 2,557 days** (2019-01-01 → 2025-12-31, MCO period retained) used for MCO-robustness experiments.
 
@@ -351,6 +351,8 @@ Converts a pre-filtered features CSV into model-ready tensors. MCO filtering is 
 
 **Scaler leakage prevention.** `MinMaxScaler` is fitted on `X_train` only (flattened to `(N·T, F)` to fit per-feature). A separate scaler is fitted on `y_train` to enable inverse-transformation of predictions back to ridership counts. Both scalers are saved as `.pkl` files alongside the sequences.
 
+**Known-future calendar tensor (`X_future`).** The 16 temporal features (holiday flags, lead/lag days, cyclical encodings, year, day-of-year) are deterministic for any future date, so they are additionally extracted for the `T_out` forecast steps of each window as `X_future: (N, T_out, 16)` — consumed by HMT-TSF as known decoder context. The temporal columns are resolved **by name** from `feature_metadata*.json` (they are non-contiguous in the aligned column order); the resolved indices and names are recorded in `split_dates.json`.
+
 **Storage.** Arrays are cast to `float16` by default. For MinMax-scaled `[0, 1]` data, `float16` precision loss (≈ 0.001) is negligible. This halves disk and memory footprint. Optional `--compress` flag writes `.npz` for an additional 1.5–3× reduction.
 
 **Six lookback directories** (three windows × two MCO conditions) are produced by `run_pipeline.py` step 3:
@@ -368,7 +370,7 @@ Converts a pre-filtered features CSV into model-ready tensors. MCO filtering is 
 
 ## Notable EDA Findings
 
-The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, multivariate, and thematic categories. Each finding below is analysed using the **MEAL** strategy (Main Idea → Evidence → Analysis → Link).
+The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, multivariate, and thematic categories. The **ten most significant findings** — those that directly informed a feature-engineering or modelling decision, were validated by the final SHAP/results analysis, or underpin the demand–supply (unreliability-mitigation) narrative — are presented below; supporting analyses from the wider suite are folded into the finding they reinforce. Each finding is analysed using the **MEAL** strategy (Main Idea → Evidence → Analysis → Link).
 
 ---
 
@@ -426,18 +428,22 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Main Idea.** A moderate positive correlation exists between RON95 retail price and total ridership: higher fuel prices are associated with increased public transit use, consistent with modal substitution — commuters switching from private vehicles when petrol costs rise (Mily et al., 2024).
 
-**Evidence.** Binned scatter plot of weekly RON95 price (RM/litre) versus 7-day rolling mean of `total_ridership` was constructed after aligning both series on the daily index. The Pearson correlation is ≈ +0.35 (post-MCO window only); the relationship is non-linear, steepening above RM 2.20/litre. Stationarity of raw price levels was checked via ADF test (p > 0.05, confirming non-stationarity), motivating the addition of `ron95_pct_chg` as a secondary feature.
+**Evidence.** Binned scatter plot of weekly RON95 price (RM/litre) versus 7-day rolling mean of `total_ridership` was constructed after aligning both series on the daily index. The Pearson correlation is ≈ +0.35 (post-MCO window only); the relationship is non-linear, steepening above RM 2.20/litre. Stationarity of raw price levels was checked via ADF test (p > 0.05, confirming non-stationarity), motivating the addition of `ron95_pct_chg` as a secondary feature. Two supporting analyses sharpen the mechanism: lag analysis over a 0–7-day window (`src/eda/bivariate/fuel_ridership.py`) shows the strongest price–ridership correlation at lags of 1–3 days, with rail more sensitive to sustained price levels and bus more reactive to weekly price-change events; and seasonal decomposition with ACF/PACF (`src/eda/fuel/fuel.py`) reveals a dominant 52-week autocorrelation period — Malaysian retail fuel pricing follows a government-set annual review cycle, with rolling 4-week volatility clustering around policy announcement windows.
 
-**Analysis.** The elasticity signal motivates retaining both fuel-level columns (for baseline demand context) and percent-change columns (for stationary, gradient-safe signal). Including all six fuel types captures the subsidy–non-subsidy boundary effect (`ron95_budi95`, `ron95_skps`), which represents discrete policy interventions that altered effective price at household level without changing the RON95 headline price (Rahimi et al., 2024).
+**Analysis.** The elasticity signal motivates retaining both fuel-level columns (for baseline demand context) and percent-change columns (for stationary, gradient-safe signal); the 1–3-day best lag and the 52-week policy cycle jointly justify the weekly change columns (`fp_chg_*`) as the primary short-run demand-driver signal — a model that sees only levels would conflate slow multi-year trends with the annual policy cycle (Chevance et al., 2024). The mode-specific elasticity difference also supports modelling bus and rail service lines as separate target columns rather than collapsing them. Including all six fuel types captures the subsidy–non-subsidy boundary effect (`ron95_budi95`, `ron95_skps`), which represents discrete policy interventions that altered effective price at household level without changing the RON95 headline price (Rahimi et al., 2024) — though the subsequent SHAP analysis showed these administered series carry no predictive signal precisely because they were frozen across the post-MCO window (see Finding 6).
 
 **Figures.**
 - `src/eda/theme/results/graphs/fuel_ridership_relationship.png` — binned scatter of RON95 price vs 7-day rolling ridership mean
 - `src/eda/theme/results/graphs/demand_driver_correlations.png` — Pearson correlations between all demand drivers and total ridership
 - `src/eda/theme/results/graphs/fuel_price_trends.png` — full fuel price level series for all six fuel types
+- `src/eda/bivariate/results/fuel_ridership_lagged_effects.png` — best-lag identification across shifts 0–7 days
+- `src/eda/fuel/results/acf_{fuel}.png`, `decomposition_{fuel}.png`, `volatility_{fuel}.png` — 52-week autocorrelation, seasonal decomposition, and policy-window volatility clusters per fuel type
 
 **Link.**
 - Mily, I., Haque, M., & Islam, M. T. (2024). [Unveiling the consequence of unprecedented fuel price hike in Bangladesh on consumer travel behavior](https://doi.org/10.1080/29941849.2024.2409081). *Transportation Safety and Environment*, online 22 Oct 2024.
 - Rahimi, E., Shamshiripour, A., Shabanpour, R., Mohammadian, A., & Auld, J. (2024). [Analyzing the influence of fuel price shock on urban public transit and interurban automobile travel demand: Evidence from a country with fixed fuel price regulation](https://www.researchgate.net/publication/399563477). *Transportation Research Interdisciplinary Perspectives*, 36.
+- Belloc, I., Giménez-Nadal, J. I., & Molina, J. A. (2024). [The gasoline price and the commuting behavior of US commuters: Exploring changes to green travel mode choices](https://doi.org/10.1016/j.jtrangeo.2024.104006). *Journal of Transport Geography*, 116, 104006.
+- Chevance, G., Andrieu, B., Koch, N., et al. (2024). [How gasoline prices influence the effectiveness of interventions targeting sustainable transport modes?](https://doi.org/10.1038/s44333-024-00017-1) *npj Sustainable Mobility and Transport*, 1, 17.
 
 ---
 
@@ -470,19 +476,23 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Main Idea.** Public transit stops are heavily concentrated in Greater Kuala Lumpur (Selangor + Federal Territory). Most peninsular states outside this corridor — and all Borneo states — hold fewer than 5% of total stops each. The network is functionally monocentric.
 
-**Evidence.** DBSCAN clustering (ε = 0.02°, min_samples = 5) applied to the combined stop coordinate set from all four GTFS operators produces two dominant clusters covering Klang Valley and Penang Island, with all remaining states forming noise points or micro-clusters. Stop count per state was computed by spatially joining nodes to GADM Level-1 boundaries: Selangor + KL FT account for ~62% of all stops (Li et al., 2024).
+**Evidence.** DBSCAN clustering (ε = 0.02°, min_samples = 5) applied to the combined stop coordinate set from all four GTFS operators produces two dominant clusters covering Klang Valley and Penang Island, with all remaining states forming noise points or micro-clusters. Stop count per state was computed by spatially joining nodes to GADM Level-1 boundaries: Selangor + KL FT account for ~62% of all stops (Li et al., 2024). Two supporting analyses reinforce the picture: graph-topology metrics per operator (average degree, clustering coefficient, hub betweenness) show the four operators span a spectrum from densely meshed urban metro (Rapid Rail KL: k̄ ≈ 2.8, clustering ≈ 0.41) to sparse long-haul chains (KTMB: k̄ ≈ 2.0, clustering ≈ 0.05); and mode-share decomposition (`src/eda/theme/network_performance_series.py`) shows the rail sub-system dominates total ridership, with the two bus services individually smaller than any single rail line and top-100 ridership days concentrated in rail.
 
-**Analysis.** The national feature matrix uses summary scalars (total stops, routes, edges) rather than per-region disaggregation because the stop distribution is too skewed to yield meaningful per-state time-varying signals. This concentration also means the GTFS-derived static features predominantly reflect conditions in the Klang Valley corridor, which dominates total ridership. This is an acknowledged limitation for models attempting spatially differentiated forecasts (Wang et al., 2024).
+**Analysis.** The national feature matrix uses summary scalars (total stops, routes, edges) rather than per-region or per-operator disaggregation: the stop distribution is too skewed to yield meaningful per-state time-varying signals, and the topology heterogeneity means per-operator features would introduce sparsity for small networks (Song et al., 2024). The concentration also means the GTFS-derived static features predominantly reflect conditions in the Klang Valley corridor, which dominates total ridership — an acknowledged limitation for models attempting spatially differentiated forecasts (Wang et al., 2024). Rail dominance additionally validates modelling each of the 12 service lines as separate target columns: an aggregate-only target would be dominated by the rail sub-system and mask bus-service dynamics entirely (Yang et al., 2023).
 
 **Figures.**
 - `src/eda/gtfs/results/02_stop_density_clustering.png` — DBSCAN clustering of stop coordinates showing the Klang Valley and Penang dominant clusters
 - `src/eda/gtfs/results/01_route_length_coverage.png` — route length and coverage distribution across all four operators
+- `src/eda/gtfs/results/05_network_topology.png` — degree distribution, clustering coefficient, and betweenness centrality per operator
 - `src/eda/theme/results/graphs/gtfs_stop_heatmap.png` — spatial heatmap of stop density across Peninsular Malaysia and Borneo
 - `src/eda/theme/results/graphs/stop_density_population.png` — stop density overlaid on population density, highlighting the Klang Valley concentration
+- `src/eda/theme/results/graphs/ridership_by_mode.png` — daily bus vs rail ridership share, showing rail dominance
 
 **Link.**
 - Li, Y., et al. (2024). [An efficient approach for identifying potential bus passenger demand based on multisource data](https://doi.org/10.1155/2024/5368577). *Journal of Advanced Transportation*, 2024, 5368577.
 - Wang, Z., Huang, K., Massobrio, R., Bombelli, A., & Cats, O. (2024). [Quantification and comparison of hierarchy in public transport networks](https://doi.org/10.1016/j.physa.2023.129479). *Physica A: Statistical Mechanics and Its Applications*, 634, 129479.
+- Song, J., Ding, J., Gui, X., & Zhu, Y. (2024). [Assessment and solutions for vulnerability of urban rail transit network based on complex network theory: A case study of Chongqing](https://doi.org/10.1016/j.heliyon.2024.e27237). *Heliyon*, 10(5), e27237.
+- Yang, C., Yu, C., Dong, W., & Yuan, Q. (2023). [Substitutes or complements? Examining effects of urban rail transit on bus ridership using longitudinal city-level data](https://doi.org/10.1016/j.tra.2023.103489). *Transportation Research Part A: Policy and Practice*, 174, 103489.
 
 ---
 
@@ -494,7 +504,7 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Evidence.** The condition number of the 6-column fuel-level sub-matrix exceeds 1,000, and the three smallest eigenvalues are < 0.01 — both conventional multicollinearity thresholds. Variance Inflation Factors (VIF) for RON95 and diesel level exceed 15. The percent-change columns are markedly less collinear (VIF < 3) because they capture idiosyncratic weekly adjustment patterns.
 
-**Analysis.** High multicollinearity does not degrade prediction accuracy in over-parameterised deep learning models, but it inflates Shapley value variance and reduces interpretability (Rahimi et al., 2024). The SHAP-guided reduction removes the most redundant fuel-level columns while retaining the percent-change columns and the subsidy-tier columns that carry policy-specific signal. The resulting 53-feature set achieves within 0.05 pp of the 79-feature baseline (HMT-TSF-FR: 81.77% vs. HMT-TSF: 81.82%), confirming that the removed features were redundant for prediction (Wu et al., 2023).
+**Analysis.** High multicollinearity does not degrade prediction accuracy in over-parameterised deep learning models, but it inflates Shapley value variance and reduces interpretability (Rahimi et al., 2024). The SHAP-guided reduction removes nine fuel columns — the entire administered RON95 family (headline level, its change variants, and the `budi95`/`skps` subsidy tiers, all frozen or near-constant across the post-MCO window) plus the East Malaysia diesel variants — while retaining the unfrozen RON97 and diesel levels, their percent-changes, and weekly changes, alongside dropping all 17 zero-variance static features. The resulting 53-feature set does not merely match the 79-feature baseline but exceeds it at the headline configuration (HMT-TSF-FR: 86.59% vs. HMT-TSF: 85.78%, +0.81 pp), confirming that the removed features were redundant-to-harmful for normal-regime prediction (Wu et al., 2023) — though they contribute stabilising redundancy under the MCO structural break (Chapter 4.9).
 
 **Figures.**
 - `src/eda/multivariate/results/full_demand_correlation_matrix.png` — full 79×79 Pearson correlation heatmap of the feature matrix
@@ -514,7 +524,7 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Evidence.** Population density grids from `population_density_clean.csv` were overlaid with the GTFS stop spatial join output. For each 1 km² grid cell, the density decile and nearest-stop distance were cross-tabulated. Cells in the top density quartile but with nearest-stop distance > 1 km are flagged as underserved. Approximately 14% of the high-density grid cells fall in this category, concentrated in outer Klang Valley suburbs and Sabah coastal towns.
 
-**Analysis.** This finding motivates including both `pop_density_median` and `pop_density_log_median` as static features: the log-transform compresses the extreme right skew from urban core cells, while the median provides a robust central tendency (Al-Ansari & Al-Mamoori, 2022). Stop-level population at BallTree nearest-neighbour resolution is exported to `population_at_stops.csv` for potential future stop-disaggregated modelling. For the current national forecasting task, underserved zone identification is contextual rather than directly encoded — it informs the interpretation of model error distributions.
+**Analysis.** This finding motivates including both `pop_density_median` and `pop_density_log_median` as static features: the log-transform compresses the extreme right skew from urban core cells, while the median provides a robust central tendency (Al-Ansari & Al-Mamoori, 2022). Stop-level population at BallTree nearest-neighbour resolution is exported to `population_at_stops.csv` for potential future stop-disaggregated modelling. A companion composite transit-equity index (`src/eda/multivariate/transit_equity_index_by_zone.py`) extends this analysis by scoring each GADM zone on stop density, population density, walking friction, and POI density; in its current implementation the friction/POI components use constant defaults, so the score is effectively a stop-density-disparity proxy — substituting the per-stop population and POI exports would yield a genuine multi-dimensional index (future work). For the current national forecasting task, underserved-zone identification is contextual rather than directly encoded — it identifies where demand–supply mismatch concentrates and informs the interpretation of model error distributions.
 
 **Figures.**
 - `src/eda/multivariate/results/underserved_population_identification.png` — cross-tabulation of density decile vs nearest-stop distance, with underserved cells flagged
@@ -535,42 +545,23 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Main Idea.** School holiday periods show systematic over-supply of transit capacity relative to observed demand. Ramadan shifts demand composition by service type — rail demand dips during morning peak while bus demand redistributes toward evening prayer times.
 
-**Evidence.** Capacity utilisation ratio (ridership / scheduled service capacity, proxied by `gtfs_n_directed_edges`) was computed by calendar period. School holidays show a ~22% drop in utilisation below the annual mean while scheduled service remains constant. During Ramadan months (identified from the holiday calendar), per-service ridership decomposition shows `bus_rapid_*` categories recovering faster in the early evening slot, while `rail_lrt_*` and `rail_mrt_*` show reduced AM-peak demand.
+**Evidence.** Capacity utilisation ratio (ridership / scheduled service capacity, proxied by `gtfs_n_directed_edges`) was computed by calendar period. School holidays show a ~22% drop in utilisation below the annual mean while scheduled service remains constant. During Ramadan months (identified from the holiday calendar), per-service ridership decomposition shows `bus_rapid_*` categories recovering faster in the early evening slot, while `rail_lrt_*` and `rail_mrt_*` show reduced AM-peak demand. The companion holiday-service-gap analysis (`src/eda/multivariate/holiday_service_gap_analysis.py`) quantifies the same misalignment per holiday: the efficiency ratio `total_ridership / service_frequency` (active GTFS calendar services per date) drops significantly on public holidays, with December–January — the months of highest holiday concentration — showing the sharpest declines.
 
-**Analysis.** The school holiday mismatch supports encoding `is_school_holiday` and `days_to_next_school_hol` as distinct features from their public-holiday equivalents — their demand signatures differ in duration and magnitude (Li et al., 2022). The Ramadan effect is partially captured by `is_public_holiday` (Hari Raya) and the school holiday flag, but the intra-Ramadan gradual shift is absorbed by the cyclical `month_sin/cos` features (Lee et al., 2024). A dedicated Ramadan binary flag was considered but not added because it would overlap with existing features and month cyclical encodings.
+**Analysis.** The school holiday mismatch supports encoding `is_school_holiday` and `days_to_next_school_hol` as distinct features from their public-holiday equivalents — their demand signatures differ in duration and magnitude (Li et al., 2022). The Ramadan effect is partially captured by `is_public_holiday` (Hari Raya) and the school holiday flag, but the intra-Ramadan gradual shift is absorbed by the cyclical `month_sin/cos` features (Lee et al., 2024). A dedicated Ramadan binary flag was considered but not added because it would overlap with existing features and month cyclical encodings. The efficiency ratio itself is deliberately **not** encoded as a model input — a ridership-to-supply ratio would introduce circular dependency with the target (Yu et al., 2024); instead it informs error interpretation (systematic holiday under-prediction likely reflects supply over-provision) and is the EDA quantification of the demand–supply mismatch this thesis's forecasting layer is designed to mitigate (Wong & Yap, 2023).
 
 **Figures.**
 - `src/eda/multivariate/results/seasonal_demand_supply_mismatch.png` — utilisation ratio by calendar period, showing the school-holiday over-supply trough and Ramadan redistribution
+- `src/eda/multivariate/results/holiday_service_gap_analysis.png` — efficiency ratio (ridership per active GTFS service) by calendar period, with top-20 holiday months annotated
 
 **Link.**
 - Li, W., Guan, H., Han, Y., Zhu, H., & Wang, A. (2022). [Short-term holiday travel demand prediction for urban tour transportation: A combined model based on STC-LSTM deep learning approach](https://doi.org/10.1007/s12205-022-1698-3). *KSCE Journal of Civil Engineering*, 26(9), 4086–4102.
 - Lee, S., Kim, J., & Cho, K. (2024). [Temporal dynamics of public transportation ridership in Seoul before, during, and after COVID-19 from urban resilience perspective](https://doi.org/10.1038/s41598-024-59323-w). *Scientific Reports*, 14, 9078.
+- Wong, H., & Yap, M. (2023). [A data driven approach to update public transport service elasticities](https://doi.org/10.1016/j.jpubtr.2023.100066). *Journal of Public Transportation*, 25, 100066.
+- Yu, C., Dong, W., Liu, Y., Yang, C., & Yuan, Q. (2024). [Rethinking bus ridership dynamics: Examining nonlinear effects of determinants on bus ridership changes using city-level panel data from 2010 to 2019](https://doi.org/10.1016/j.tranpol.2024.04.004). *Transport Policy*, 148, 1–14.
 
 ---
 
-### Finding 9 — Network Topology Heterogeneity by Service
-
-**Script:** `src/eda/gtfs/gtfs.py`
-
-**Main Idea.** Average node degree and edge-to-node density ratios differ substantially across operators. LRT Kelana Jaya is the most densely meshed network; ETS and Intercity are sparse long-haul chains. The four operators span a topology spectrum from urban metro to regional rail.
-
-**Evidence.** Graph topology metrics were computed from `gtfs_stop_edges_{operator}.csv` for all four operators: average degree `k̄ = 2|E|/|V|`, clustering coefficient, and betweenness centrality of top-5 hub nodes (Wang et al., 2024). Rapid Rail KL: `k̄ ≈ 2.8`, Clustering ≈ 0.41. KTMB (ETS/Intercity): `k̄ ≈ 2.0`, Clustering ≈ 0.05. RapidBus networks fall between these extremes.
-
-**Analysis.** The topology diversity motivates the decision to concatenate all four operator node/edge tables before computing summary scalars (`gtfs_n_stops`, `gtfs_n_routes`, `gtfs_n_directed_edges`, `gtfs_avg_segment_s`) rather than computing per-operator features (Song et al., 2024). Per-operator disaggregation would require 16 static scalars and introduce sparsity for operators with small networks. The segment travel-time mean (`gtfs_avg_segment_s`) excludes frequency-based operators (for whom `travel_time_s = −1`) to avoid polluting the average with sentinel values.
-
-**Figures.**
-- `src/eda/gtfs/results/05_network_topology.png` — degree distribution, clustering coefficient, and betweenness centrality for all four operators
-- `src/eda/gtfs/results/03_service_frequency.png` — headway/frequency analysis per operator
-- `src/eda/theme/results/graphs/network_performance_summary.png` — thematic summary of network topology metrics across operators
-- `src/eda/theme/results/graphs/route_coverage_analysis.png` — route coverage comparison by operator type
-
-**Link.**
-- Wang, Z., Huang, K., Massobrio, R., Bombelli, A., & Cats, O. (2024). [Quantification and comparison of hierarchy in public transport networks](https://doi.org/10.1016/j.physa.2023.129479). *Physica A: Statistical Mechanics and Its Applications*, 634, 129479.
-- Song, J., Ding, J., Gui, X., & Zhu, Y. (2024). [Assessment and solutions for vulnerability of urban rail transit network based on complex network theory: A case study of Chongqing](https://doi.org/10.1016/j.heliyon.2024.e27237). *Heliyon*, 10(5), e27237.
-
----
-
-### Finding 10 — Feature Correlation Structure: Lag Dominance and Static Near-Zero Signal
+### Finding 9 — Feature Correlation Structure: Lag Dominance and Static Near-Zero Signal
 
 **Script:** `src/eda/multivariate/full_demand_model_feature_correlation_matrix.py`
 
@@ -578,7 +569,7 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 **Evidence.** Full 79×79 correlation matrix computed on the no-MCO feature matrix. Top correlations with `total_ridership`: `ridership_lag_7` (r = 0.94), `ridership_lag_14` (r = 0.91), `ridership_lag_28` (r = 0.87). Static features: `gtfs_n_stops` (r = 0.00, by construction — constant column), `osm_poi_total_mean` (r ≈ 0.00), `gadm_n_states` (r = 0.00). Eigenvalue decomposition confirms that the first principal component (≈ 72% of variance) is dominated by the lag trio.
 
-**Analysis.** The near-zero linear correlation of static features does not mean they are uninformative — constant-valued columns have zero variance and thus zero correlation by definition. Their value lies in providing fixed reference context that allows models to calibrate absolute scale (network size, urban density) rather than contributing time-varying signal. The lag dominance confirms that models should incorporate autoregressive structure; the lag trio is the strongest set of input features regardless of model architecture (Wu et al., 2023; Guo et al., 2025). This also implies that a naive persistence baseline (forecast = lag_7) would achieve moderate performance, which is the practical floor that all 15 evaluated architectures (14 baselines plus HMT-TSF) need to exceed.
+**Analysis.** The near-zero linear correlation of static features does not mean they are uninformative a priori — constant-valued columns have zero variance and thus zero correlation by definition — but the downstream SHAP analysis (Chapter 4.8) confirmed the stronger conclusion: all 17 static features carry exactly zero attribution in every evaluated configuration, validating this EDA signal and motivating their removal in the feature-reduced HMT-TSF-FR variant. The lag dominance confirms that models should incorporate autoregressive structure; the lag trio is the strongest set of input features regardless of model architecture (Wu et al., 2023; Guo et al., 2025). This also implies that a naive persistence baseline (forecast = lag_7) would achieve moderate performance, which is the practical floor that all 15 evaluated architectures (14 baselines plus HMT-TSF) need to exceed.
 
 **Figures.**
 - `src/eda/multivariate/results/full_demand_correlation_matrix.png` — full 79×79 Pearson correlation heatmap with lag feature dominance visible in the ridership target row
@@ -590,168 +581,26 @@ The EDA suite in `src/eda/` contains 40 scripts across univariate, bivariate, mu
 
 ---
 
-### Finding 11 — Rainfall Intensity Categories and Ridership Impact
-
-**Script:** `src/eda/bivariate/rainfall_ridership.py`
-
-**Main Idea.** Transit ridership responds non-uniformly to rainfall intensity (Jiang & Cai, 2023). The relationship is weak at low intensities but strengthens measurably in the Heavy (30–50 mm) and Very Heavy (50–100 mm) categories. Monthly rolling correlation between rainfall and ridership varies seasonally, peaking during the Northeast Monsoon window (November–January).
-
-**Evidence.** Daily rainfall is binned into five categories: Light (0–10 mm), Moderate (10–30 mm), Heavy (30–50 mm), Very Heavy (50–100 mm), and Extreme (> 100 mm). Ridership is compared across bins via box and violin plots. A 30-day rolling Pearson correlation between `rainfall_mm` and `total_ridership` is computed alongside correlations against 1-month accumulation (`acc_1mo_mm`) and anomaly (`anomaly_1mo`). Extreme-event analysis uses the 95th percentile of `rainfall_mm` as the threshold; ridership before, during, and in the 3 days following each event is tracked. Monthly correlation coefficients (with p-values) confirm the seasonal peak during the monsoon months.
-
-**Analysis.** The non-linear intensity response justifies retaining `rainfall_mm` as a continuous feature rather than a binary wet/dry flag. The 95th-percentile extreme-event analysis also informs the `limit=7` interpolation cap applied in `rainfall.py` — individual monsoon events typically last 2–5 days, so capping imputation at 7 days avoids bridging across distinct events. The monthly seasonal variation confirms that a single annual correlation coefficient would be misleading; cyclical `month_sin/cos` features are needed to let models capture this interaction implicitly (Li & Cao, 2025).
-
-**Figures.**
-- `src/eda/bivariate/results/rainfall_ridership_category.png` — box/violin plots of ridership across five rainfall intensity bins (Light → Extreme)
-- `src/eda/bivariate/results/rainfall_ridership_correlation.png` — 30-day rolling Pearson correlation between rainfall_mm and total_ridership
-- `src/eda/bivariate/results/rainfall_ridership_extreme_events.png` — ridership before, during, and 3 days after 95th-percentile extreme events
-- `src/eda/bivariate/results/rainfall_ridership_seasonal.png` — monthly correlation coefficients showing the Northeast Monsoon seasonal peak
-- `src/eda/bivariate/results/rainfall_ridership_weekday_weekend.png` — rainfall–ridership relationship split by weekday vs weekend
-- `src/eda/theme/results/graphs/rainfall_ridership_impact.png` — thematic summary of rainfall impact on ridership across intensity categories
-
-**Link.**
-- Jiang, S., & Cai, C. (2023). [The impacts of weather conditions on metro ridership: An empirical study from three mega cities in China](https://doi.org/10.1016/j.tbs.2022.12.003). *Travel Behaviour and Society*, 31, 200–210.
-- Li, J., & Cao, J. (2025). [The impact of weather on public bus ridership: Empirical findings from Chenzhou, China](https://doi.org/10.1007/s12469-024-00374-7). *Public Transport* (Springer).
-
----
-
-### Finding 12 — Fuel Price Lag Effects and Mode-Specific Elasticity
-
-**Script:** `src/eda/bivariate/fuel_ridership.py`
-
-**Main Idea.** The ridership response to a fuel price change is not instantaneous (Belloc et al., 2024). Lag analysis over a 0–7-day window shows the strongest price-ridership correlation occurs at a lag of 1–3 days. Rail and bus modes respond at different lags and with different elasticity magnitudes: rail ridership is more sensitive to sustained price levels while bus ridership reacts more sharply to weekly price-change events.
-
-**Evidence.** Percentage changes in RON95, RON97, diesel, and `diesel_eastmsia` prices are paired with percentage changes in `total_ridership`, filtering pairs where both changes exceed ±0.1% to exclude noise. Best-lag identification iterates shifts 0–7 days and selects the lag with the highest absolute Pearson correlation. Mode substitution analysis splits ridership into directional regimes (`Price_Up` / `Price_Down`) and computes mean ridership change per regime. Threshold analysis uses a 20-point price grid from the 10th to 90th percentile of RON95 to identify non-linear demand responses. Note: `diesel_eastmsia` is constant at RM 2.15/litre throughout the analysis window and contributes no variation.
-
-**Analysis.** The 1–3-day best lag motivates using the `fp_chg_*` (weekly change) columns rather than raw level columns as the primary demand-driver signal for within-week ridership variation. Levels are retained for the long-run equilibrium signal. The mode-specific elasticity difference supports the decision to include both bus and rail service lines as separate target columns — aggregating to `total_ridership` only would mask differential demand elasticity that is relevant to forecasting individual service lines (Shojaeian et al., 2022).
-
-**Figures.**
-- `src/eda/bivariate/results/fuel_ridership_lagged_effects.png` — best-lag identification across shifts 0–7 days for RON95, RON97, diesel, and diesel_eastmsia
-- `src/eda/bivariate/results/fuel_ridership_mode_substitution.png` — mean ridership change in Price_Up vs Price_Down regimes by service type
-- `src/eda/bivariate/results/fuel_ridership_threshold.png` — non-linear demand response across a 20-point RON95 price grid
-- `src/eda/bivariate/results/fuel_ridership_correlation.png` — Pearson correlations between all fuel columns and ridership targets
-- `src/eda/bivariate/results/fuel_ridership_scatter_regression.png` — scatter with regression line for RON95 price vs total ridership (post-MCO window)
-
-**Link.**
-- Belloc, I., Giménez-Nadal, J. I., & Molina, J. A. (2024). [The gasoline price and the commuting behavior of US commuters: Exploring changes to green travel mode choices](https://doi.org/10.1016/j.jtrangeo.2024.104006). *Journal of Transport Geography*, 116, 104006.
-- Shojaeian, M., Khodapanah, M., & Zarra-Nezhad, M. (2022). [The role of fare and gasoline price shocks on the behavioral response of passengers in Tehran Metropolitan for using public transportation (Metro, BRT, and Bus)](https://doi.org/10.22034/uep.2022.351389.1258). *Urban Economics and Planning*, 2022.
-
----
-
-### Finding 13 — Weather-Induced Ridership Surge Under Heavy Rainfall
+### Finding 10 — Weather-Induced Ridership Surge Under Heavy Rainfall
 
 **Script:** `src/eda/multivariate/weather_induced_ridership_surge_analysis.py`
 
 **Main Idea.** Heavy rainfall events (above the 75th percentile of daily `rainfall_mm`) are associated with a measurable increase in transit ridership — the inverse of the conventional "rain reduces travel" narrative (Chen et al., 2022). Commuters who would otherwise use private vehicles shift to public transit when rainfall is severe enough to make driving uncomfortable or unsafe.
 
-**Evidence.** A binary `heavy_rain` flag is defined using the 75th-percentile threshold of the national mean daily `rainfall_mm`. A four-variable correlation matrix — `(total_ridership, rainfall_mm, rainfall_anomaly, heavy_rain)` — is computed and saved to `weather_ridership_correlation.csv`. Ridership percentage change is computed as `pct_change × 100` relative to the prior day. A scatter plot of rainfall vs. ridership percentage change coloured by the `heavy_rain` flag illustrates the surge regime. Monthly ridership aggregations compare heavy-rain days against non-heavy-rain days.
+**Evidence.** A binary `heavy_rain` flag is defined using the 75th-percentile threshold of the national mean daily `rainfall_mm`. A four-variable correlation matrix — `(total_ridership, rainfall_mm, rainfall_anomaly, heavy_rain)` — is computed and saved to `weather_ridership_correlation.csv`. Ridership percentage change is computed as `pct_change × 100` relative to the prior day. A scatter plot of rainfall vs. ridership percentage change coloured by the `heavy_rain` flag illustrates the surge regime. The companion intensity-bin analysis (`src/eda/bivariate/rainfall_ridership.py`) bins daily rainfall into five categories (Light 0–10 mm → Extreme > 100 mm): the ridership relationship is weak at low intensities but strengthens measurably in the Heavy (30–50 mm) and Very Heavy (50–100 mm) bins, and a 30-day rolling correlation peaks during the Northeast Monsoon window (November–January).
 
-**Analysis.** The surge finding is the complement of Finding 11: light-to-moderate rain slightly suppresses ridership (trips foregone); heavy rain can paradoxically boost ridership via modal shift. This non-monotone relationship is why a single `rainfall_mm` continuous variable is more informative than a binary wet/dry flag — it allows the model to represent both sides of the response curve. The 75th-percentile threshold used here is consistent with common extreme-weather classification in the literature (Rahmani & Mohammadzadeh Moghaddam, 2025) and is distinct from the 95th-percentile "extreme event" used in `rainfall_ridership.py`, allowing the two scripts to characterise different portions of the tail.
+**Analysis.** The two analyses jointly establish a non-monotone response: light-to-moderate rain slightly suppresses ridership (trips foregone); heavy rain paradoxically boosts ridership via modal shift from private vehicles (Jiang & Cai, 2023). This is why a single continuous `rainfall_mm` variable is more informative than a binary wet/dry flag — it lets the model represent both sides of the response curve — and why the seasonal interaction is left to the cyclical `month_sin/cos` features rather than a fixed coefficient. The 75th-percentile surge threshold is consistent with common extreme-weather classification in the literature (Rahmani & Mohammadzadeh Moghaddam, 2025) and is deliberately distinct from the 95th-percentile "extreme event" threshold of the intensity-bin analysis, so the two characterise different portions of the tail. Individual monsoon events typically last 2–5 days, which also fixes the `limit=7` interpolation cap in `rainfall.py` — long enough to span an event, short enough not to bridge across distinct events.
 
 **Figures.**
 - `src/eda/multivariate/results/weather_induced_ridership_surge.png` — scatter of rainfall vs ridership percentage change coloured by the heavy_rain flag, showing the surge regime above the 75th-percentile threshold
-- `src/eda/theme/results/graphs/rainfall_ridership_impact.png` — thematic overview of the non-monotone rainfall–ridership relationship (shared with Finding 11)
+- `src/eda/bivariate/results/rainfall_ridership_category.png` — box/violin plots of ridership across five rainfall intensity bins (Light → Extreme)
+- `src/eda/bivariate/results/rainfall_ridership_seasonal.png` — monthly correlation coefficients showing the Northeast Monsoon seasonal peak
+- `src/eda/theme/results/graphs/rainfall_ridership_impact.png` — thematic overview of the non-monotone rainfall–ridership relationship
 
 **Link.**
 - Chen, J., et al. (2022). [Spatiotemporal variations in Shanghai metro commuting flows during rainfall events](https://doi.org/10.1175/WCAS-D-21-0167.1). *Weather, Climate, and Society*, 14(3), 785–799.
+- Jiang, S., & Cai, C. (2023). [The impacts of weather conditions on metro ridership: An empirical study from three mega cities in China](https://doi.org/10.1016/j.tbs.2022.12.003). *Travel Behaviour and Society*, 31, 200–210.
 - Rahmani, B., & Mohammadzadeh Moghaddam, A. (2025). [Forecasting demand fluctuations of public bus transit during special events and adverse weather conditions through smart card data analysis](https://doi.org/10.1016/j.tbs.2025.100511). *Travel Behaviour and Society*, 39, 100511.
 
 ---
 
-### Finding 14 — Fuel Price Autocorrelation and 52-Week Periodicity
-
-**Script:** `src/eda/fuel/fuel.py`
-
-**Main Idea.** Malaysian retail fuel prices exhibit a dominant 52-week autocorrelation period — pricing decisions follow a government-set annual review cycle. ADF tests confirm non-stationarity at the level, while first-differenced series are stationary. Rolling 4-week price volatility reveals discrete volatility clusters coinciding with policy announcement windows.
-
-**Evidence.** Additive seasonal decomposition (period = 52 weeks, or `max(2, len/4)` if insufficient data) separates trend, seasonal, and residual components for all six fuel types: `ron95`, `ron97`, `diesel`, `diesel_eastmsia`, `ron95_budi95`, `ron95_skps`. ACF and PACF are computed up to `min(52, len//2 − 1)` lags with a floor of 10. Rolling volatility is the 4-week standard deviation of weekly price changes. `level` and `change_weekly` series are handled as separate data types.
-
-**Analysis.** The 52-week periodicity directly motivates including the weekly change columns (`fp_chg_*`) alongside the level columns (`fp_lv_*`) in the feature matrix (Chevance et al., 2024). A model that sees only price levels will conflate slow multi-year trends with annual policy cycles; the change columns provide a stationary, gradient-safe representation of the policy-driven signal. The volatility clustering also supports the non-linear elasticity finding in Finding 12 — high-volatility windows correspond to periods of rapid modal substitution, not gradual adjustment (Rahimi et al., 2024).
-
-**Figures.** (produced per fuel type for all six: `ron95`, `ron97`, `diesel`, `diesel_eastmsia`, `ron95_budi95`, `ron95_skps`)
-- `src/eda/fuel/results/acf_{fuel}.png` — ACF up to 52 lags showing the dominant 52-week autocorrelation peak
-- `src/eda/fuel/results/pacf_{fuel}.png` — PACF confirming partial autocorrelation structure
-- `src/eda/fuel/results/decomposition_{fuel}.png` — additive STL decomposition separating trend, 52-week seasonal, and residual components
-- `src/eda/fuel/results/volatility_{fuel}.png` — 4-week rolling standard deviation of weekly price changes, showing discrete volatility clusters
-- `src/eda/fuel/results/trend_{fuel}.png` — long-run price trend and level series
-- `src/eda/theme/results/graphs/fuel_price_trends.png` — thematic summary of all six fuel price level series
-
-**Link.**
-- Chevance, G., Andrieu, B., Koch, N., et al. (2024). [How gasoline prices influence the effectiveness of interventions targeting sustainable transport modes?](https://doi.org/10.1038/s44333-024-00017-1) *npj Sustainable Mobility and Transport*, 1, 17.
-- Rahimi, E., Shamshiripour, A., Shabanpour, R., Mohammadian, A., & Auld, J. (2024). [Analyzing the influence of fuel price shock on urban public transit and interurban automobile travel demand: Evidence from a country with fixed fuel price regulation](https://www.researchgate.net/publication/399563477). *Transportation Research Interdisciplinary Perspectives*, 36.
-
----
-
-### Finding 15 — Holiday Service Gap and Efficiency Ratio
-
-**Script:** `src/eda/multivariate/holiday_service_gap_analysis.py`
-
-**Main Idea.** The ratio of ridership to scheduled service frequency — the efficiency ratio — drops significantly on public holidays compared to normal working days. December and January consistently rank in the top-20 months for holiday concentration and show the sharpest efficiency declines, indicating that scheduled service is not reduced in proportion to demand during these periods.
-
-**Evidence.** A `service_frequency` column is derived from the number of active GTFS calendar services per date. `ridership_per_service = total_ridership / service_frequency` is computed as the efficiency metric. Holiday and non-holiday day means are compared for `total_ridership`, `service_frequency`, and `ridership_per_service`. Monthly aggregation (year-month) identifies the top-20 holiday months by holiday day concentration. Results are exported to `holiday_service_gap.csv` and `holiday_service_detail.csv`.
-
-**Analysis.** The efficiency ratio is a supply-demand alignment metric that cannot be derived from ridership or service data alone. Its inclusion as an EDA finding (rather than a feature) reflects an analytical decision: encoding a ratio of ridership-to-supply as a model input would introduce circular dependency with the target variable. Instead, the finding informs the interpretation of model errors during high-holiday periods — systematic under-prediction on major holidays likely reflects supply over-provision not captured by the binary `is_public_holiday` feature (Wong & Yap, 2023). A more granular `service_frequency` feature was considered but rejected to avoid target leakage (Yu et al., 2024).
-
-**Figures.**
-- `src/eda/multivariate/results/holiday_service_gap_analysis.png` — efficiency ratio (ridership per active GTFS service) by calendar period, with top-20 holiday months annotated
-
-**Link.**
-- Wong, H., & Yap, M. (2023). [A data driven approach to update public transport service elasticities](https://doi.org/10.1016/j.jpubtr.2023.100066). *Journal of Public Transportation*, 25, 100066.
-- Yu, C., Dong, W., Liu, Y., Yang, C., & Yuan, Q. (2024). [Rethinking bus ridership dynamics: Examining nonlinear effects of determinants on bus ridership changes using city-level panel data from 2010 to 2019](https://doi.org/10.1016/j.tranpol.2024.04.004). *Transport Policy*, 148, 1–14.
-
----
-
-### Finding 16 — Transit Equity Index by Administrative Zone
-
-**Script:** `src/eda/multivariate/transit_equity_index_by_zone.py`
-
-**Main Idea.** A composite transit equity score — combining stop density, population density, walking friction, and POI density — reveals that transit access is spatially inequitable across Malaysian administrative zones (Li et al., 2023; Rathod et al., 2025). States with high stop density but low population density score differently from states with high population density but sparse stop coverage.
-
-**Evidence.** Each administrative zone (GADM Level-1 boundary) receives an equity score computed as:
-```
-equity_score = 0.30 × (stop_density / max_stop_density)
-             + 0.30 × (population_density_estimate / max_pop_density)
-             + 0.20 × (1 − walking_friction_estimate)
-             + 0.20 × (poi_density_estimate / max_poi_density)
-```
-Stop density is derived from the spatial join of GTFS nodes to GADM polygons (EPSG:4326 → EPSG:3857, predicate `within`). Zone area is computed from the projected geometry. Results are written to `transit_equity_scores.csv` with columns `NAME_1`, `stop_count`, `stop_density`, `equity_score`. Note: `walking_friction_estimate`, `population_density_estimate`, and `poi_density_estimate` use constant defaults (0.5, 500, 50) in the current implementation, meaning the effective score is driven by stop density until per-zone estimates are substituted.
-
-**Analysis.** The equity index extends Finding 7 (underserved population zones) by adding a composite lens that includes POI accessibility and walkability alongside the density-coverage gap. The constant default estimates mean the current scores are primarily a proxy for stop density disparity — a known limitation. The finding motivates the inclusion of both `pop_density_median` and GTFS summary scalars as complementary static features: neither alone captures the full supply-accessibility picture. For future work, replacing the constant defaults with `population_at_stops.csv` and `poi_counts_at_stops.csv` values would produce a genuine multi-dimensional equity score.
-
-**Figures.**
-- `src/eda/multivariate/results/transit_equity_index_by_zone.png` — composite equity scores per GADM Level-1 zone, coloured by stop density quartile
-- `src/eda/multivariate/results/composite_accessibility_score.png` — breakdown of equity score components (stop density, population density, walking friction, POI density) per zone
-- `src/eda/theme/results/graphs/accessibility_equity_index.png` — thematic summary of the equity index spatial distribution
-- `src/eda/gadm/results/adjacency_network.png` — GADM Level-1 adjacency network showing state borders and centroids used in the equity computation
-
-**Link.**
-- Li, W., Guan, H., Qin, W., & Ji, X. (2023). [Collective and individual spatial equity measure in public transit accessibility based on generalized travel cost](https://doi.org/10.1016/j.retrec.2023.100033). *Research in Transportation Economics*, 98, 101267.
-- Rathod, R., Joshi, G., & Arkatkar, S. (2025). [Composite Accessibility Index: A novel and holistic measure for evaluating transit accessibility](https://doi.org/10.1177/03611981241270156). *Transportation Research Record*.
-
----
-
-### Finding 17 — Mode Share Decomposition and Ridership Distribution by Service
-
-**Script:** `src/eda/theme/network_performance_series.py`
-
-**Main Idea.** Rail modes (LRT Ampang, MRT Kajang, LRT Kelana Jaya, Monorail, MRT Putrajaya) collectively account for a substantially larger share of total ridership than bus modes (RapidBus KL, RapidBus Penang). Top-100 ridership days are concentrated in the rail sub-system. The two bus services together are individually small relative to any single rail line.
-
-**Evidence.** Modal aggregations are computed as:
-```
-bus_ridership  = bus_rkl + bus_rpn
-rail_ridership = rail_lrt_ampang + rail_mrt_kajang + rail_lrt_kj + rail_monorail + rail_mrt_pjy
-bus_ridership_share  = bus_ridership  / total_ridership × 100
-rail_ridership_share = rail_ridership / total_ridership × 100
-```
-Daily totals and averages per mode are written to `ridership_mode_performance.csv`. GTFS stops are spatially joined to GADM boundaries (EPSG:3857, predicate `within`) and counted per zone and source operator. High-density population zones are identified as grid cells with `density_log` above the 90th percentile; stop overlap with these zones is recorded in `network_overlap_stats.csv`.
-
-**Analysis.** Rail dominance in total ridership validates the decision to model each of the 12 service lines as separate target columns rather than aggregating to a single total. An aggregated target would be dominated by the rail sub-system and would mask bus-service dynamics entirely (Yang et al., 2023). The 90th-percentile high-density overlap metric confirms the transit concentration finding (Finding 5): most stops in high-density areas belong to rail operators. This also contextualises the static GTFS features — `gtfs_n_stops` aggregates across all operators and thus conflates the sparse bus network with the denser rail network; per-operator disaggregation is available in the operator node tables if needed (Dai et al., 2024).
-
-**Figures.**
-- `src/eda/theme/results/graphs/ridership_by_mode.png` — daily bus vs rail ridership share stacked time series with bus_ridership_share and rail_ridership_share
-- `src/eda/theme/results/graphs/network_performance_summary.png` — per-operator stop count, route count, and ridership contribution (shared with Finding 9)
-- `src/eda/theme/results/graphs/stop_density_population.png` — 90th-percentile high-density zone overlap with rail vs bus stop locations (shared with Finding 5)
-- `src/eda/ridership/results/temporal_trend_analysis.png` — full 2019–2025 ridership by service line, showing rail dominance in absolute scale
-
-**Link.**
-- Yang, C., Yu, C., Dong, W., & Yuan, Q. (2023). [Substitutes or complements? Examining effects of urban rail transit on bus ridership using longitudinal city-level data](https://doi.org/10.1016/j.tra.2023.103489). *Transportation Research Part A: Policy and Practice*, 174, 103489.
-- Dai, S., Yu, L., Song, L., Li, Y., & Fan, X. (2024). [The temporal distribution of ridership in metro stations from land-use perspective](https://doi.org/10.1371/journal.pone.0308759). *PLOS ONE*, 19(10), e0308759.

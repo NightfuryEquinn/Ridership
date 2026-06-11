@@ -902,23 +902,23 @@ HMT-TSF is proposed to address three key limitations identified across the 14 ba
 
 #### What Features
 
-All 79 input features (or 53 in the SHAP-reduced FR variant) are organised into five semantic groups:
+All 79 input features (or 53 in the SHAP-reduced FR variant) are organised into five semantic groups. Two groups (temporal, external) are **non-contiguous** in the aligned column order, so each group is defined as one or more index segments (matching `FEAT_GROUPS` in `hmttsf.py`):
 
 | Group | Indices (full, 79F) | Indices (FR, 53F) | Count | Features |
 |-------|--------------------|--------------------|-------|---------|
 | Target context | 0–12 | 0–12 | 13 / 13 | 12 service-line ridership values + total_ridership |
-| Temporal/cyclical | 13–28 | 13–22 | 16 / 10 | Holiday flags, lead-lag holiday, sin/cos encodings (DoW, month), year, day_of_year |
-| External | 29–58 | 23–49 | 30 / 27 | Fuel prices (×15) + rainfall (×15) |
-| Lag | 59–61 | 50–52 | 3 / 3 | ridership_lag_7, ridership_lag_14, ridership_lag_28 |
+| Lag | 13–15 | 13–15 | 3 / 3 | ridership_lag_7, ridership_lag_14, ridership_lag_28 |
+| Temporal/cyclical | 16–17 ∪ 33–46 | 16–17 ∪ 24–37 | 16 / 16 | year, day_of_year + holiday flags, lead-lag holiday, DoW/month, sin/cos encodings |
+| External | 18–32 ∪ 47–61 | 18–23 ∪ 38–52 | 30 / 21 | Fuel prices (15 / 6 kept) + rainfall (×15) |
 | Static | 62–78 | — | 17 / 0 | Population + GTFS + OSM POI + GADM (all dropped in FR via SHAP) |
 
 #### Why These Features
 
 **Target context (13 features):** The 12 individual service-line ridership values encode autoregressive signals at the granularity of each transit line rather than only aggregate demand. Malaysian transit networks exhibit inter-line demand spillover: when one rail corridor is disrupted or operating below capacity, complementary bus routes and adjacent rail lines absorb excess demand. Including all 12 lines allows the model to learn these cross-line demand propagation patterns directly from historical co-movements. The total_ridership aggregate provides a system-wide baseline that contextualises individual line trajectories and serves as the primary forecast target.
 
-**Temporal/cyclical features (16/10 features):** Malaysian public holidays — including Hari Raya Aidilfitri, Hari Raya Aidiladha, Chinese New Year, Deepavali, National Day, and state-specific gazetted holidays — cause ridership swings of 30–80% relative to normal days, fluctuations that cannot be inferred from historical ridership signals alone. Continuous lead-lag holiday counters (`days_to_next` / `days_since_last` for both public and school holidays) capture the gradual departure pattern before and the return surge after major holidays. Cyclical sin/cos encodings of day-of-week and month prevent discontinuities at boundaries (Saturday=0 and Sunday=6 are equally adjacent to Monday=1, rather than artificially far apart in linear encoding). Year and day_of_year capture secular ridership growth and annual seasonal patterns not fully covered by cyclical encodings. In the FR variant, SHAP identified six temporal features with near-zero importance — likely redundant or correlated encodings — and dropped them.
+**Temporal/cyclical features (16/10 features):** Malaysian public holidays — including Hari Raya Aidilfitri, Hari Raya Aidiladha, Chinese New Year, Deepavali, National Day, and state-specific gazetted holidays — cause ridership swings of 30–80% relative to normal days, fluctuations that cannot be inferred from historical ridership signals alone. Continuous lead-lag holiday counters (`days_to_next` / `days_since_last` for both public and school holidays) capture the gradual departure pattern before and the return surge after major holidays. Cyclical sin/cos encodings of day-of-week and month prevent discontinuities at boundaries (Saturday=0 and Sunday=6 are equally adjacent to Monday=1, rather than artificially far apart in linear encoding). Year and day_of_year capture secular ridership growth and annual seasonal patterns not fully covered by cyclical encodings. All 16 temporal features are retained in the FR variant — SHAP analysis (Chapter 4.8) confirms calendar structure is among the strongest predictive signal in the study.
 
-**External features (30/27 features):** Malaysian fuel prices are periodically adjusted by the government under a managed float mechanism. When RON95 or diesel prices rise sharply, mode-switching effects increase public transit demand as motorists temporarily substitute transit for private vehicle travel. Fifteen fuel-related features covering multiple fuel grades and both absolute levels and change indicators allow the model to learn both level effects and price-change velocity effects. Fifteen per-state rainfall columns (one daily rainfall aggregate per Malaysian state/territory) capture the first-last-mile access suppression effect: heavy rain reduces walkability and cycling access to transit stations, temporarily suppressing ridership even when service levels are unchanged. Three absolute fuel-level features were dropped in the FR variant (SHAP ≈ 0), likely because the fuel change-rate features already encode the predictive information contained in absolute levels more efficiently.
+**External features (30/27 features):** Malaysian fuel prices are periodically adjusted by the government under a managed float mechanism. When RON95 or diesel prices rise sharply, mode-switching effects increase public transit demand as motorists temporarily substitute transit for private vehicle travel. Fifteen fuel-related features covering multiple fuel grades and both absolute levels and change indicators allow the model to learn both level effects and price-change velocity effects. Fifteen per-state rainfall columns (one daily rainfall aggregate per Malaysian state/territory) capture the first-last-mile access suppression effect: heavy rain reduces walkability and cycling access to transit stations, temporarily suppressing ridership even when service levels are unchanged. Nine fuel columns are dropped in the FR variant (SHAP ≈ 0): the entire administered RON95 family (headline level, its change variants, and the `budi95`/`skps` subsidy tiers — frozen or near-constant across the post-MCO training window) plus the East Malaysia diesel variants. The unfrozen RON97 and diesel series (levels, percent-changes, weekly changes) are retained and carry the genuine mode-substitution signal.
 
 **Lag features (3 features):** ridership_lag_7, ridership_lag_14, and ridership_lag_28 provide explicit autoregressive reference values at weekly, bi-weekly, and monthly offsets. These are complementary to the continuous temporal window that the TCN encoder processes: they provide hard-coded point-in-time reference values at historically meaningful periodicities that remain available as isolated features to the Feature Graph Encoder even after temporal pooling. For example, ridership_lag_7 directly encodes what total ridership was exactly one week ago — the most important single periodic baseline for a transit system with strong weekly regularity.
 
@@ -937,7 +937,7 @@ Independent embedding allows each group's internal structure to be learned witho
 **Step 2 — Gated group fusion with learned softmax weights:** All group embeddings are concatenated and passed through a learned softmax group gate, which adaptively weights each group's contribution at each timestep:
 
 ```
-h_concat = cat[h_1, h_2, h_3, h_4]      → (B, T_in, n_groups × d/2)
+h_concat = cat[h_1, …, h_5]             → (B, T_in, n_groups × d/2)
 gate = softmax(Linear(d_concat → n_groups))  → (B, T_in, n_groups)
 h_gated = Σ_g(gate_g · h_g)              → (B, T_in, n_groups × d/2)
 ```
@@ -1039,9 +1039,13 @@ L = WeightedHuber(step-decay γ=0.9) + λ · TemporalSmoothness
 
 Step 1 (1-day-ahead) has weight 1.0; step 7 (7-day-ahead) receives weight 0.9^6 ≈ 0.53. TemporalSmoothness = ‖y_{t+1} − y_t‖² across T_out prevents oscillatory day-to-day predictions.
 
+#### Future Temporal Projection — Known-Future Calendar Conditioning
+
+The 16 temporal features are deterministic for any future calendar date, so `sequence_builder.py` pre-computes them for the `T_out` forecast steps of each window as `X_future: (B, T_out, 16)`. A per-step MLP (`n_t → max(2·n_t, 32) → 1`, zero-initialised so it starts as a no-op) learns an additive correction from this known-future context — letting the model anticipate weekend dips and holiday effects inside the forecast horizon rather than extrapolating them from the look-back window. HMT-TSF is the **only** model in the study that receives this input, so its margin over the baselines reflects architecture plus conditioning (see the comparison-fairness note in `REVISION.md`).
+
 #### Optional Post-Hoc Residual Boosting (Phase 3)
 
-After neural training, a CatBoost (or sklearn MLP) model is fitted on training-set residuals Δ = y_true − y_neural. The correction is applied as: `y_final = y_neural + 0.5 × Δ_boost`, activated only if Combined% improves on the validation set. This provides a non-parametric second-stage correction for systematic prediction biases without modifying the neural model.
+After neural training, a CatBoost (or sklearn MLP) model is fitted on training-set residuals Δ = y_true − y_neural. The correction is applied as: `y_final = y_neural + 0.5 × Δ_boost`, activated only if Combined% improves on the validation set. This provides a non-parametric second-stage correction for systematic prediction biases without modifying the neural model. In the regenerated runs the validation gate activates the boost only at extreme lookbacks (lb7/lb84).
 
 ---
 
@@ -1050,11 +1054,11 @@ After neural training, a CatBoost (or sklearn MLP) model is fitted on training-s
 ```mermaid
 flowchart TD
     IN79["Input X · (B, T_in, F=79) · MinMax-scaled"]
-    SHAP["SHAP Reduction (script default ON → FR variant)\n79 → 53 features\n−6 temporal · −3 fuel-level · −17 static\n(--no-feat-reduce retains F=79 —\nthe headline configuration reported in Chapter 4)"]
+    SHAP["SHAP Reduction (script default ON → FR variant)\n79 → 53 features\n−9 fuel-price · −17 static\n(FR is the study headline at nomco_lb14;\n--no-feat-reduce retains F=79 — preferred under MCO)"]
     IN53["Input X · (B, T_in, F=53 or 79)"]
     REVIN["RevIN\nx̂ = (x−μ)/σ × γ + β\nper-sample · per-feature\nlearnable γ, β per feature"]
 
-    FGF["Feature Group Fusion → (B, T_in, d_model)\nTarget ctx 0–12 → MLP → d/2\nTemporal/Cyc 13–22 → MLP → d/2\nExternal 23–49 → MLP → d/2\nLag 50–52 → MLP → d/2\nconcat × softmax(group_gate)\nLinear→d · GELU · Dropout · Linear→d · LayerNorm"]
+    FGF["Feature Group Fusion → (B, T_in, d_model)\nTarget ctx 0–12 → MLP → d/2\nLag 13–15 → MLP → d/2\nTemporal/Cyc 16–17 ∪ 24–37 → MLP → d/2\nExternal 18–23 ∪ 38–52 → MLP → d/2\nconcat × softmax(group_gate)\nLinear→d · GELU · Dropout · Linear→d · LayerNorm"]
 
     TTB["Temporal Transformer Block\nLearnable positional embeddings\nMultiheadAttention (n_heads)\nPost-LN residual · FFN d→d"]
 
@@ -1099,6 +1103,8 @@ flowchart TD
 - Post-hoc CatBoost residual correction adds a second-stage pipeline that is harder to interpret and may degrade if neural residuals are not well-structured
 - The K=3 regime embedding boundaries are manually motivated by the MCO chronology; a different country or crisis timeline would require re-specification of regime count and boundary dates
 - Static Pearson graph in the Feature Graph Encoder inherits the same MCO-sensitivity limitation as STGCN and ASTGCN, partially offset by RevIN and regime gating but not fully resolved
+- The FR variant trades MCO robustness for normal-regime accuracy (lb14 MCO degradation −7.85 pp vs the full model's −3.79 pp; Chapter 4.9) — the appropriate variant is regime-dependent
+- The known-future calendar conditioning (`X_future`) is an input advantage no baseline shares, so headline margins partly reflect conditioning rather than architecture alone
 
 ---
 
