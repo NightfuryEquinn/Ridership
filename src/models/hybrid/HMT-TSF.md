@@ -454,26 +454,26 @@ python src/models/hybrid/hmttsf.py \
 
 ## Achieved Results
 
-All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and evaluated for both the full-feature model (F=79) and the feature-reduced variant (F=53). Aggregate results are stored in `src/outputs/aggregate_hmttsf.csv`. Run IDs are recorded therein.
+All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and evaluated for both the full-feature model (F=79) and the feature-reduced variant (F=53), using the corrected pipeline of 2026-06-11 (`REVISION.md`): true-layout feature groups, calendar-feature `X_future`, validation-gated residual boost (`--use-catboost`; applied only at extreme lookbacks — full: nomco_lb7/nomco_lb84/mco_lb84; FR: nomco_lb7/mco_lb84). Aggregate results are stored in `src/outputs/aggregate_hmttsf.csv`. Run IDs are recorded therein.
 
-**Optimisation targets:** Combined% ≥ 75%, R² ≥ 0.70 (both simultaneously). **HMT-TSF (F=79): 8 of 10** configurations meet both targets (nomco_lb84 and mco_lb84 fall short). **HMT-TSF-FR (F=53): 9 of 10** — only mco_lb84 falls below both thresholds.
+**Optimisation targets:** Combined% ≥ 75%, R² ≥ 0.70 (both simultaneously). **HMT-TSF (F=79): 10 of 10** configurations meet both targets. **HMT-TSF-FR (F=53): 9 of 10** — only mco_lb84 (73.23%, R² 0.680) falls below both thresholds.
 
 ### HMT-TSF Full (F=79) — Overall Performance
 
 | Configuration | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
 |---------------|-----------|-------|------|-------|-----|-----|------|
-| nomco_lb7 | 79.88 | 6.17 | 5.43 | 8.52 | 0.783 | 68,163 | 107,034 |
-| **nomco_lb14** | **81.46** | **5.58** | **4.70** | **8.25** | **0.797** | **59,105** | **103,684** |
-| nomco_lb28 | 80.25 | 5.93 | 5.38 | 8.44 | 0.788 | 67,606 | 106,096 |
-| nomco_lb56 | 77.77 | 6.88 | 6.32 | 9.02 | 0.755 | 79,342 | 113,248 |
-| nomco_lb84 | 74.65 | 7.97 | 7.41 | 9.98 | 0.704 | 92,303 | 124,327 |
-| mco_lb7 | 75.19 | 7.70 | 6.87 | 10.24 | 0.712 | 84,611 | 126,052 |
-| mco_lb14 | 75.66 | 7.48 | 6.83 | 10.02 | 0.724 | 84,286 | 123,558 |
-| mco_lb28 | 75.96 | 7.44 | 6.58 | 10.02 | 0.722 | 81,282 | 123,739 |
-| **mco_lb56** | **76.48** | **7.26** | **6.24** | **10.02** | **0.722** | **77,496** | **124,291** |
-| mco_lb84 | 73.98 | 8.32 | 6.89 | 10.81 | 0.674 | 85,558 | 134,126 |
+| nomco_lb7 | 84.88 | 4.74 | 4.25 | 6.13 | 0.888 | 53,325 | 76,951 |
+| **nomco_lb14** | **85.78** | **4.39** | **3.97** | **5.87** | **0.897** | **49,897** | **73,757** |
+| nomco_lb28 | 84.23 | 4.94 | 4.55 | 6.28 | 0.883 | 57,268 | 78,910 |
+| nomco_lb56 | 82.53 | 5.52 | 5.11 | 6.84 | 0.859 | 64,198 | 85,874 |
+| nomco_lb84 | 77.68 | 6.99 | 6.59 | 8.73 | 0.773 | 82,174 | 108,800 |
+| mco_lb7 | 78.61 | 6.89 | 6.12 | 8.38 | 0.807 | 75,401 | 103,170 |
+| **mco_lb14** | **81.99** | 5.68 | 5.18 | 7.15 | 0.859 | 63,853 | 88,228 |
+| mco_lb28 | 79.89 | 6.26 | 5.83 | 8.02 | 0.822 | 72,032 | 99,059 |
+| mco_lb56 | 79.47 | 6.68 | 5.91 | 7.95 | 0.825 | 73,334 | 98,598 |
+| mco_lb84 | 78.45 | 6.73 | 6.17 | 8.64 | 0.791 | 76,593 | 107,293 |
 
-**Best configurations:** nomco_lb14 (Combined%=81.46%, R²=0.797) and, under MCO, mco_lb56 (76.48%, R²=0.722).
+**Best configurations:** nomco_lb14 (Combined%=85.78%, R²=0.897) and, under MCO, mco_lb14 (81.99%, R²=0.859) — with correct future-calendar conditioning, lb14 is optimal in both regimes.
 
 ---
 
@@ -485,41 +485,41 @@ SHAP-guided ablation removed 26 zero-importance features (corrected labels, 2026
 
 | Configuration | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
 |---------------|-----------|-------|------|-------|-----|-----|------|
-| nomco_lb7 | 79.76 | 6.20 | 5.58 | 8.46 | 0.787 | 70,070 | 106,249 |
-| **nomco_lb14** | **81.62** | **5.52** | **4.80** | **8.06** | **0.807** | **60,306** | **101,291** |
-| nomco_lb28 | 81.12 | 5.66 | 4.93 | 8.29 | 0.795 | 62,012 | 104,294 |
-| nomco_lb56 | 78.44 | 6.62 | 5.97 | 8.97 | 0.758 | 74,991 | 112,577 |
-| nomco_lb84 | 75.58 | 7.69 | 7.11 | 9.63 | 0.724 | 88,591 | 119,975 |
-| mco_lb7 | 75.12 | 7.75 | 6.84 | 10.29 | 0.709 | 84,201 | 126,759 |
-| mco_lb14 | 75.66 | 7.41 | 6.61 | 10.31 | 0.708 | 81,565 | 127,181 |
-| **mco_lb28** | **76.54** | **7.24** | **6.29** | **9.92** | **0.727** | **77,753** | **122,584** |
-| mco_lb56 | 76.43 | 7.34 | 6.33 | 9.89 | 0.728 | 78,611 | 122,788 |
-| mco_lb84 | 69.56 | 9.27 | 8.24 | 12.93 | 0.533 | 102,291 | 160,533 |
+| nomco_lb7 | 84.81 | 4.77 | 4.28 | 6.14 | 0.888 | 53,708 | 77,101 |
+| **nomco_lb14** | **86.59** | **4.11** | **3.69** | **5.62** | **0.906** | **46,323** | **70,664** |
+| nomco_lb28 | 86.07 | 4.27 | 3.94 | 5.71 | 0.903 | 49,541 | 71,806 |
+| nomco_lb56 | 84.04 | 5.04 | 4.54 | 6.37 | 0.878 | 57,053 | 79,924 |
+| nomco_lb84 | 81.94 | 5.89 | 5.04 | 7.13 | 0.848 | 62,778 | 88,894 |
+| mco_lb7 | 77.76 | 6.99 | 6.36 | 8.89 | 0.783 | 78,305 | 109,448 |
+| **mco_lb14** | **78.74** | 6.35 | 5.97 | 8.95 | 0.780 | 73,630 | 110,319 |
+| mco_lb28 | 76.45 | 7.10 | 6.64 | 9.81 | 0.733 | 82,013 | 121,240 |
+| mco_lb56 | 75.90 | 7.60 | 7.14 | 9.36 | 0.757 | 88,563 | 116,166 |
+| mco_lb84 | 73.23 | 8.31 | 7.75 | 10.71 | 0.680 | 96,192 | 132,961 |
 
-**Best configurations:** FR nomco_lb14 (Combined%=81.62%, R²=0.807 — the new global best across the study) and, under MCO, FR mco_lb28 (76.54%, R²=0.727; MCO optimum shifts lb56→lb28 relative to Full).
+**Best configurations:** FR nomco_lb14 (Combined%=86.59%, R²=0.906 — the global best across the study) and, under MCO, FR mco_lb14 (78.74%, R²=0.780).
 
 ### FR vs Full Comparison (Δ Combined%, Δ R²)
 
 | Configuration | Full Combined% | FR Combined% | Δ Combined% | Full R² | FR R² | Δ R² |
 |---------------|---------------|-------------|-------------|---------|-------|------|
-| nomco_lb7 | 79.88 | 79.76 | −0.12 | 0.783 | 0.787 | +0.004 |
-| nomco_lb14 | 81.46 | 81.62 | **+0.16** | 0.797 | 0.807 | **+0.010** |
-| nomco_lb28 | 80.25 | 81.12 | **+0.87** | 0.788 | 0.795 | **+0.007** |
-| nomco_lb56 | 77.77 | 78.44 | **+0.67** | 0.755 | 0.758 | **+0.003** |
-| nomco_lb84 | 74.65 | 75.58 | **+0.93** | 0.704 | 0.724 | **+0.020** |
-| mco_lb7 | 75.19 | 75.12 | −0.07 | 0.712 | 0.709 | −0.003 |
-| mco_lb14 | 75.66 | 75.66 | 0.00 | 0.724 | 0.708 | −0.016 |
-| mco_lb28 | 75.96 | 76.54 | **+0.58** | 0.722 | 0.727 | **+0.005** |
-| mco_lb56 | 76.48 | 76.43 | −0.05 | 0.722 | 0.728 | **+0.006** |
-| mco_lb84 | 73.98 | 69.56 | **−4.42** | 0.674 | 0.533 | **−0.141** |
+| nomco_lb7 | 84.88 | 84.81 | −0.07 | 0.888 | 0.888 | −0.000 |
+| nomco_lb14 | 85.78 | 86.59 | **+0.81** | 0.897 | 0.906 | **+0.008** |
+| nomco_lb28 | 84.23 | 86.07 | **+1.84** | 0.883 | 0.903 | **+0.020** |
+| nomco_lb56 | 82.53 | 84.04 | **+1.52** | 0.859 | 0.878 | **+0.019** |
+| nomco_lb84 | 77.68 | 81.94 | **+4.26** | 0.773 | 0.848 | **+0.075** |
+| mco_lb7 | 78.61 | 77.76 | −0.85 | 0.807 | 0.783 | −0.024 |
+| mco_lb14 | 81.99 | 78.74 | **−3.25** | 0.859 | 0.780 | **−0.079** |
+| mco_lb28 | 79.89 | 76.45 | −3.44 | 0.822 | 0.733 | −0.089 |
+| mco_lb56 | 79.47 | 75.90 | −3.57 | 0.825 | 0.757 | −0.068 |
+| mco_lb84 | 78.45 | 73.23 | **−5.22** | 0.791 | 0.680 | **−0.112** |
 
-FR is neutral-to-better in 8 of 10 configurations, with the most consistent gains in the no-MCO series (nomco_lb28–lb84) where the removed static features contributed collinearity noise rather than signal. The single major exception is mco_lb84 (−4.42 pp Combined%, −0.141 R²): with an 84-day look-back spanning the COVID structural break, regime gating relied on static spatial signals (population density, GTFS coverage, OSM POI density) to separate pre-/during-/post-MCO contexts; removing those 17 nodes collapses regime separation and accuracy significantly. For look-backs ≤56 days the COVID window sits largely outside the look-back, so static feature removal is harmless or beneficial.
+The post-fix runs cleanly split the FR trade-off along the regime axis. **Under nomco, FR wins every lookback ≥14**, with the margin growing with window length (+0.81 at lb14 up to +4.26 at lb84) — removing the 26 zero-signal features acts as noise regularisation under long autocorrelation windows, and even converts the full model's only `overfit` configuration (nomco_lb84, validation drift +36.9%) into a comfortable `good_fit`. **Under mco, FR loses every lookback** (−0.85 to −5.22, deepening with window length): with an input that spans or follows the COVID structural break, the redundant near-constant fuel-price columns evidently provide a stabilising anchor whose removal costs accuracy and robustness.
 
-**Lookback sensitivity (no-MCO):** FR peaks at lb14 (81.62%, +0.16 pp vs Full), with lb28 (81.12%) a close second. The FR advantage grows at longer look-backs — nomco_lb84 now clears the target (75.58%) where Full fell short (74.65%), a +0.93 pp gain attributable to eliminating static-node noise over long windows.
+**Lookback sensitivity (no-MCO):** FR peaks at lb14 (86.59%) with lb28 (86.07%) a close second; even FR nomco_lb84 (81.94%) outscores every baseline in the study.
 
-**Lookback sensitivity (MCO):** FR MCO optimum shifts to lb28 (76.54%) from Full's lb56 (76.48%). Without static spatial anchors the regime gating peaks earlier; lb56 (76.43%) is a marginal 0.11 pp behind. Both lb28 and lb56 remain above the 75% target. mco_lb84 collapses (see above).
+**Lookback sensitivity (MCO):** both variants peak at lb14 (Full 81.99, FR 78.74). All Full MCO configs clear the 75% target; FR clears it at lb7/lb14/lb28/lb56 and fails only at mco_lb84 (73.23%).
 
-**MCO degradation:** At lb14 FR degrades by 5.96 pp (81.62→75.66) versus Full's 5.80 pp. The slightly larger gap reflects the absence of static spatial anchors under MCO conditions. The mean degradation across lb7–lb56 is ~3.7 pp for FR vs ~3.3 pp for Full — a modest increase that remains well below the baseline median MCO degradation.
+**MCO degradation:** at lb14, FR degrades by 7.85 pp (86.59→78.74) versus Full's 3.79 pp (85.78→81.99). Feature redundancy is part of the robustness budget: use FR for normal operations, Full for shock-prone regimes.
 
 ---
 
@@ -527,8 +527,8 @@ FR is neutral-to-better in 8 of 10 configurations, with the most consistent gain
 
 | Model | Combined% | R² | MAE | RMSE |
 |-------|-----------|-----|-----|------|
-| **HMT-TSF-FR** | **81.62** | **0.807** | 60,306 | **101,291** |
-| HMT-TSF | 81.46 | 0.797 | **59,105** | 103,684 |
+| **HMT-TSF-FR** | **86.59** | **0.906** | **46,323** | **70,664** |
+| HMT-TSF | 85.78 | 0.897 | 49,897 | 73,757 |
 | Informer (tuned) | 79.99 | 0.778 | 65,360 | 108,628 |
 | TPA-LSTM (tuned) | 79.95 | 0.782 | 66,703 | 107,475 |
 | BiLSTM (tuned) | 79.44 | 0.794 | 73,516 | 104,667 |
@@ -536,7 +536,7 @@ FR is neutral-to-better in 8 of 10 configurations, with the most consistent gain
 | ASTGCN (tuned) | 78.82 | 0.754 | 72,053 | 114,259 |
 | LSTM (tuned) | 78.43 | 0.777 | 78,339 | 108,676 |
 
-HMT-TSF-FR sets the study-wide headline at nomco_lb14: Combined% 81.62% and R² 0.807, leading all 16 models on both metrics. HMT-TSF Full at 81.46% is 0.16 pp behind and edges FR on raw MAE (59,105 vs 60,306); FR achieves the lowest RMSE in the study (101,291). The next baseline tier (Informer, TPA-LSTM, BiLSTM) clusters 1.5–2.2 pp below FR.
+HMT-TSF-FR sets the study-wide headline at nomco_lb14: Combined% 86.59% and R² 0.906, leading all 16 models on every metric, with HMT-TSF Full second at 85.78%. The next baseline tier (Informer, TPA-LSTM, BiLSTM) sits 6.6–7.2 pp below FR. Part of this margin reflects HMT-TSF's exclusive access to known-future calendar conditioning (`X_future`) — see the comparison-fairness note in `REVISION.md`.
 
 ---
 
@@ -544,16 +544,16 @@ HMT-TSF-FR sets the study-wide headline at nomco_lb14: Combined% 81.62% and R² 
 
 | Model | Combined% | R² | MAE | RMSE |
 |-------|-----------|-----|-----|------|
+| **HMT-TSF** | **81.99** | **0.859** | **63,853** | **88,228** |
+| HMT-TSF-FR | 78.74 | 0.780 | 73,630 | 110,319 |
 | Informer (tuned) | 75.79 | 0.742 | 85,636 | 119,628 |
-| **HMT-TSF** | **75.66** | **0.724** | **84,286** | 123,558 |
-| HMT-TSF-FR | 75.66 | 0.708 | 81,565 | 127,181 |
 | ST-LSTM (tuned) | 75.05 | 0.726 | 86,892 | 123,067 |
 | TPA-LSTM (tuned) | 74.77 | 0.721 | 87,921 | 124,327 |
 | BiLSTM (tuned) | 70.66 | 0.666 | 111,167 | 135,981 |
 | CNN-LSTM-Aug (tuned) | 67.98 | 0.604 | 121,399 | 148,024 |
 | LSTM (tuned) | 66.23 | 0.581 | 130,969 | 152,325 |
 
-Under MCO at lb14 both HMT-TSF variants tie at Combined% 75.66%, statistically level with the strongest baseline Informer tuned (75.79%). Full edges FR on R² (0.724 vs 0.708) and RMSE without the static-feature handicap; FR edges Full on MAE (81,565 vs 84,286). Note that FR's MCO optimum is at lb28 (76.54%), where it would lead the MCO table. Both HMT-TSF variants clear the 75% target; the remaining baselines drop to 66–75% as the COVID structural break overwhelms pure temporal/spatial pattern transfer.
+Under MCO at lb14 the full HMT-TSF leads the entire study at 81.99% — 6.20 pp ahead of the strongest baseline (Informer tuned, 75.79%) — with FR second at 78.74%. Both HMT-TSF variants clear the 75% target; the remaining baselines drop to 66–76% as the COVID structural break overwhelms pure temporal/spatial pattern transfer.
 
 ---
 
@@ -565,35 +565,35 @@ Test set split chronologically into 3 equal blocks. Combined% and R² per block;
 
 | Configuration | Block 1 | R² | Block 2 | R² | Block 3 | R² | Range |
 |---------------|---------|-----|---------|-----|---------|-----|-------|
-| nomco_lb7 | 81.56 | 0.821 | 75.59 | 0.693 | 82.93 | 0.848 | 7.34 |
-| nomco_lb14 | 84.72 | 0.863 | 76.79 | 0.698 | 83.27 | 0.838 | 7.93 |
-| nomco_lb28 | 86.66 | 0.896 | 72.12 | 0.633 | 82.86 | 0.846 | 14.54 |
-| nomco_lb56 | 78.40 | 0.759 | 75.72 | 0.728 | 79.20 | 0.778 | 3.48 |
-| nomco_lb84 | 67.68 | 0.586 | 78.63 | 0.788 | 78.01 | 0.752 | 10.95 |
-| mco_lb7 | 69.77 | 0.636 | 79.45 | 0.781 | 76.33 | 0.706 | 9.68 |
-| mco_lb14 | 70.64 | 0.663 | 80.18 | 0.792 | 76.17 | 0.710 | 9.54 |
-| mco_lb28 | 69.82 | 0.654 | 81.25 | 0.803 | 76.85 | 0.705 | 11.43 |
-| mco_lb56 | 72.36 | 0.673 | 78.25 | 0.746 | 78.86 | 0.745 | 6.50 |
-| mco_lb84 | 70.07 | 0.616 | 74.42 | 0.667 | 77.56 | 0.740 | 7.49 |
+| nomco_lb7 | 88.36 | 0.936 | 81.72 | 0.843 | 84.88 | 0.887 | 6.64 |
+| nomco_lb14 | 90.62 | 0.960 | 82.14 | 0.846 | 85.12 | 0.887 | 8.48 |
+| nomco_lb28 | 87.08 | 0.927 | 78.57 | 0.810 | 87.50 | 0.915 | 8.93 |
+| nomco_lb56 | 75.81 | 0.757 | 86.81 | 0.929 | 85.71 | 0.893 | 11.00 |
+| nomco_lb84 | 73.44 | 0.707 | 78.28 | 0.803 | 81.50 | 0.819 | 8.06 |
+| mco_lb7 | 71.99 | 0.712 | 84.66 | 0.899 | 79.47 | 0.804 | 12.67 |
+| mco_lb14 | 77.66 | 0.807 | 87.33 | 0.929 | 81.27 | 0.840 | 9.67 |
+| mco_lb28 | 73.74 | 0.740 | 85.94 | 0.901 | 80.27 | 0.825 | 12.20 |
+| mco_lb56 | 75.42 | 0.790 | 81.64 | 0.841 | 81.36 | 0.843 | 6.22 |
+| mco_lb84 | 76.12 | 0.767 | 79.45 | 0.809 | 79.78 | 0.794 | 3.66 |
 
 **HMT-TSF-FR (F=53):**
 
 | Configuration | Block 1 | R² | Block 2 | R² | Block 3 | R² | Range |
 |---------------|---------|-----|---------|-----|---------|-----|-------|
-| nomco_lb7 | 83.47 | 0.856 | 75.61 | 0.705 | 80.52 | 0.804 | 7.86 |
-| nomco_lb14 | 85.84 | 0.883 | 76.16 | 0.696 | 83.39 | 0.847 | 9.68 |
-| nomco_lb28 | 85.64 | 0.883 | 72.93 | 0.640 | 85.70 | 0.877 | 12.77 |
-| nomco_lb56 | 78.01 | 0.753 | 76.00 | 0.734 | 81.26 | 0.789 | 5.26 |
-| nomco_lb84 | 69.50 | 0.633 | 79.04 | 0.801 | 78.45 | 0.749 | 9.54 |
-| mco_lb7 | 69.05 | 0.616 | 80.08 | 0.791 | 76.25 | 0.708 | 11.03 |
-| mco_lb14 | 71.91 | 0.680 | 78.31 | 0.722 | 76.66 | 0.709 | 6.40 |
-| mco_lb28 | 71.05 | 0.660 | 79.88 | 0.782 | 78.67 | 0.735 | 8.83 |
-| mco_lb56 | 71.23 | 0.677 | 78.67 | 0.751 | 79.40 | 0.757 | 8.17 |
-| mco_lb84 | 58.84 | 0.237 | 74.33 | 0.661 | 76.40 | 0.720 | 17.56 |
+| nomco_lb7 | 87.90 | 0.932 | 82.18 | 0.849 | 84.61 | 0.884 | 5.73 |
+| nomco_lb14 | 91.39 | 0.966 | 83.26 | 0.860 | 85.70 | 0.891 | 8.13 |
+| nomco_lb28 | 88.09 | 0.939 | 81.50 | 0.844 | 89.04 | 0.930 | 7.53 |
+| nomco_lb56 | 79.60 | 0.807 | 86.27 | 0.919 | 86.69 | 0.909 | 7.08 |
+| nomco_lb84 | 75.42 | 0.756 | 83.41 | 0.890 | 87.62 | 0.917 | 12.20 |
+| mco_lb7 | 69.64 | 0.645 | 84.71 | 0.901 | 79.47 | 0.799 | 15.07 |
+| mco_lb14 | 73.53 | 0.712 | 82.12 | 0.798 | 80.59 | 0.826 | 8.59 |
+| mco_lb28 | 67.00 | 0.540 | 81.67 | 0.827 | 81.36 | 0.839 | 14.68 |
+| mco_lb56 | 67.22 | 0.631 | 80.32 | 0.823 | 80.56 | 0.827 | 13.33 |
+| mco_lb84 | 69.64 | 0.590 | 74.73 | 0.742 | 75.44 | 0.705 | 5.80 |
 
-**No-MCO pattern:** Both variants show Block 2 as the consistently weakest segment — a lower-ridership seasonal phase in the mid-test window — with Blocks 1 and 3 stronger. nomco_lb56 is the most stable FR no-MCO configuration (range 5.26%), slightly above Full's (3.48%). FR nomco_lb14 at range 9.68 is somewhat wider than Full (7.93) but Block 1 rises from 84.72 to 85.84. The nomco_lb28 Block 2 dip (72.93 for FR, 72.12 for Full) is the main source of within-test variance in both variants.
+**No-MCO pattern:** At short lookbacks (lb7–lb28) Block 2 is the weakest segment in both variants — a lower-ridership seasonal phase in the mid-test window — while at lb56–lb84 the ordering flips and Block 1 is weakest. No nomco block falls below 73.4 (Full) / 75.4 (FR) Combined%. FR nomco_lb14, the study headline, holds 91.39 / 83.26 / 85.70 across blocks (range 8.13).
 
-**MCO pattern:** MCO Block 1 is consistently the weakest in both variants (COVID disruption at test start), with Blocks 2–3 recovering. The mco_lb84 FR collapse is stark: Block 1 drops to 58.84% (R²=0.237), far below Full's 70.07% (R²=0.616), confirming static-feature dependence at long COVID windows. FR mco_lb14 is more temporally stable (range 6.40 vs Full 9.54), reflecting the cleaner feature set reducing variance at shorter look-backs. mco_lb56 remains the most stable MCO Full configuration (range 6.50%); FR mco_lb56 is comparable (range 8.17%).
+**MCO pattern:** MCO Block 1 is consistently the weakest in both variants (COVID disruption at test start), with Blocks 2–3 recovering. FR's MCO instability is visible block-wise too: FR mco_lb28 and mco_lb56 drop to 67.0–67.2 in Block 1 versus Full's 73.7–75.4, confirming the redundancy-as-robustness effect. The most stable configurations are mco_lb84 in both variants (range 3.66 Full, 5.80 FR), though at lower absolute accuracy.
 
 ---
 

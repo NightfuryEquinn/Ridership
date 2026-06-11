@@ -1,10 +1,10 @@
 # HMT-TSF Results (Proposed Model)
 
-> Source: `src/outputs/aggregate_hmttsf.csv` · Generated 2026-06-05
+> Source: `src/outputs/aggregate_hmttsf.csv` · Generated 2026-06-11 (regenerated after the feature-order fix — see `REVISION.md`)
 > Companion files: `RESULTS.md` (16 baselines), `DIAGNOSTICS.md` (fit diagnostics)
 > Scope: HMT-TSF and HMT-TSF-FR across `{nomco, mco}` × `{lb7, lb14, lb28, lb56, lb84}` = 10 configs each, with naive-persistence reference, Δ-vs-naive block, 3-block walk-forward validation, and fit diagnosis.
-> **Regeneration required (2026-06-11):** all HMT-TSF runs in this file pre-date the feature-order fix (see `REVISION.md`): the semantic feature grouping was misaligned, `X_future` carried lag/trend/fuel columns instead of calendar features, and the optional residual-boost decision was gated on test metrics rather than validation metrics. To refresh on the A100: rebuild all sequence sets (`python src/features/run_pipeline.py --skip-clean --skip-align`), then re-run `src/models/hybrid/hmttsf.py` per `{nomco, mco} × {lb7, lb14, lb28, lb56, lb84}` ± `--no-feat-reduce`, with `--shap` on the headline configs (SHAP labels are correct automatically after the fix).
-> All figures below are also single-run point estimates (seed=42) — see the caveat in `RESULTS.md`.
+> These runs use the corrected pipeline: semantic feature groups aligned to the true column order, `X_future` carrying the 16 known-future calendar features, and the residual-boost decision gated on **validation** metrics (`--use-catboost` enabled; the boost was applied in 5 of 20 runs, all at extreme lookbacks — full: nomco_lb7/nomco_lb84/mco_lb84; FR: nomco_lb7/mco_lb84).
+> All figures are single-run point estimates (seed=42) — see the caveat in `RESULTS.md`.
 
 ## 1. Conventions
 
@@ -17,25 +17,25 @@
 
 ---
 
-## 2. Main results — all 10 configs
+## 2. Main results — all 10 configs (HMT-TSF, F=79)
 
 | Config | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| **nomco_lb7** | 79.90 | 6.16 | 5.42 | 8.52 | 0.784 | 68,085 | 106,956 |
-| **nomco_lb14** | **81.82** | **5.45** | **4.58** | **8.16** | **0.802** | **57,553** | **102,512** |
-| **nomco_lb28** | 80.23 | 5.94 | 5.39 | 8.44 | 0.788 | 67,735 | 106,116 |
-| **nomco_lb56** | 77.75 | 6.89 | 6.33 | 9.02 | 0.755 | 79,447 | 113,291 |
-| **nomco_lb84** | 74.17 | 8.13 | 7.59 | 10.11 | 0.695 | 94,581 | 126,031 |
-| mco_lb7 | 75.25 | 7.68 | 6.85 | 10.23 | 0.712 | 84,288 | 125,937 |
-| mco_lb14 | 76.11 | 7.31 | 6.64 | 9.94 | 0.729 | 81,913 | 122,596 |
-| mco_lb28 | 75.94 | 7.45 | 6.58 | 10.02 | 0.722 | 81,350 | 123,840 |
-| **mco_lb56** | **76.53** | 7.24 | 6.23 | 10.00 | 0.722 | 77,313 | 124,147 |
-| mco_lb84 | 73.95 | 8.33 | 6.90 | 10.82 | 0.673 | 85,604 | 134,339 |
+| nomco_lb7 | 84.88 | 4.74 | 4.25 | 6.13 | 0.888 | 53,325 | 76,951 |
+| **nomco_lb14** | **85.78** | **4.39** | **3.97** | **5.87** | **0.897** | **49,897** | **73,757** |
+| nomco_lb28 | 84.23 | 4.94 | 4.55 | 6.28 | 0.883 | 57,268 | 78,910 |
+| nomco_lb56 | 82.53 | 5.52 | 5.11 | 6.84 | 0.859 | 64,198 | 85,874 |
+| nomco_lb84 | 77.68 | 6.99 | 6.59 | 8.73 | 0.773 | 82,174 | 108,800 |
+| mco_lb7 | 78.61 | 6.89 | 6.12 | 8.38 | 0.807 | 75,401 | 103,170 |
+| **mco_lb14** | **81.99** | 5.68 | 5.18 | 7.15 | 0.859 | 63,853 | 88,228 |
+| mco_lb28 | 79.89 | 6.26 | 5.83 | 8.02 | 0.822 | 72,032 | 99,059 |
+| mco_lb56 | 79.47 | 6.68 | 5.91 | 7.95 | 0.825 | 73,334 | 98,598 |
+| mco_lb84 | 78.45 | 6.73 | 6.17 | 8.64 | 0.791 | 76,593 | 107,293 |
 
 **Read-out:**
-- **Best overall: `nomco_lb14` — 81.82 Combined%, R² 0.802, MAE 57,553.** This is the global best of the entire study (beats the top baseline Informer at 79.13 by +2.69 Combined).
-- **nomco lookback profile is single-peaked at lb14**, falling off symmetrically: lb7 (79.90) < lb14 (81.82) > lb28 (80.23) > lb56 (77.75) > lb84 (74.17). The 14-day window is decisively optimal for a 7-day horizon.
-- **MCO profile inverts the lookback preference**: under MCO the best window is **lb56 (76.53)**, with lb84 again worst. Longer context helps the model average through the lockdown discontinuity, whereas in normal conditions it just adds noise.
+- **Best full-model config: `nomco_lb14` — 85.78 Combined%, R² 0.897, MAE 49,897.** The study-wide best is the feature-reduced variant at the same configuration (HMT-TSF-FR `nomco_lb14`: **86.59**, R² 0.906, MAE 46,323 — §11), which beats the top baseline (Informer tuned, 79.99) by **+6.60 Combined**.
+- **nomco lookback profile is single-peaked at lb14**: lb7 (84.88) < lb14 (85.78) > lb28 (84.23) > lb56 (82.53) > lb84 (77.68). The 14-day window remains decisively optimal for a 7-day horizon.
+- **Under MCO the lb14 peak persists** (81.99), unlike the pre-fix runs where lb56 led: with the correct future-calendar conditioning, short windows no longer need long context to absorb the lockdown discontinuity. mco_lb84 (78.45) actually *exceeds* nomco_lb84 (77.68) — the only lookback where the MCO condition wins, because nomco_lb84 is the study's sole overfit configuration (§6).
 
 ---
 
@@ -45,20 +45,20 @@ Model vs naive (last-value) baseline, Combined% and R², with Δ.
 
 | Config | Model Combined% | Naive Combined% | Δ Combined | Model R² | Naive R² | Δ R² |
 |---|---:|---:|---:|---:|---:|---:|
-| nomco_lb7 | 79.90 | 34.80 | +45.10 | 0.784 | −0.963 | +1.746 |
-| nomco_lb14 | 81.82 | 34.83 | **+46.98** | 0.802 | −0.961 | +1.763 |
-| nomco_lb28 | 80.23 | 34.64 | +45.59 | 0.788 | −0.969 | +1.757 |
-| nomco_lb56 | 77.75 | 34.99 | +42.76 | 0.755 | −0.960 | +1.715 |
-| nomco_lb84 | 74.17 | 34.22 | +39.95 | 0.695 | −0.969 | +1.664 |
-| mco_lb7 | 75.25 | 25.73 | +49.52 | 0.712 | −1.132 | +1.844 |
-| mco_lb14 | 76.11 | 25.62 | +50.49 | 0.729 | −1.138 | +1.866 |
-| mco_lb28 | 75.94 | 25.77 | +50.17 | 0.722 | −1.142 | +1.864 |
-| mco_lb56 | 76.53 | 25.62 | +50.91 | 0.722 | −1.157 | +1.880 |
-| mco_lb84 | 73.95 | 25.76 | +48.19 | 0.673 | −1.160 | +1.833 |
+| nomco_lb7 | 84.88 | 34.80 | +50.09 | 0.888 | −0.963 | +1.851 |
+| nomco_lb14 | 85.78 | 34.83 | **+50.94** | 0.897 | −0.961 | +1.858 |
+| nomco_lb28 | 84.23 | 34.64 | +49.59 | 0.883 | −0.969 | +1.852 |
+| nomco_lb56 | 82.53 | 34.99 | +47.54 | 0.859 | −0.960 | +1.819 |
+| nomco_lb84 | 77.68 | 34.22 | +43.46 | 0.773 | −0.969 | +1.742 |
+| mco_lb7 | 78.61 | 25.73 | +52.88 | 0.807 | −1.132 | +1.939 |
+| mco_lb14 | 81.99 | 25.62 | **+56.37** | 0.859 | −1.137 | +1.997 |
+| mco_lb28 | 79.89 | 25.77 | +54.12 | 0.822 | −1.142 | +1.964 |
+| mco_lb56 | 79.47 | 25.62 | +53.85 | 0.825 | −1.157 | +1.982 |
+| mco_lb84 | 78.45 | 25.76 | +52.69 | 0.791 | −1.160 | +1.952 |
 
 **Read-out:**
 - Naive persistence has **negative R² in every config** (−0.96 nomco, −1.14 mco) — it is worse than predicting the mean, confirming ridership has strong non-persistent dynamics (weekly seasonality, holidays, fuel/weather shocks).
-- HMT-TSF beats naive by **+47.0 Combined / +1.76 R² at nomco_lb14**, and the margin is even larger under MCO (**+50 Combined**), because the naive baseline degrades faster than the model when the lockdown break is included. This quantifies how much structure the model is actually capturing beyond carry-forward.
+- HMT-TSF beats naive by **+50.9 Combined / +1.86 R² at nomco_lb14**, and the margin is even larger under MCO (**+56.4 Combined at mco_lb14**), because the naive baseline degrades faster than the model when the lockdown break is included.
 
 ---
 
@@ -66,74 +66,74 @@ Model vs naive (last-value) baseline, Combined% and R², with Δ.
 
 | Lookback | nomco Combined% | mco Combined% | Δ (mco − nomco) | nomco R² | mco R² |
 |---|---:|---:|---:|---:|---:|
-| lb7 | 79.90 | 75.25 | −4.65 | 0.784 | 0.712 |
-| lb14 | 81.82 | 76.11 | −5.71 | 0.802 | 0.729 |
-| lb28 | 80.23 | 75.94 | −4.29 | 0.788 | 0.722 |
-| lb56 | 77.75 | 76.53 | −1.22 | 0.755 | 0.722 |
-| lb84 | 74.17 | 73.95 | −0.22 | 0.695 | 0.673 |
+| lb7 | 84.88 | 78.61 | −6.27 | 0.888 | 0.807 |
+| lb14 | 85.78 | 81.99 | −3.79 | 0.897 | 0.859 |
+| lb28 | 84.23 | 79.89 | −4.34 | 0.883 | 0.822 |
+| lb56 | 82.53 | 79.47 | −3.06 | 0.859 | 0.825 |
+| lb84 | 77.68 | 78.45 | **+0.77** | 0.773 | 0.791 |
 
 **Read-out:**
-- HMT-TSF's MCO degradation is **−5.71 at lb14 and shrinks to −1.22 at lb56 / −0.22 at lb84**. With a long enough window the model is virtually MCO-invariant.
-- Context vs. `RESULTS.md` §5: at lb14 HMT-TSF (−5.71) is the most MCO-robust model in the entire study, marginally ahead of Informer (−5.88) and BiLSTM (−6.30), and far ahead of the fragile tail (CNN-LSTM −32.1, STFGNN −32.9). It also retains the **highest absolute MCO accuracy** (76.11 vs Informer 73.25).
-- This robustness is the core empirical justification for the regime-embedding component of the architecture.
+- HMT-TSF's MCO degradation at the headline lookback is **−3.79** — the smallest lb14 degradation in the study (Informer tuned: −4.64) — and it retains the **highest absolute MCO accuracy of any model (81.99)**, clearing the 75% target with room to spare.
+- At lb84 the sign flips (+0.77): the MCO-included condition wins, but only because nomco_lb84 overfits (§6) — not because long context is desirable.
+- This robustness is the core empirical justification for the regime-embedding component of the architecture. Note that the FR variant is noticeably **less** MCO-robust (−7.85 at lb14, §11) — the dropped near-constant fuel levels evidently still anchor the model under the structural break.
 
 ---
 
-## 5. Walk-forward validation (3 blocks)
+## 5. Walk-forward validation (3 blocks, HMT-TSF)
 
 Each config was re-validated on 3 sequential out-of-sample blocks. Combined% / R² per block.
 
 | Config | Block 1 | Block 2 | Block 3 | Spread (Comb.) |
 |---|---|---|---|---:|
-| nomco_lb7 | 81.63 / 0.822 | 75.59 / 0.693 | 82.90 / 0.847 | 7.3 |
-| nomco_lb14 | 85.18 / 0.870 | 76.99 / 0.699 | 83.72 / 0.844 | 8.2 |
-| nomco_lb28 | 86.63 / 0.896 | 72.11 / 0.633 | 82.83 / 0.845 | 14.5 |
-| nomco_lb56 | 78.38 / 0.759 | 75.72 / 0.728 | 79.16 / 0.778 | 3.4 |
-| nomco_lb84 | 68.33 / 0.593 | 78.65 / 0.788 | 75.85 / 0.715 | 10.3 |
-| mco_lb7 | 69.89 / 0.638 | 79.52 / 0.782 | 76.31 / 0.706 | 9.6 |
-| mco_lb14 | 71.58 / 0.673 | 80.51 / 0.793 | 76.24 / 0.711 | 8.9 |
-| mco_lb28 | 69.80 / 0.653 | 81.23 / 0.803 | 76.82 / 0.704 | 11.4 |
-| mco_lb56 | 72.40 / 0.674 | 78.29 / 0.747 | 78.90 / 0.746 | 6.5 |
-| mco_lb84 | 70.06 / 0.615 | 74.36 / 0.666 | 77.52 / 0.740 | 7.5 |
+| nomco_lb7 | 88.36 / 0.936 | 81.72 / 0.843 | 84.88 / 0.887 | 6.6 |
+| nomco_lb14 | 90.62 / 0.960 | 82.14 / 0.846 | 85.12 / 0.887 | 8.5 |
+| nomco_lb28 | 87.08 / 0.927 | 78.57 / 0.810 | 87.50 / 0.915 | 8.9 |
+| nomco_lb56 | 75.81 / 0.757 | 86.81 / 0.929 | 85.71 / 0.893 | 11.0 |
+| nomco_lb84 | 73.44 / 0.707 | 78.28 / 0.803 | 81.50 / 0.819 | 8.1 |
+| mco_lb7 | 71.99 / 0.712 | 84.66 / 0.899 | 79.47 / 0.804 | 12.7 |
+| mco_lb14 | 77.66 / 0.807 | 87.33 / 0.929 | 81.27 / 0.840 | 9.7 |
+| mco_lb28 | 73.74 / 0.740 | 85.94 / 0.901 | 80.27 / 0.825 | 12.2 |
+| mco_lb56 | 75.42 / 0.790 | 81.64 / 0.841 | 81.36 / 0.843 | 6.2 |
+| mco_lb84 | 76.12 / 0.767 | 79.45 / 0.809 | 79.78 / 0.794 | 3.7 |
 
 **Read-out:**
-- All blocks stay strong (no block drops below ~68 Combined / 0.59 R²) — performance is **not driven by a single favourable test split**.
-- Under `nomco`, **Block 2 is consistently the weakest** block (e.g., lb14: 76.99 vs 85.18/83.72), indicating a harder middle segment (likely a seasonal/behavioural shift). Under `mco`, the ordering flips — **Block 2 is the strongest** — consistent with the lockdown signal landing in different blocks across the two splits.
-- **nomco_lb56 is the most temporally stable** config (spread 3.4), a useful property if block-to-block consistency matters more than peak accuracy. nomco_lb28 has the highest single block (86.63 / R² 0.896) but the widest spread (14.5).
+- All blocks stay strong (no block drops below ~72 Combined / 0.71 R²) — performance is **not driven by a single favourable test split**.
+- Under `nomco` at short lookbacks, **Block 2 is the weakest** (e.g., lb14: 82.14 vs 90.62/85.12), indicating a harder middle segment; under `mco`, **Block 1 is the weakest** and Block 2 the strongest — consistent with the lockdown signal landing in different blocks across the two splits.
+- **mco_lb84 is the most temporally stable** config (spread 3.7), followed by mco_lb56 (6.2); among nomco configs, lb7 is the most stable (6.6). The headline nomco_lb14 spread is 8.5.
 
 ---
 
 ## 6. Fit diagnosis
 
-Every HMT-TSF config (all 10) is diagnosed **`good_fit`** — see `DIAGNOSTICS.md` for the cross-model comparison.
+9 of 10 HMT-TSF configs are diagnosed **`good_fit`**; the sole exception is `nomco_lb84` (overfit — validation drift +36.9% after epoch 18). HMT-TSF-FR is `good_fit` in all 10 configs (§11). See `DIAGNOSTICS.md` for the cross-model comparison.
 
 | Config | Verdict | Val drift % | Gap ratio | Val trend | Best/Total epochs |
 |---|---|---:|---:|---|---|
-| nomco_lb7 | good_fit | 1.19 | 1.97 | flat | 147 / 150 |
-| nomco_lb14 | good_fit | 1.50 | 2.39 | flat | 148 / 150 |
-| nomco_lb28 | good_fit | 2.89 | 2.38 | flat | 66 / 91 |
-| nomco_lb56 | good_fit | 12.32 | 2.76 | falling | 17 / 37 |
-| nomco_lb84 | good_fit | 7.22 | 2.84 | flat | 58 / 88 |
-| mco_lb7 | good_fit | 0.44 | 1.80 | flat | 137 / 150 |
-| mco_lb14 | good_fit | 5.22 | 2.14 | flat | 102 / 122 |
-| mco_lb28 | good_fit | 9.34 | 2.10 | falling | 25 / 50 |
-| mco_lb56 | good_fit | 4.42 | 2.28 | falling | 18 / 38 |
-| mco_lb84 | good_fit | 3.93 | 1.99 | flat | 45 / 75 |
+| nomco_lb7 | good_fit | 0.00 | 1.69 | flat | 150 / 150 |
+| nomco_lb14 | good_fit | 0.61 | 1.57 | flat | 50 / 70 |
+| nomco_lb28 | good_fit | 3.77 | 2.03 | flat | 118 / 143 |
+| nomco_lb56 | good_fit | 12.33 | 2.64 | flat | 47 / 67 |
+| nomco_lb84 | **overfit** | **36.95** | 2.45 | falling | 18 / 48 |
+| mco_lb7 | good_fit | 3.34 | 1.72 | flat | 77 / 102 |
+| mco_lb14 | good_fit | 4.36 | 1.85 | flat | 77 / 97 |
+| mco_lb28 | good_fit | 12.00 | 2.18 | flat | 78 / 103 |
+| mco_lb56 | good_fit | 12.85 | 2.35 | falling | 28 / 48 |
+| mco_lb84 | good_fit | 3.40 | 2.12 | flat | 96 / 126 |
 
 **Read-out:**
-- **Gap ratio (val/train loss) stays within 1.8–2.8× — always under the 3× overfit threshold.** No config shows memorisation. This is the cleanest fit profile in the study: every LSTM-family and STGCN-family baseline exceeds 3× (often far more — up to 37×; see `DIAGNOSTICS.md`).
-- **Validation drift is small** (≤12.3%, well under the 25% threshold); largest at nomco_lb56 but still `good_fit`.
-- The lb14/lb7 nomco runs train to near the epoch cap (148/147 of 150) with flat val trend — they could likely absorb a few more epochs, but the marginal gain is small given they are already the best configs.
+- **Gap ratio (val/train loss) stays within 1.6–2.6× — always under the 3× overfit threshold.** No config shows memorisation; every LSTM-family and STGCN-family baseline exceeds 3× (often far more — up to 37×; see `DIAGNOSTICS.md`).
+- The single `overfit` verdict (nomco_lb84) is drift-driven, not gap-driven: validation loss degraded +37% after its early best (epoch 18 of 48). The 84-day window over a 7-day horizon remains the study's clearest "too much context" case — and the FR variant fixes it (nomco_lb84 `good_fit`, +4.26 Combined; §11).
+- The headline nomco_lb14 run has the cleanest profile in the study: gap 1.57×, drift 0.61%.
 
 ---
 
 ## 7. Verdict
 
-1. **HMT-TSF is the global best model in the study** at its default `nomco_lb14`: 81.82 Combined%, R² 0.802, MAE 57,553 — ahead of every baseline on every headline metric (`RESULTS.md` §2).
-2. **It generalises cleanly** — the only model family that is `good_fit` across *all* configs, with gap ratios capped at 2.8× vs baselines' 3–37×.
-3. **It is the most shock-robust model** — smallest MCO degradation at lb14 and near-invariant at long lookbacks (−0.22 at lb84), with the highest retained MCO accuracy.
-4. **Lookback recommendation: lb14 for normal operations, lb56 for shock-prone regimes.** lb84 is never optimal and should be dropped.
-5. **Walk-forward confirms the headline is not split-luck** — all three blocks hold up.
+1. **HMT-TSF leads the study at its default `nomco_lb14`**: 85.78 Combined%, R² 0.897, MAE 49,897 — and the feature-reduced variant raises the study-wide headline to **86.59 / 0.906 / 46,323**, +6.60 Combined over the best tuned baseline (Informer tuned, 79.99).
+2. **It generalises cleanly** — 19 of 20 runs across both variants are `good_fit` (sole exception: full-model nomco_lb84), with gap ratios capped at 2.7× vs baselines' 3–37×.
+3. **It is the most shock-robust model** — smallest lb14 MCO degradation (−3.79) and the highest retained MCO accuracy in the study (81.99).
+4. **Lookback recommendation: lb14 everywhere.** With corrected future-calendar conditioning, lb14 is optimal in both regimes; lb84 is never optimal and overfits at nomco.
+5. **Walk-forward confirms the headline is not split-luck** — all three blocks hold up (≥82.1 Combined at nomco_lb14).
 
 ---
 
@@ -141,15 +141,14 @@ Every HMT-TSF config (all 10) is diagnosed **`good_fit`** — see `DIAGNOSTICS.m
 
 | Scenario | Recommended HMT-TSF config | Rationale |
 |---|---|---|
-| **Default production forecasting** | `nomco_lb14` | Global best accuracy + clean fit; the 14-day window is decisively optimal for the 7-day horizon. |
-| **Shock / lockdown / structural-break regime** | `mco_lb56` (or `lb84` for maximum invariance) | Long context minimises MCO degradation (Δ −1.22) and gives the best MCO Combined% (76.53). |
-| **Maximum temporal stability across periods** | `nomco_lb56` | Lowest block-to-block spread (3.4) in walk-forward. |
-| **Lowest absolute error** | `nomco_lb14` | MAE 57,553 / RMSE 102,512 — lowest in the study. |
-| **Interpretability / driver analysis** | `nomco_lb14` with `--shap` | Clean fit makes attributions trustworthy; pair with Informer for cross-checking. |
-| **Compute / memory constrained** | HMT-TSF-FR `nomco_lb14` | 53-feature input (vs 79) cuts GCN memory ~33%; within 0.05 Combined% of full model (§11). |
-| **Drop from the grid** | `lb84` (both nomco and mco) | Never optimal; strictly dominated by shorter windows. |
+| **Default production forecasting** | HMT-TSF-FR `nomco_lb14` | Study-wide best (86.59 / R² 0.906 / MAE 46,323) at 53-feature input cost. |
+| **Shock / lockdown / structural-break regime** | full HMT-TSF `mco_lb14` | Best MCO accuracy in the study (81.99); the full feature set is markedly more MCO-robust than FR (Δ −3.79 vs −7.85). |
+| **Maximum temporal stability across periods** | `mco_lb84` (full) | Lowest block-to-block spread (3.7) in walk-forward. |
+| **Lowest absolute error** | HMT-TSF-FR `nomco_lb14` | MAE 46,323 / RMSE 70,664 — lowest in the study. |
+| **Interpretability / driver analysis** | `nomco_lb14` with `--shap` | Cleanest fit in the study (gap 1.57×) makes attributions trustworthy. |
+| **Drop from the grid** | `nomco_lb84` (full) | The study's only overfit config; strictly dominated by shorter windows. |
 
-> All numbers verified against `aggregate_hmttsf.csv` row 2.
+> All numbers verified against `aggregate_hmttsf.csv` (regenerated 2026-06-11).
 
 ---
 
@@ -157,119 +156,119 @@ Every HMT-TSF config (all 10) is diagnosed **`good_fit`** — see `DIAGNOSTICS.m
 
 ### Method
 
-SHAP values were computed using `shap.GradientExplainer` on the trained `nomco_lb14` model. The first 100 test samples (shape `100 × 84 × 79`) were used as the background set. The explainer produced an absolute SHAP array of the same shape; values were averaged over the sample and time-step dimensions, yielding a single 79-element importance vector — one score per input feature.
+SHAP values were computed using `shap.GradientExplainer` on the trained `nomco_lb14` model. The first 100 test samples (shape `100 × 14 × 79`) were used as the background set. The explainer produced an absolute SHAP array of shape `(100, 14, 79, 7)`; values were averaged over the sample, time-step, and horizon dimensions, yielding a single 79-element importance vector — one score per input feature. Feature names are resolved from the aligned CSV column order (`feature_metadata.json → column_order`), the authoritative index→name mapping after the 2026-06-11 fix.
 
-### Top 10 Features (decoded)
+### Top 10 Features — headline run (`nomco_lb14`, by mean |SHAP|)
 
-| SHAP rank | feat index | Feature name | Group | Interpretation |
-|-----------|-----------|--------------|-------|----------------|
-| 1 | feat_12 | rail_komuter | Ridership | KTM Komuter historical counts — dominant predictor; strong autocorrelation |
-| 2 | feat_4 | rail_mrt_kajang | Ridership | MRT Kajang historical counts |
-| 3 | feat_3 | rail_lrt_ampang | Ridership | LRT Ampang historical counts |
-| 4 | feat_42 | fp_chg_ron95_budi95 | Fuel — external | RON95 Budi95 subsidy price change; mode-shift signal |
-| 5 | feat_37 | fp_lv_diesel_pct_chg | Fuel — external | Diesel % change; freight/bus cost pass-through |
-| 6 | feat_2 | bus_rpn | Ridership | Rapid Bus Penang historical counts |
-| 7 | feat_20 | day_of_week | Temporal | Weekly seasonality — single strongest temporal signal |
-| 8 | feat_53 | rainfall_mm__MY10 | Rainfall — external | Selangor rainfall; wet days shift commuters onto rail |
-| 9 | feat_40 | fp_chg_diesel | Fuel — external | Diesel absolute price change |
-| 10 | feat_0 | total_ridership | Ridership | Aggregate total ridership history |
+| SHAP rank | feat index | Feature name | Group | Mean \|SHAP\| | Interpretation |
+|-----------|-----------|--------------|-------|---:|----------------|
+| 1 | feat_46 | month_cos | Temporal | 0.391 | Annual-cycle position (cosine) — seasonal demand level |
+| 2 | feat_45 | month_sin | Temporal | 0.332 | Annual-cycle position (sine) |
+| 3 | feat_41 | month | Temporal | 0.309 | Raw month index; reinforces the seasonal signal |
+| 4 | feat_12 | total_ridership | Ridership | 0.011 | Aggregate demand history — strongest non-seasonal driver |
+| 5 | feat_20 | fp_lv_diesel | Fuel — external | 0.006 | Diesel price level; mode-substitution signal |
+| 6 | feat_36 | days_to_next_public_hol | Temporal | 0.003 | Holiday anticipation (pre-holiday dips/surges) |
+| 7 | feat_19 | fp_lv_ron97 | Fuel — external | 0.002 | RON97 price level (the unfrozen petrol grade) |
+| 8 | feat_55 | rainfall_mm__MY09 | Rainfall — external | 0.001 | Perlis rainfall — northern corridor weather |
+| 9 | feat_57 | rainfall_mm__MY11 | Rainfall — external | 0.001 | Terengganu rainfall — monsoon corridor |
+| 10 | feat_53 | rainfall_mm__MY07 | Rainfall — external | 0.001 | Penang rainfall — major urban transit market |
 
 ### Interpretation
 
-The model's learned drivers align with known transit demand theory. Historical ridership on individual service lines dominates (indices 0–12), confirming strong autocorrelation — yesterday's Komuter count is the best single predictor of tomorrow's. Fuel price signals (indices 29–43) appear next, capturing the mode-substitution effect: RON95/diesel price increases reduce private vehicle use and push passengers onto transit. Day of week (`feat_20`) is the only temporal feature in the top 10, reflecting weekly periodicity as more informative than calendar or holiday indicators alone. Selangor rainfall (`feat_53`, MY10) enters because the Klang Valley concentrates the majority of Malaysian transit ridership and wet conditions measurably increase rail uptake. Static infrastructure features (GTFS, OSM, GADM, indices 64–78) rank low throughout — they carry little day-to-day variance and the model correctly down-weights them. This attribution profile supports the validity of the feature set and validates the architecture's ability to extract meaningful temporal and cross-modal signals.
+Seasonal-position encodings (`month_cos`, `month_sin`, `month`) carry by far the largest attribution magnitudes, indicating the model anchors its 7-day forecasts on where in the annual demand cycle the window sits — school terms, festive seasons, and the northeast monsoon all phase-lock to the calendar. The strongest non-seasonal driver is `total_ridership` itself, confirming aggregate autocorrelation, followed by the two *unfrozen* fuel price series (diesel and RON97 — the administered RON95 variants are SHAP-zero; §10) and holiday anticipation. Regional rainfall enters at ranks 8–10. Static infrastructure features (indices 62–78) rank at exactly zero throughout — they carry no day-to-day variance and the model correctly ignores them. Note that magnitude and cross-run consistency give complementary views: ranked by how often a feature reaches the top-15 across all ten configurations, `total_ridership` is first (10/10 runs; §10).
 
-### Full Feature Index → Name Mapping
+### Full Feature Index → Name Mapping (aligned column order)
 
-#### Group 1 — Target / Ridership (indices 0–12)
-
-| Index | Feature |
-|-------|---------|
-| 0 | total_ridership |
-| 1 | bus_rkl |
-| 2 | bus_rpn |
-| 3 | rail_lrt_ampang |
-| 4 | rail_mrt_kajang |
-| 5 | rail_lrt_kj |
-| 6 | rail_monorail |
-| 7 | rail_mrt_pjy |
-| 8 | rail_ets |
-| 9 | rail_intercity |
-| 10 | rail_komuter_utara |
-| 11 | rail_tebrau |
-| 12 | rail_komuter |
-
-#### Group 2 — Temporal (indices 13–28)
+#### Indices 0–12 — Target / Ridership
 
 | Index | Feature |
 |-------|---------|
-| 13 | is_public_holiday |
-| 14 | is_school_holiday |
-| 15 | is_holiday_any |
-| 16 | days_to_next_public_hol |
-| 17 | days_since_last_public_hol |
-| 18 | days_to_next_school_hol |
-| 19 | days_since_last_school_hol |
-| 20 | day_of_week |
-| 21 | month |
-| 22 | is_weekend |
-| 23 | dow_sin |
-| 24 | dow_cos |
-| 25 | month_sin |
-| 26 | month_cos |
-| 27 | year |
-| 28 | day_of_year |
+| 0 | bus_rkl |
+| 1 | bus_rpn |
+| 2 | rail_lrt_ampang |
+| 3 | rail_mrt_kajang |
+| 4 | rail_lrt_kj |
+| 5 | rail_monorail |
+| 6 | rail_mrt_pjy |
+| 7 | rail_ets |
+| 8 | rail_intercity |
+| 9 | rail_komuter_utara |
+| 10 | rail_tebrau |
+| 11 | rail_komuter |
+| 12 | total_ridership |
 
-#### Group 3 — External: Fuel Prices (indices 29–43)
+#### Indices 13–17 — Lag + trend
 
 | Index | Feature |
 |-------|---------|
-| 29 | fp_lv_ron95 |
-| 30 | fp_lv_ron97 |
-| 31 | fp_lv_diesel |
-| 32 | fp_lv_diesel_eastmsia |
-| 33 | fp_lv_ron95_budi95 |
-| 34 | fp_lv_ron95_skps |
-| 35 | fp_lv_ron95_pct_chg |
-| 36 | fp_lv_ron97_pct_chg |
-| 37 | fp_lv_diesel_pct_chg |
-| 38 | fp_chg_ron95 |
-| 39 | fp_chg_ron97 |
-| 40 | fp_chg_diesel |
-| 41 | fp_chg_diesel_eastmsia |
-| 42 | fp_chg_ron95_budi95 |
-| 43 | fp_chg_ron95_skps |
+| 13 | ridership_lag_7 |
+| 14 | ridership_lag_14 |
+| 15 | ridership_lag_28 |
+| 16 | year |
+| 17 | day_of_year |
 
-#### Group 3 — External: Rainfall by State (indices 44–58)
+#### Indices 18–32 — External: Fuel Prices
+
+| Index | Feature |
+|-------|---------|
+| 18 | fp_lv_ron95 |
+| 19 | fp_lv_ron97 |
+| 20 | fp_lv_diesel |
+| 21 | fp_lv_diesel_eastmsia |
+| 22 | fp_lv_ron95_budi95 |
+| 23 | fp_lv_ron95_skps |
+| 24 | fp_lv_ron95_pct_chg |
+| 25 | fp_lv_ron97_pct_chg |
+| 26 | fp_lv_diesel_pct_chg |
+| 27 | fp_chg_ron95 |
+| 28 | fp_chg_ron97 |
+| 29 | fp_chg_diesel |
+| 30 | fp_chg_diesel_eastmsia |
+| 31 | fp_chg_ron95_budi95 |
+| 32 | fp_chg_ron95_skps |
+
+#### Indices 33–46 — Temporal: holiday / cyclical
+
+| Index | Feature |
+|-------|---------|
+| 33 | is_public_holiday |
+| 34 | is_school_holiday |
+| 35 | is_holiday_any |
+| 36 | days_to_next_public_hol |
+| 37 | days_since_last_public_hol |
+| 38 | days_to_next_school_hol |
+| 39 | days_since_last_school_hol |
+| 40 | day_of_week |
+| 41 | month |
+| 42 | is_weekend |
+| 43 | dow_sin |
+| 44 | dow_cos |
+| 45 | month_sin |
+| 46 | month_cos |
+
+#### Indices 47–61 — External: Rainfall by State
 
 | Index | Feature | State |
 |-------|---------|-------|
-| 44 | rainfall_mm__MY01 | Johor |
-| 45 | rainfall_mm__MY02 | Kedah |
-| 46 | rainfall_mm__MY03 | Kelantan |
-| 47 | rainfall_mm__MY04 | Melaka |
-| 48 | rainfall_mm__MY05 | Negeri Sembilan |
-| 49 | rainfall_mm__MY06 | Pahang |
-| 50 | rainfall_mm__MY07 | Pulau Pinang |
-| 51 | rainfall_mm__MY08 | Perak |
-| 52 | rainfall_mm__MY09 | Perlis |
-| 53 | rainfall_mm__MY10 | Selangor |
-| 54 | rainfall_mm__MY11 | Terengganu |
-| 55 | rainfall_mm__MY12 | Sabah |
-| 56 | rainfall_mm__MY13 | Sarawak |
-| 57 | rainfall_mm__MY15 | W.P. Kuala Lumpur |
-| 58 | rainfall_mm__MY17 | W.P. Putrajaya |
+| 47 | rainfall_mm__MY01 | Johor |
+| 48 | rainfall_mm__MY02 | Kedah |
+| 49 | rainfall_mm__MY03 | Kelantan |
+| 50 | rainfall_mm__MY04 | Melaka |
+| 51 | rainfall_mm__MY05 | Negeri Sembilan |
+| 52 | rainfall_mm__MY06 | Pahang |
+| 53 | rainfall_mm__MY07 | Pulau Pinang |
+| 54 | rainfall_mm__MY08 | Perak |
+| 55 | rainfall_mm__MY09 | Perlis |
+| 56 | rainfall_mm__MY10 | Selangor |
+| 57 | rainfall_mm__MY11 | Terengganu |
+| 58 | rainfall_mm__MY12 | Sabah |
+| 59 | rainfall_mm__MY13 | Sarawak |
+| 60 | rainfall_mm__MY15 | W.P. Kuala Lumpur |
+| 61 | rainfall_mm__MY17 | W.P. Putrajaya |
 
 > MY14 (Labuan) and MY16 are excluded from the pipeline.
 
-#### Group 4 — Lag Features (indices 59–61)
-
-| Index | Feature |
-|-------|---------|
-| 59 | ridership_lag_7 |
-| 60 | ridership_lag_14 |
-| 61 | ridership_lag_28 |
-
-#### Group 5 — Static (indices 62–78)
+#### Indices 62–78 — Static
 
 | Index | Feature | Source |
 |-------|---------|--------|
@@ -297,81 +296,63 @@ The model's learned drivers align with known transit demand theory. Historical r
 
 ### Method
 
-SHAP values from all 10 HMT-TSF configurations (nomco/mco × lb7/lb14/lb28/lb56/lb84) were aggregated independently. Each `shap_values.npy` has shape `(100, T_in, 79, 7)`; absolute values were averaged over samples, time steps, and forecast horizons to produce a 79-element importance vector per run. Features were then classified by how many runs assigned them zero importance.
+SHAP values from all 10 HMT-TSF configurations (nomco/mco × lb7/lb14/lb28/lb56/lb84) were aggregated independently. Each `shap_values.npy` has shape `(100, T_in, 79, 7)`; absolute values were averaged over samples, time steps, and forecast horizons to produce a 79-element importance vector per run. Features were then classified by how many runs assigned them zero importance. Full table: `src/outputs/shap_crossrun_summary.csv` (regenerate with `python src/utils/shap_crossrun.py`).
 
-### Universal Zeros — Zero in ALL 10 runs (drop unconditionally)
+### Universal Zeros — zero in ALL 10 runs (23 features)
 
-**23 features** contribute zero signal regardless of lookback window or MCO setting.
+All 17 static features plus 6 administered/secondary fuel-price columns:
 
 | Index | Feature | Group | Why dead |
 |-------|---------|-------|---------|
-| 21 | month | Temporal | Redundant with month_sin/cos |
-| 22 | is_weekend | Temporal | Fully subsumed by day_of_week |
-| 23 | dow_sin | Temporal | Cyclical encoding unused; raw day_of_week dominates |
-| 30 | fp_lv_ron97 | Fuel | Collinear with RON95; change variants rank higher |
-| 31 | fp_lv_diesel | Fuel | Collinear with diesel pct_chg variants |
-| 32 | fp_lv_diesel_eastmsia | Fuel | East Malaysia price level; irrelevant to KL/Penang corridors |
-| 62 | pop_density_median | Static | Time-invariant; no day-to-day variation |
-| 63 | pop_density_log_median | Static | Same |
-| 64 | gtfs_n_stops | Static | Same |
-| 65 | gtfs_n_routes | Static | Same |
-| 66 | gtfs_n_directed_edges | Static | Same |
-| 67 | gtfs_avg_segment_s | Static | Same |
-| 68 | osm_poi_total_mean | Static | Aggregate of below; all zero |
-| 69 | osm_poi_transport_mean | Static | Same |
-| 70 | osm_poi_food_mean | Static | Same |
-| 71 | osm_poi_retail_mean | Static | Same |
-| 72 | osm_poi_education_mean | Static | Same |
-| 73 | osm_poi_healthcare_mean | Static | Same |
-| 74 | osm_poi_leisure_mean | Static | Same |
-| 75 | osm_poi_other_mean | Static | Same |
-| 76 | gadm_n_states | Static | Constant scalar across all rows |
-| 77 | gadm_n_border_pairs | Static | Same |
-| 78 | gadm_mean_border_km | Static | Same |
+| 21 | fp_lv_diesel_eastmsia | Fuel | East Malaysia price level; irrelevant to Peninsular corridors |
+| 22 | fp_lv_ron95_budi95 | Fuel | Subsidy-scheme price; near-constant |
+| 23 | fp_lv_ron95_skps | Fuel | Subsidy-scheme price; near-constant |
+| 30 | fp_chg_diesel_eastmsia | Fuel | Change of a near-constant series |
+| 31 | fp_chg_ron95_budi95 | Fuel | Change of a near-constant series |
+| 32 | fp_chg_ron95_skps | Fuel | Change of a near-constant series |
+| 62–63 | pop_density_median / log_median | Static | Time-invariant; no day-to-day variation |
+| 64–67 | gtfs_n_stops / n_routes / n_directed_edges / avg_segment_s | Static | Same |
+| 68–75 | osm_poi_* (8 categories) | Static | Same |
+| 76–78 | gadm_n_states / n_border_pairs / mean_border_km | Static | Constant scalars |
 
-> The entire Static group (OSM, GTFS, GADM, population) is dead weight across every configuration. This was confirmed across both nomco and mco, and all five lookback windows.
+> The entire Static group (OSM, GTFS, GADM, population) is dead weight across every configuration — confirmed across both regimes and all five lookback windows.
 
-### Near-Universal Zeros — Zero in 8/10 runs (recommended to drop)
+### Near-Universal Zeros — zero in 8/10 runs (3 features)
 
 | Index | Feature | Zero in | Note |
 |-------|---------|---------|------|
-| 18 | days_to_next_school_hol | 8/10 | Only marginally active in 2 configs |
-| 24 | dow_cos | 8/10 | Cosine half of DOW encoding; raw day_of_week dominates |
-| 27 | year | 8/10 | Only active in lb7 (very short context forces it) |
+| 18 | fp_lv_ron95 | 8/10 | RON95 was frozen at RM2.05 across the post-MCO training window |
+| 24 | fp_lv_ron95_pct_chg | 8/10 | Percentage change of the frozen series |
+| 27 | fp_chg_ron95 | 8/10 | Absolute change of the frozen series |
 
-### Consistently Important Features — Top-15 in ≥6/10 runs
+### Consistently Important Features — top-15 in ≥5/10 runs
 
 | Consistency | Index | Feature | Group |
 |------------|-------|---------|-------|
-| 10/10 (100%) | feat_12 | rail_komuter | Ridership |
-| 8/10 (80%) | feat_42 | fp_chg_ron95_budi95 | Fuel change |
-| 7/10 (70%) | feat_36 | fp_lv_ron97_pct_chg | Fuel % change |
-| 7/10 (70%) | feat_46 | rainfall_mm__MY03 (Kelantan) | Rainfall |
-| 6/10 (60%) | feat_04 | rail_mrt_kajang | Ridership |
-| 6/10 (60%) | feat_20 | day_of_week | Temporal |
-| 6/10 (60%) | feat_35 | fp_lv_ron95_skps | Fuel |
-| 6/10 (60%) | feat_41 | fp_chg_diesel_eastmsia | Fuel change |
-| 6/10 (60%) | feat_45 | rainfall_mm__MY02 (Kedah) | Rainfall |
+| 10/10 (100%) | feat_12 | total_ridership | Ridership |
+| 8/10 (80%) | feat_36 | days_to_next_public_hol | Temporal |
+| 7/10 (70%) | feat_45 | month_sin | Temporal |
+| 7/10 (70%) | feat_04 | rail_lrt_kj | Ridership |
+| 6/10 (60%) | feat_46 | month_cos | Temporal |
+| 6/10 (60%) | feat_41 | month | Temporal |
+| 6/10 (60%) | feat_20 | fp_lv_diesel | Fuel |
+| 5/10 (50%) | feat_35 | is_holiday_any | Temporal |
+| 5/10 (50%) | feat_34 | is_school_holiday | Temporal |
+| 5/10 (50%) | feat_19 | fp_lv_ron97 | Fuel |
+| 5/10 (50%) | feat_38 | days_to_next_school_hol | Temporal |
+| 5/10 (50%) | feat_37 | days_since_last_public_hol | Temporal |
 
-> Kelantan (MY03) and Kedah (MY02) rainfall appearing in 70% and 60% of runs respectively is not coincidental — both states sit on the northeast monsoon corridor (Nov–Jan). The model has detected a weather regime effect propagating from east-coast precipitation to nationwide transit demand.
+> Calendar structure dominates the consistent set: holiday anticipation/recovery, seasonal-position encodings, and school terms — alongside aggregate ridership autocorrelation and the two unfrozen fuel grades (diesel, RON97).
 
-### Lookback-Dependent Feature Shifts
+### Removal Summary
 
-| Window | Dominant features | Interpretation |
-|--------|------------------|----------------|
-| lb7 | feat_34/35 (RON95 price levels), rainfall states | Very short context forces reliance on external signals; no autocorrelation depth |
-| lb14–28 | Balanced: ridership lines + rainfall + fuel change features | Optimal regime — matches best accuracy (nomco_lb14 = 81.82 Combined%) |
-| lb56–84 | feat_12 (rail_komuter) dominates | Long autocorrelation window; model anchors on historical ridership trend |
-
-### Revised Removal Summary
-
-| Tier | Count | Criterion | Recommended action |
+| Tier | Count | Criterion | Action |
 |------|-------|-----------|-------------------|
-| Universal zeros | 23 | Zero in all 10 runs | Drop unconditionally |
-| Near-universal zeros | 3 | Zero in 8/10 runs | Recommended to drop |
+| Universal zeros | 23 | Zero in all 10 runs | Dropped |
+| Near-universal zeros | 3 | Zero in 8/10 runs | Dropped |
 | **Total** | **26** | 79 → **53 features** | ~33% input dimension reduction |
 
-Removing 26 features shrinks the input tensor from `(B, T_in, 79)` → `(B, T_in, 53)`, reduces the graph adjacency from `79×79` → `53×53`, and cuts GradientExplainer memory by ~33% — with no expected loss in predictive accuracy since all removed features contribute zero or near-zero signal across both data regimes and all lookback windows tested.
+Removing 26 features shrinks the input tensor from `(B, T_in, 79)` → `(B, T_in, 53)`, reduces the graph adjacency from `79×79` → `53×53`, and cuts GradientExplainer memory by ~33%. The post-fix runs confirm the removal is not merely lossless under normal conditions but **beneficial** (§11) — while costing MCO robustness.
 
 ---
 
@@ -383,47 +364,47 @@ HMT-TSF-FR is the feature-reduced variant trained on 53 features (26 SHAP-zero f
 
 | Config | HMT-TSF | HMT-TSF-FR | Δ (FR − std) |
 |---|---:|---:|---:|
-| nomco_lb7 | 79.90 | 79.72 | −0.18 |
-| nomco_lb14 | **81.82** | **81.77** | −0.05 |
-| nomco_lb28 | 80.23 | 81.11 | **+0.88** |
-| nomco_lb56 | 77.75 | 78.44 | **+0.69** |
-| nomco_lb84 | 74.17 | 75.51 | **+1.34** |
-| mco_lb7 | 75.25 | 75.12 | −0.13 |
-| mco_lb14 | 76.11 | 75.59 | −0.52 |
-| mco_lb28 | 75.94 | **76.69** | **+0.75** |
-| mco_lb56 | 76.53 | 76.44 | −0.09 |
-| mco_lb84 | **73.95** | 69.45 | **−4.50** |
+| nomco_lb7 | 84.88 | 84.81 | −0.07 |
+| nomco_lb14 | 85.78 | **86.59** | **+0.81** |
+| nomco_lb28 | 84.23 | 86.07 | **+1.84** |
+| nomco_lb56 | 82.53 | 84.04 | **+1.52** |
+| nomco_lb84 | 77.68 | 81.94 | **+4.26** |
+| mco_lb7 | 78.61 | 77.76 | −0.85 |
+| mco_lb14 | **81.99** | 78.74 | −3.25 |
+| mco_lb28 | 79.89 | 76.45 | −3.44 |
+| mco_lb56 | 79.47 | 75.90 | −3.57 |
+| mco_lb84 | 78.45 | 73.23 | −5.22 |
 
 ### R² — HMT-TSF vs HMT-TSF-FR
 
 | Config | HMT-TSF R² | HMT-TSF-FR R² | Δ R² |
 |---|---:|---:|---:|
-| nomco_lb14 | 0.802 | 0.805 | +0.003 |
-| nomco_lb28 | 0.788 | 0.795 | +0.007 |
-| nomco_lb56 | 0.755 | 0.758 | +0.003 |
-| nomco_lb84 | 0.695 | 0.723 | +0.028 |
-| mco_lb14 | 0.729 | 0.712 | −0.017 |
-| mco_lb84 | 0.673 | 0.530 | −0.143 |
+| nomco_lb14 | 0.897 | 0.906 | +0.008 |
+| nomco_lb28 | 0.883 | 0.903 | +0.020 |
+| nomco_lb56 | 0.859 | 0.878 | +0.019 |
+| nomco_lb84 | 0.773 | 0.848 | +0.075 |
+| mco_lb14 | 0.859 | 0.780 | −0.079 |
+| mco_lb84 | 0.791 | 0.680 | −0.112 |
 
-### Fit Diagnosis — HMT-TSF-FR
+### Fit Diagnosis — HMT-TSF-FR (10/10 `good_fit`)
 
 | Config | Verdict | Val drift % | Gap ratio | Val trend | Best/Total epochs |
 |---|---|---:|---:|---|---|
-| nomco_lb7 | good_fit | 2.67 | 2.01 | flat | 147 / 150 |
-| nomco_lb14 | good_fit | 4.66 | 2.19 | flat | 85 / 105 |
-| nomco_lb28 | good_fit | 1.72 | 2.33 | falling | 56 / 81 |
-| nomco_lb56 | good_fit | 8.22 | 2.74 | falling | 12 / 32 |
-| nomco_lb84 | good_fit | 1.04 | 2.62 | flat | 132 / 150 |
-| mco_lb7 | good_fit | 2.41 | 1.74 | flat | 68 / 93 |
-| mco_lb14 | good_fit | 11.78 | 1.93 | flat | 67 / 87 |
-| mco_lb28 | good_fit | 6.41 | 2.02 | falling | 27 / 52 |
-| mco_lb56 | good_fit | 5.40 | 2.28 | falling | 19 / 39 |
-| mco_lb84 | good_fit | 1.91 | 2.10 | flat | 75 / 105 |
+| nomco_lb7 | good_fit | 0.76 | 1.68 | flat | 135 / 150 |
+| nomco_lb14 | good_fit | 2.94 | 1.66 | flat | 69 / 89 |
+| nomco_lb28 | good_fit | 6.27 | 2.05 | flat | 110 / 135 |
+| nomco_lb56 | good_fit | 13.39 | 2.52 | falling | 45 / 65 |
+| nomco_lb84 | good_fit | 11.08 | 2.72 | falling | 61 / 91 |
+| mco_lb7 | good_fit | 2.69 | 1.70 | flat | 65 / 90 |
+| mco_lb14 | good_fit | 4.36 | 1.86 | flat | 75 / 95 |
+| mco_lb28 | good_fit | 5.98 | 2.20 | flat | 74 / 99 |
+| mco_lb56 | good_fit | 7.90 | 2.62 | flat | 48 / 68 |
+| mco_lb84 | good_fit | 3.49 | 2.18 | flat | 96 / 126 |
 
 ### Read-out
 
-- **At the headline configuration (`nomco_lb14`), FR is essentially identical to the standard model** (81.77 vs 81.82, Δ −0.05 Combined, R² 0.805 vs 0.802). The 26 removed features contributed zero signal, confirming the SHAP analysis.
-- **FR outperforms the standard model at longer nomco lookbacks** (lb28 +0.88, lb56 +0.69, lb84 +1.34). Removing noisy zero-SHAP features appears to reduce interference when the model has a long autocorrelation window — a noise-regularisation effect.
-- **FR degrades sharply at `mco_lb84`** (−4.50 Combined, R² 0.530 vs 0.673). The mco_lb84 regime requires some of the near-zero features (likely temporal/fuel level signals) to navigate the long lockdown-spanning window; their removal causes collapse.
-- **All FR configs remain `good_fit`** with gap ratios within 1.7–2.7×, confirming that FR does not introduce overfitting.
-- **Recommendation:** Use HMT-TSF-FR for `nomco` operations at any lookback — it matches or exceeds the standard model at lower input cost. Retain the standard model for `mco` or when mco_lb84 stability is required.
+- **FR is now the study-wide headline**: at `nomco_lb14` it reaches 86.59 Combined% / R² 0.906 / MAE 46,323 — **+0.81 over the full model** and +6.60 over the best tuned baseline. Walk-forward holds (91.39 / 83.26 / 85.70 per block).
+- **FR wins every nomco lookback from lb14 up**, with the margin growing with window length (+0.81 → +4.26 at lb84). Removing the 26 zero-signal features acts as noise regularisation under long autocorrelation windows — it even converts the full model's only `overfit` config (nomco_lb84) into a comfortable `good_fit` (+4.26 Combined, R² +0.075).
+- **FR loses every mco config** (−0.85 to −5.22), with degradation deepening as the window grows. Under the structural break, the near-constant fuel-level columns evidently provide a stabilising anchor that the reduced model lacks. FR's lb14 MCO degradation is −7.85 vs the full model's −3.79.
+- **All FR configs remain `good_fit`** with gap ratios within 1.7–2.7×, confirming that feature reduction does not introduce overfitting.
+- **Recommendation:** Use HMT-TSF-FR for `nomco` operations at any lookback ≥14 — it dominates the full model at lower input cost. Retain the full model for `mco`/shock-prone regimes, where its feature redundancy buys robustness.

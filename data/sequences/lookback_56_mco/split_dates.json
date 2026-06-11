@@ -18,6 +18,40 @@
   "target_col_idx": 12,
   "dtype": "float16",
   "compressed": false,
-  "temporal_feat_start": 13,
-  "temporal_feat_end": 29
+  "temporal_feat_indices": [
+    16,
+    17,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "temporal_feat_names": [
+    "year",
+    "day_of_year",
+    "is_public_holiday",
+    "is_school_holiday",
+    "is_holiday_any",
+    "days_to_next_public_hol",
+    "days_since_last_public_hol",
+    "days_to_next_school_hol",
+    "days_since_last_school_hol",
+    "day_of_week",
+    "month",
+    "is_weekend",
+    "dow_sin",
+    "dow_cos",
+    "month_sin",
+    "month_cos"
+  ]
 }

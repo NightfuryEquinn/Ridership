@@ -20,26 +20,26 @@ The modelling scope is therefore **demand-side forecasting**: this study does no
 
 Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7** (both must be met simultaneously). Headline ranking uses the **no-MCO (nomco) · lb14** configuration; MCO-inclusive results are reported as a structural-break robustness check.
 
-> **Methodological caveats.** All reported metrics are **single-run point estimates** (seed=42); no confidence intervals or statistical significance tests (e.g., Diebold–Mariano) accompany the rankings, so sub-percentage-point differences between adjacent ranks should not be over-interpreted. In addition, a feature-column-order fix applied on 2026-06-11 (see `REVISION.md`) means HMT-TSF results and the SHAP feature-importance narrative pre-date the corrected pipeline and are scheduled for regeneration; baseline (non-HMT-TSF) model results are unaffected. See `REVISION.md` for the full audit.
+> **Methodological caveats.** All reported metrics are **single-run point estimates** (seed=42); no confidence intervals or statistical significance tests (e.g., Diebold–Mariano) accompany the rankings, so sub-percentage-point differences between adjacent ranks should not be over-interpreted. HMT-TSF and SHAP results were regenerated on 2026-06-11 with the corrected pipeline (feature-order fix, validation-gated residual boost — see `REVISION.md`); baseline results were never affected. HMT-TSF is also the only model receiving known-future calendar inputs (`X_future`), so its margin reflects architecture *plus* conditioning. See `REVISION.md` for the full audit.
 
 ### Best Overall (no-MCO · lb14)
 
 | Rank | Model | Combined% | R² | MAE | RMSE | Meets targets? |
 |------|-------|-----------|----|-----|------|----------------|
-| 1 | **HMT-TSF** (F=79) | **81.82%** | 0.802 | **57,553** | 102,512 | Yes — both |
-| 2 | HMT-TSF-FR (F=53) | 81.77% | **0.805** | 59,120 | **101,614** | Yes — both |
+| 1 | **HMT-TSF-FR** (F=53) | **86.59%** | **0.906** | **46,323** | **70,664** | Yes — both |
+| 2 | HMT-TSF (F=79) | 85.78% | 0.897 | 49,897 | 73,757 | Yes — both |
 | 3 | Informer (tuned) | 79.99% | 0.778 | 65,360 | 108,628 | Yes — both |
 | 4 | TPA-LSTM (tuned) | 79.95% | 0.782 | 66,703 | 107,475 | Yes — both |
 | 5 | BiLSTM (tuned) | 79.44% | 0.794 | 73,516 | 104,667 | Yes — both |
 
-**HMT-TSF** sets the study-wide headline at nomco·lb14: Combined% 81.82%, R² 0.802, lowest MAE (57,553). HMT-TSF-FR is within 0.05 pp (81.77%, R² 0.805, RMSE 101,614). The next best baseline (Informer tuned) is 1.83 pp below. Full baseline and tuned results are in `src/models/MODEL.md`; HMT-TSF cross-configuration results are in `src/models/hybrid/HMT-TSF.md`.
+**HMT-TSF-FR** (the SHAP-guided 53-feature variant) sets the study-wide headline at nomco·lb14: Combined% 86.59%, R² 0.906, lowest MAE (46,323) — +0.81 pp over the full model and **+6.60 pp over the best baseline** (Informer tuned). Full baseline and tuned results are in `src/models/MODEL.md`; HMT-TSF cross-configuration results are in `src/outputs/HMT-TSF-RESULTS.md`.
 
 ### Tuned Models vs. HMT-TSF (no-MCO · lb14)
 
 | Rank | Model | Combined% | R² | Δ vs Base |
 |------|-------|-----------|-----|----------|
-| 1 | **HMT-TSF** | **81.82** | 0.802 | — |
-| 2 | HMT-TSF-FR | 81.77 | **0.805** | — |
+| 1 | **HMT-TSF-FR** | **86.59** | **0.906** | — |
+| 2 | HMT-TSF | 85.78 | 0.897 | — |
 | 3 | Informer (tuned) | 79.99 | 0.778 | +0.86 pp |
 | 4 | TPA-LSTM (tuned) | 79.95 | 0.782 | +1.28 pp |
 | 5 | BiLSTM (tuned) | 79.44 | 0.794 | +0.40 pp |
@@ -53,15 +53,15 @@ Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7**
 
 | Rank | Model | MCO Combined% | Δ vs No-MCO |
 |------|-------|--------------|------------|
-| 1 | **HMT-TSF** | **76.11** | −5.71 pp |
-| 2 | Informer (tuned) | 75.79 | −4.64 pp |
-| 3 | HMT-TSF-FR | 75.59 | −6.18 pp |
+| 1 | **HMT-TSF** | **81.99** | **−3.79 pp** |
+| 2 | HMT-TSF-FR | 78.74 | −7.85 pp |
+| 3 | Informer (tuned) | 75.79 | −4.64 pp |
 | 4 | ST-LSTM (tuned) | 75.05 | −4.08 pp |
 | 5 | TPA-LSTM (tuned) | 74.77 | −5.18 pp |
 | … | … | … | … |
 | Last | STGCN (tuned) | 53.79 | −22.54 pp |
 
-Graph-based models suffer the most under MCO: their static Pearson-correlation adjacency is fitted on normal-period training data and cannot adapt to the COVID-driven ridership collapse. HMT-TSF is the most MCO-robust model (76.11%, −5.71 pp), with Informer the best-performing baseline (< −5 pp); HMT-TSF's regime-gating component is the primary driver of this resilience.
+Graph-based models suffer the most under MCO: their static Pearson-correlation adjacency is fitted on normal-period training data and cannot adapt to the COVID-driven ridership collapse. The full HMT-TSF is both the most MCO-robust model (−3.79 pp) and the highest MCO scorer (81.99%); its regime-gating component is the primary driver. The feature-reduced variant trades that robustness for normal-regime accuracy (−7.85 pp under MCO) — use FR for normal operations, the full model for shock-prone regimes.
 
 ---
 
@@ -455,7 +455,7 @@ Three models in `src/models/attention-based/`; tuned variants in `src/models/att
 
 | Model | Key Architecture | Strengths | Weaknesses |
 |-------|-----------------|-----------|------------|
-| **HMT-TSF** | RevIN → 5-group semantic feature encoders → Temporal Transformer block → [Multi-Scale TCN ‖ Feature GCN ‖ Regime Gating] → SE-gated fusion → dual forecast heads; optional CatBoost residual correction | Best study-wide: Combined% 81.82%, R² 0.802 (nomco_lb14, full model); HMT-TSF-FR (53 features) is within 0.05 pp; regime gating handles MCO structural break; widest lookback support (7–84 days); SHAP-guided feature reduction (79→53 features) cuts GCN memory ~33% | Most complex architecture; many interacting hyperparameters; SHAP and CatBoost add significant runtime; mco_lb84 collapses when static spatial features are removed (HMT-TSF-FR −4.50 pp) |
+| **HMT-TSF** | RevIN → 5-group semantic feature encoders → Temporal Transformer block → [Multi-Scale TCN ‖ Feature GCN ‖ Regime Gating] → SE-gated fusion → dual forecast heads; known-future calendar conditioning (`X_future`); optional CatBoost residual correction (validation-gated) | Best study-wide: HMT-TSF-FR (53 features) 86.59% / R² 0.906 at nomco_lb14, full model 85.78% / 0.897; regime gating handles MCO structural break (best MCO score 81.99%, smallest degradation −3.79 pp); widest lookback support (7–84 days); SHAP-guided feature reduction (79→53) cuts GCN memory ~33% and *improves* nomco accuracy | Most complex architecture; many interacting hyperparameters; SHAP and CatBoost add significant runtime; FR loses MCO robustness (−7.85 pp at lb14, −5.22 vs full at mco_lb84); full model overfits at nomco_lb84 |
 
 ---
 

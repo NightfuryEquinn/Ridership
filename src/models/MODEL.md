@@ -1315,12 +1315,14 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 
 | Condition | Model | Combined% | R² | Δ vs Best Baseline |
 |-----------|-------|-----------|-----|-------------------|
-| No-MCO, lb14 | **HMT-TSF** | **81.82** | 0.802 | **+1.83 pp** vs Informer tuned (79.99) |
-| No-MCO, lb14 | HMT-TSF-FR | 81.77 | **0.805** | +1.78 pp vs Informer tuned (79.99) |
+| No-MCO, lb14 | **HMT-TSF-FR** | **86.59** | **0.906** | **+6.60 pp** vs Informer tuned (79.99) |
+| No-MCO, lb14 | HMT-TSF | 85.78 | 0.897 | +5.79 pp vs Informer tuned (79.99) |
 | No-MCO, lb14 | Informer (tuned) | 79.99 | 0.778 | — best baseline |
-| MCO, lb14 | HMT-TSF | 76.11 | 0.729 | +0.32 pp vs Informer tuned (75.79) |
+| MCO, lb14 | **HMT-TSF** | **81.99** | **0.859** | **+6.20 pp** vs Informer tuned (75.79) |
+| MCO, lb14 | HMT-TSF-FR | 78.74 | 0.780 | +2.95 pp vs Informer tuned |
 | MCO, lb14 | Informer (tuned) | 75.79 | 0.742 | — best baseline |
-| MCO, lb14 | HMT-TSF-FR | 75.59 | 0.712 | −0.20 pp vs Informer tuned |
+
+> HMT-TSF figures regenerated 2026-06-11 with the corrected pipeline (`REVISION.md`). HMT-TSF is the only model receiving known-future calendar inputs (`X_future`).
 
 **Metric definitions:** Combined% = max(0, 100 − MAPE − MAE% − RMSE%); all percentage terms use mean-demand normalisation. Targets: Combined% ≥ 75%, R² ≥ 0.70.
 
