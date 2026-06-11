@@ -177,8 +177,13 @@ Output of `src/features/feature_align.py`. This is the single source of truth fo
 |------|-------------|
 | `features_aligned.csv` | Daily feature matrix, **MCO period included**. 79 columns × 2,557 days (2019-01-01 – 2025-12-31). Fed to `sequence_builder.py` for MCO-inclusive experiments. |
 | `features_aligned_no_mco.csv` | Same matrix with MCO rows (2020-03-18 – 2021-12-31) and pre-2022 rows dropped. 79 columns × 1,461 days (2022-01-01 – 2025-12-31). Default model training input. |
-| `feature_metadata.json` | JSON schema for `features_aligned.csv`: column groups, source list, null counts. |
+| `feature_metadata.json` | JSON schema for `features_aligned.csv`: **column_order** (authoritative index→name mapping for tensors and SHAP labels), column groups (semantic, not positional), source list, null counts. |
 | `feature_metadata_no_mco.json` | Same as above but with the day count after MCO exclusion. |
+
+> **Lag MCO-bridging note:** in `features_aligned_no_mco.csv`, the
+> `ridership_lag_{7,14,28}` columns at the start of the post-MCO window
+> reference dates inside the excluded MCO period (e.g., lag_28 at
+> 2022-01-01 → 2021-12-04). Deliberate — see `src/features/PIPELINE.md`.
 
 ### Feature column breakdown (~79 columns)
 

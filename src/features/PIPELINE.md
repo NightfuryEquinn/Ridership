@@ -307,6 +307,17 @@ Tensor shapes:
 > `N_features` is whatever the input CSV contains. Check
 > `split_dates.json → n_features` for the exact count after running.
 
+> **Temporal column resolution (fixed 2026-06-11):** the 16 `X_future`
+> columns are resolved **by name** from `feature_metadata*.json →
+> column_groups.temporal` and selected in ascending column-index order;
+> the resolved indices and names are recorded in `split_dates.json →
+> temporal_feat_indices / temporal_feat_names`. The temporal group is
+> non-contiguous in the aligned column order (year/day_of_year sit apart
+> from the holiday/cyclical block). An earlier version used a hardcoded
+> contiguous slice (13–28) that silently selected lag/trend/fuel columns
+> after a column reorder — sequence sets built before this fix carry the
+> wrong `X_future` content and must be rebuilt.
+
 ---
 
 ## Full Run (copy-paste)
@@ -368,6 +379,15 @@ python src/features/sequence_builder.py --features-path data/features/features_a
   historical ridership series (2019-present) so that rows at 2022-01-01 have
   valid values. For lookback=14, `ridership_lag_28` provides 28-day look-back
   that the sequence window alone cannot reach.
+
+  **MCO-bridging caveat:** in the MCO-excluded dataset the lag features at the
+  start of the post-MCO window reference dates *inside* the excluded MCO
+  period (e.g., `ridership_lag_28` at 2022-01-01 references 2021-12-04). This
+  is deliberate — fabricating or zeroing those values would inject artificial
+  signal — but it means the "MCO-excluded" condition still carries indirect
+  MCO information through the lag channel for the first 28 days of the
+  series. State this when describing the no-MCO condition in the methodology
+  chapter.
 
 - **Graph adjacency** — Graph-based models (STGCN, MTGNN, STSGCN, STFGNN,
   PDR-STGCN, ASTGCN) and HMT-TSF build their feature-correlation adjacency

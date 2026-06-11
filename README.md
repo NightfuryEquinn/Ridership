@@ -1,14 +1,26 @@
-# Malaysian Transit Ridership Forecasting Research
+# Mitigating Public Transit Unreliability through Deep Learning Analytics and Ridership Forecasting
 
-> Last updated: 2026-06-05
+> Last updated: 2026-06-11
 
 Masters Final Year Project comparing 15 deep-learning models for Malaysian public transit ridership forecasting across three model series using 8 spatio-temporal feature sources.
+
+## Scope: How Ridership Forecasting Mitigates Transit Unreliability
+
+Public transit unreliability in Malaysia manifests as demand–supply mismatch: overcrowded peak services, ghost buses on low-demand routes, and capacity decisions made reactively rather than ahead of demand. This study addresses the **analytics layer** of that problem — accurate 7-day-ahead ridership forecasts are the prerequisite for proactive mitigation:
+
+- **Capacity planning** — forecasted demand peaks let operators pre-position rolling stock and crews instead of responding after overcrowding occurs;
+- **Headway adjustment** — anticipated demand troughs (holidays, monsoon days) justify schedule thinning without stranding passengers, and forecasted surges justify densified headways before queues form;
+- **Demand–supply matching** — per-service-line forecasts (12 lines + system total) expose which corridors are chronically under- or over-served, feeding the EDA-identified underserved-zone analysis (`src/eda/multivariate/`).
+
+The modelling scope is therefore **demand-side forecasting**: this study does not model supply-side reliability events (delays, breakdowns, cancellations) directly — no AVL/on-time-performance data is publicly available for Malaysian operators at daily granularity. Integrating such data is the principal future-work direction (see `src/FUTURE.md` and `REVISION.md`).
 
 ---
 
 ## Key Results
 
 Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7** (both must be met simultaneously). Headline ranking uses the **no-MCO (nomco) · lb14** configuration; MCO-inclusive results are reported as a structural-break robustness check.
+
+> **Methodological caveats.** All reported metrics are **single-run point estimates** (seed=42); no confidence intervals or statistical significance tests (e.g., Diebold–Mariano) accompany the rankings, so sub-percentage-point differences between adjacent ranks should not be over-interpreted. In addition, a feature-column-order fix applied on 2026-06-11 (see `REVISION.md`) means HMT-TSF results and the SHAP feature-importance narrative pre-date the corrected pipeline and are scheduled for regeneration; baseline (non-HMT-TSF) model results are unaffected. See `REVISION.md` for the full audit.
 
 ### Best Overall (no-MCO · lb14)
 
@@ -215,7 +227,7 @@ Ridership/
 ├── docs/                   # Documentation (PDFs, reports, presentations)
 ├── journal_articles/       # Supporting research papers
 ├── CLAUDE.md               # Detailed project guidance for Claude Code
-├── cuda.py                 # GPU/CUDA verification script
+├── check_cuda.py           # GPU/CUDA verification script
 ├── LICENSE
 ├── METRICS.md              # Detailed metric definitions
 └── README.md               # This file
@@ -237,7 +249,7 @@ Ridership/
 .venv\Scripts\activate
 
 # Verify GPU availability
-python cuda.py  # Should print True if CUDA is available
+python check_cuda.py  # Should print True if CUDA is available
 ```
 
 ---

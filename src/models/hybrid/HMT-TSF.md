@@ -8,7 +8,7 @@
 Input: (B, T_in, F=79)   [MinMax-scaled by data pipeline]
         │
         │  SHAP reduction at load time (default, --no-feat-reduce retains F=79)
-        │  26 zero-importance features dropped: 6 temporal, 3 fuel-level, 17 static
+        │  26 zero-importance features dropped: 9 fuel-price, 17 static
         ▼
 Input: (B, T_in, F=53)
         │
@@ -26,8 +26,8 @@ Input: (B, T_in, F=53)
 │                                                                   │ │
 │  ┌────────────────┐ ┌──────────────┐ ┌───────────────┐ ┌───────┐  │ │
 │  │ Target context │ │Temporal/Cyc. │ │   External    │ │  Lag  │  │ │
-│  │   idx  0–12    │ │  idx 13–22   │ │  idx 23–49    │ │50–52  │  │ │
-│  │   MLP → d/2    │ │  MLP → d/2   │ │  MLP → d/2    │ │MLP→d/2│  │ │
+│  │   idx  0–12    │ │ idx 16–17 &  │ │ idx 18–23 &   │ │13–15  │  │ │
+│  │   MLP → d/2    │ │ 24–37 →d/2   │ │ 38–52 → d/2   │ │MLP→d/2│  │ │
 │  └──────┬─────────┘ └──────┬───────┘ └───────┬───────┘ └───┬───┘  │ │
 │         └──────────────────┴─────────────────┴─────────────┘      │ │
 │              concat × softmax(group_gate) — learned group weights │ │
@@ -126,12 +126,12 @@ Output: (B, T_out=7)  [MinMax-scaled]
 ```mermaid
 flowchart TD
     IN79["Input X · (B, T_in, F=79) · MinMax-scaled"]
-    SHAP["SHAP Reduction at load time<br/>79 → 53 features<br/>−6 temporal · −3 fuel-level · −17 static<br/><i>--no-feat-reduce retains F=79</i>"]
+    SHAP["SHAP Reduction at load time<br/>79 → 53 features<br/>−9 fuel-price · −17 static<br/><i>--no-feat-reduce retains F=79</i>"]
     IN53["Input X · (B, T_in, F=53)"]
 
     REVIN["<b>RevIN</b><br/>x̂ = (x − μ) / σ × γ + β<br/>per sample · per feature<br/>learnable γ, β per feature"]
 
-    FGF["<b>Feature Group Fusion</b> → (B, T_in, d_model)<br/>Target ctx  idx 0–12  → MLP → d/2<br/>Temporal/Cyc.  idx 13–22  → MLP → d/2<br/>External  idx 23–49  → MLP → d/2<br/>Lag  idx 50–52  → MLP → d/2<br/>concat × softmax(group_gate)<br/>Linear→d, GELU, Dropout, Linear→d, LayerNorm"]
+    FGF["<b>Feature Group Fusion</b> → (B, T_in, d_model)<br/>Target ctx  idx 0–12  → MLP → d/2<br/>Lag  idx 13–15  → MLP → d/2<br/>Temporal/Cyc.  idx 16–17 ∪ 24–37  → MLP → d/2<br/>External  idx 18–23 ∪ 38–52  → MLP → d/2<br/>concat × softmax(group_gate)<br/>Linear→d, GELU, Dropout, Linear→d, LayerNorm"]
 
     TTB["<b>Temporal Transformer Block</b><br/>Learnable positional embeddings<br/>MultiheadAttention (n_heads)<br/>Post-LN residual · FFN d → d"]
 
@@ -479,7 +479,7 @@ All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and eva
 
 ### HMT-TSF Feature-Reduced (FR, F=53)
 
-SHAP-guided ablation removed 26 zero-importance features: 6 temporal/cyclical (year, day_of_year, and 4 cyclical encodings redundant with the retained holiday and lag features), 3 collinear fuel-level series (correlated with the retained fuel-price delta features), and all 17 static features (population, GTFS route/stop counts, OSM POI counts, GADM area metrics). The retained 53 features span: 13 target-context columns, 10 temporal/cyclical encodings, 27 external series (12 fuel-price + 15 rainfall), and 3 ridership lag features. Outputs are in `src/outputs/hmttsf_feat_reduced/`.
+SHAP-guided ablation removed 26 zero-importance features (corrected labels, 2026-06-11 — see `REVISION.md`): 9 fuel-price columns (administered prices frozen or near-constant in the post-MCO window, plus East Malaysia variants) and all 17 static features (population, GTFS route/stop counts, OSM POI counts, GADM area metrics). The retained 53 features span: 13 target-context columns, 3 ridership lag features, 16 temporal/cyclical encodings (year, day_of_year, holiday flags/lead–lag, dow/month encodings), and 21 external series (6 fuel-price + 15 rainfall). Outputs are in `src/outputs/hmttsf_feat_reduced/`.
 
 ### HMT-TSF-FR (F=53) — Overall Performance
 

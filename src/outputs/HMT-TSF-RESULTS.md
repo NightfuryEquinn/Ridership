@@ -3,6 +3,8 @@
 > Source: `src/outputs/aggregate_hmttsf.csv` · Generated 2026-06-05
 > Companion files: `RESULTS.md` (16 baselines), `DIAGNOSTICS.md` (fit diagnostics)
 > Scope: HMT-TSF and HMT-TSF-FR across `{nomco, mco}` × `{lb7, lb14, lb28, lb56, lb84}` = 10 configs each, with naive-persistence reference, Δ-vs-naive block, 3-block walk-forward validation, and fit diagnosis.
+> **Regeneration required (2026-06-11):** all HMT-TSF runs in this file pre-date the feature-order fix (see `REVISION.md`): the semantic feature grouping was misaligned, `X_future` carried lag/trend/fuel columns instead of calendar features, and the optional residual-boost decision was gated on test metrics rather than validation metrics. To refresh on the A100: rebuild all sequence sets (`python src/features/run_pipeline.py --skip-clean --skip-align`), then re-run `src/models/hybrid/hmttsf.py` per `{nomco, mco} × {lb7, lb14, lb28, lb56, lb84}` ± `--no-feat-reduce`, with `--shap` on the headline configs (SHAP labels are correct automatically after the fix).
+> All figures below are also single-run point estimates (seed=42) — see the caveat in `RESULTS.md`.
 
 ## 1. Conventions
 
