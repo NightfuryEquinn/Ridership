@@ -1,9 +1,5 @@
 # Chapter 4: Findings and Results
 
-> **Methodological caveats (see `REVISION.md` for the full audit).**
-> 1. All reported metrics are **single-run point estimates** obtained with a fixed random seed (42). No confidence intervals, repeated-seed variance, or forecast-comparison significance tests (e.g., Diebold–Mariano) accompany the rankings; differences below roughly one Combined-percentage-point between adjacent ranks should be interpreted as indicative rather than conclusive. Multi-seed replication and significance testing are designated future work (Chapter 5).
-> 2. A feature-column-order defect was identified and fixed on 2026-06-11 (see `REVISION.md`), and **all HMT-TSF results and SHAP analyses in §4.7–4.9 were regenerated with the corrected pipeline on the same day**: semantic feature groups aligned to the true column order, `X_future` carrying the 16 known-future calendar features, the residual-boost decision gated on validation (not test) metrics, and SHAP labels resolved from the authoritative column order. Baseline-model results (§4.2–4.6) were never affected — baselines consume the feature vector order-agnostically and do not use `X_future`.
-
 ---
 
 ## 4.1 Overview of Experimental Evaluation
@@ -20,24 +16,26 @@ All models share a standardised training protocol: AdamW optimiser (Loshchilov &
 
 Table 4.2.1 presents the complete default-configuration ranking of all 16 baseline variants. The subsections that follow analyse the results by architectural series.
 
-| Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
-|------|-------|-----------|-------|------|-------|-----|-----|------|
-| 1 | Informer | 79.13 | 6.59 | 5.53 | 8.76 | 0.772 | 69,476 | 110,050 |
-| 2 | BiLSTM | 79.04 | 6.52 | 5.77 | 8.67 | 0.776 | 72,460 | 109,007 |
-| 3 | TPA-LSTM | 78.67 | 6.62 | 6.04 | 8.67 | 0.776 | 75,871 | 109,009 |
-| 4 | CNN-BiLSTM | 78.18 | 6.81 | 6.12 | 8.89 | 0.764 | 76,884 | 111,782 |
-| 5 | LSTM | 78.13 | 6.71 | 6.18 | 8.98 | 0.760 | 77,719 | 112,801 |
-| 6 | ST-LSTM | 78.01 | 6.93 | 6.27 | 8.79 | 0.770 | 78,779 | 110,453 |
-| 7 | MTGNN | 77.93 | 6.91 | 6.47 | 8.69 | 0.775 | 81,292 | 109,185 |
-| 8 | CNN-LSTM | 77.64 | 6.92 | 6.32 | 9.12 | 0.752 | 79,375 | 114,632 |
-| 9 | STSGCN | 76.97 | 7.18 | 6.42 | 9.42 | 0.736 | 80,703 | 118,391 |
-| 10 | STGCN | 76.81 | 7.24 | 6.77 | 9.17 | 0.750 | 85,077 | 115,297 |
-| 11 | ASTGCN | 75.69 | 7.42 | 6.89 | 9.99 | 0.703 | 86,631 | 125,606 |
-| 12 | CNN-LSTM-Augmented | 75.36 | 7.77 | 7.19 | 9.68 | 0.721 | 90,356 | 121,639 |
-| 13 | Autoformer | 74.73 | 7.86 | 7.51 | 9.90 | 0.708 | 94,414 | 124,408 |
-| 14 | CNN-LSTM-Parallel | 74.18 | 8.18 | 7.68 | 9.97 | 0.704 | 96,477 | 125,240 |
-| 15 | STFGNN | 73.94 | 8.21 | 7.60 | 10.25 | 0.688 | 95,547 | 128,777 |
-| 16 | PDR-STGCN | 73.91 | 8.15 | 7.70 | 10.24 | 0.688 | 96,801 | 128,694 |
+
+| Rank | Model              | Combined% | MAPE% | MAE% | RMSE% | R²    | MAE    | RMSE    |
+| ---- | ------------------ | --------- | ----- | ---- | ----- | ----- | ------ | ------- |
+| 1    | Informer           | 79.13     | 6.59  | 5.53 | 8.76  | 0.772 | 69,476 | 110,050 |
+| 2    | BiLSTM             | 79.04     | 6.52  | 5.77 | 8.67  | 0.776 | 72,460 | 109,007 |
+| 3    | TPA-LSTM           | 78.67     | 6.62  | 6.04 | 8.67  | 0.776 | 75,871 | 109,009 |
+| 4    | CNN-BiLSTM         | 78.18     | 6.81  | 6.12 | 8.89  | 0.764 | 76,884 | 111,782 |
+| 5    | LSTM               | 78.13     | 6.71  | 6.18 | 8.98  | 0.760 | 77,719 | 112,801 |
+| 6    | ST-LSTM            | 78.01     | 6.93  | 6.27 | 8.79  | 0.770 | 78,779 | 110,453 |
+| 7    | MTGNN              | 77.93     | 6.91  | 6.47 | 8.69  | 0.775 | 81,292 | 109,185 |
+| 8    | CNN-LSTM           | 77.64     | 6.92  | 6.32 | 9.12  | 0.752 | 79,375 | 114,632 |
+| 9    | STSGCN             | 76.97     | 7.18  | 6.42 | 9.42  | 0.736 | 80,703 | 118,391 |
+| 10   | STGCN              | 76.81     | 7.24  | 6.77 | 9.17  | 0.750 | 85,077 | 115,297 |
+| 11   | ASTGCN             | 75.69     | 7.42  | 6.89 | 9.99  | 0.703 | 86,631 | 125,606 |
+| 12   | CNN-LSTM-Augmented | 75.36     | 7.77  | 7.19 | 9.68  | 0.721 | 90,356 | 121,639 |
+| 13   | Autoformer         | 74.73     | 7.86  | 7.51 | 9.90  | 0.708 | 94,414 | 124,408 |
+| 14   | CNN-LSTM-Parallel  | 74.18     | 8.18  | 7.68 | 9.97  | 0.704 | 96,477 | 125,240 |
+| 15   | STFGNN             | 73.94     | 8.21  | 7.60 | 10.25 | 0.688 | 95,547 | 128,777 |
+| 16   | PDR-STGCN          | 73.91     | 8.15  | 7.70 | 10.24 | 0.688 | 96,801 | 128,694 |
+
 
 *Table 4.2.1. Default-configuration (`base_nomco_lb14`) performance of all 16 baseline variants, ranked by Combined%.*
 
@@ -125,18 +123,20 @@ The tuning effect on diagnostics is uniformly negative: the good-fit rate falls 
 
 HMT-TSF was evaluated across ten configurations covering two MCO conditions (nomco, mco) and five look-back windows (7, 14, 28, 56, 84 days). The full results are presented in Table 4.7.1.
 
-| Configuration | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| nomco_lb7  | 84.88 | 4.74 | 4.25 | 6.13 | 0.888 | 53,325 | 76,951 |
+
+| Configuration  | Combined% | MAPE%    | MAE%     | RMSE%    | R²        | MAE        | RMSE       |
+| -------------- | --------- | -------- | -------- | -------- | --------- | ---------- | ---------- |
+| nomco_lb7      | 84.88     | 4.74     | 4.25     | 6.13     | 0.888     | 53,325     | 76,951     |
 | **nomco_lb14** | **85.78** | **4.39** | **3.97** | **5.87** | **0.897** | **49,897** | **73,757** |
-| nomco_lb28 | 84.23 | 4.94 | 4.55 | 6.28 | 0.883 | 57,268 | 78,910 |
-| nomco_lb56 | 82.53 | 5.52 | 5.11 | 6.84 | 0.859 | 64,198 | 85,874 |
-| nomco_lb84 | 77.68 | 6.99 | 6.59 | 8.73 | 0.773 | 82,174 | 108,800 |
-| mco_lb7    | 78.61 | 6.89 | 6.12 | 8.38 | 0.807 | 75,401 | 103,170 |
-| **mco_lb14**   | **81.99** | 5.68 | 5.18 | 7.15 | 0.859 | 63,853 | 88,228 |
-| mco_lb28   | 79.89 | 6.26 | 5.83 | 8.02 | 0.822 | 72,032 | 99,059 |
-| mco_lb56   | 79.47 | 6.68 | 5.91 | 7.95 | 0.825 | 73,334 | 98,598 |
-| mco_lb84   | 78.45 | 6.73 | 6.17 | 8.64 | 0.791 | 76,593 | 107,293 |
+| nomco_lb28     | 84.23     | 4.94     | 4.55     | 6.28     | 0.883     | 57,268     | 78,910     |
+| nomco_lb56     | 82.53     | 5.52     | 5.11     | 6.84     | 0.859     | 64,198     | 85,874     |
+| nomco_lb84     | 77.68     | 6.99     | 6.59     | 8.73     | 0.773     | 82,174     | 108,800    |
+| mco_lb7        | 78.61     | 6.89     | 6.12     | 8.38     | 0.807     | 75,401     | 103,170    |
+| **mco_lb14**   | **81.99** | 5.68     | 5.18     | 7.15     | 0.859     | 63,853     | 88,228     |
+| mco_lb28       | 79.89     | 6.26     | 5.83     | 8.02     | 0.822     | 72,032     | 99,059     |
+| mco_lb56       | 79.47     | 6.68     | 5.91     | 7.95     | 0.825     | 73,334     | 98,598     |
+| mco_lb84       | 78.45     | 6.73     | 6.17     | 8.64     | 0.791     | 76,593     | 107,293    |
+
 
 *Table 4.7.1. HMT-TSF (full, F=79) results across all ten configurations. Bold rows denote the best nomco and mco configurations respectively. The feature-reduced variant exceeds these values at every nomco lookback ≥14 (Section 4.9).*
 
@@ -218,32 +218,32 @@ The empirical findings of this study can be summarised across five thematic conc
 
 ## References
 
-Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, *15*. https://doi.org/10.1038/s41598-025-02933-9
+Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, *15*. [https://doi.org/10.1038/s41598-025-02933-9](https://doi.org/10.1038/s41598-025-02933-9)
 
-Chang, J., Yin, J., Hao, Y., & Gao, C. (2025). STFDSGCN: Spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. *Sensors*, *25*(11), 3446. https://doi.org/10.3390/s25113446
+Chang, J., Yin, J., Hao, Y., & Gao, C. (2025). STFDSGCN: Spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. *Sensors*, *25*(11), 3446. [https://doi.org/10.3390/s25113446](https://doi.org/10.3390/s25113446)
 
-Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, *18*(4), e0283898. https://doi.org/10.1371/journal.pone.0283898
+Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, *18*(4), e0283898. [https://doi.org/10.1371/journal.pone.0283898](https://doi.org/10.1371/journal.pone.0283898)
 
-Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction based on CNN-BiLSTM with multicomponent information. *Applied Sciences*, *12*(17), 8714. https://doi.org/10.3390/app12178714
+Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction based on CNN-BiLSTM with multicomponent information. *Applied Sciences*, *12*(17), 8714. [https://doi.org/10.3390/app12178714](https://doi.org/10.3390/app12178714)
 
-Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, *20*(1), e0333094. https://doi.org/10.1371/journal.pone.0333094
+Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, *20*(1), e0333094. [https://doi.org/10.1371/journal.pone.0333094](https://doi.org/10.1371/journal.pone.0333094)
 
-Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, *23*(15), 6950. https://doi.org/10.3390/s23156950
+Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, *23*(15), 6950. [https://doi.org/10.3390/s23156950](https://doi.org/10.3390/s23156950)
 
-Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. *Electronics*, *14*(7), 1410. https://doi.org/10.3390/electronics14071410
+Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. *Electronics*, *14*(7), 1410. [https://doi.org/10.3390/electronics14071410](https://doi.org/10.3390/electronics14071410)
 
-Loshchilov, I., & Hutter, F. (2019). Decoupled weight decay regularization. In *International Conference on Learning Representations*. https://openreview.net/forum?id=Bkg6RiCqY7
+Loshchilov, I., & Hutter, F. (2019). Decoupled weight decay regularization. In *International Conference on Learning Representations*. [https://openreview.net/forum?id=Bkg6RiCqY7](https://openreview.net/forum?id=Bkg6RiCqY7)
 
-Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, *15*(7), 3768. https://doi.org/10.3390/app15073768
+Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, *15*(7), 3768. [https://doi.org/10.3390/app15073768](https://doi.org/10.3390/app15073768)
 
-PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. (2026). *Systems*, *14*(1), 102. https://doi.org/10.3390/systems14010102
+PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. (2026). *Systems*, *14*(1), 102. [https://doi.org/10.3390/systems14010102](https://doi.org/10.3390/systems14010102)
 
-Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, *24*(15), 4796. https://doi.org/10.3390/s24154796
+Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, *24*(15), 4796. [https://doi.org/10.3390/s24154796](https://doi.org/10.3390/s24154796)
 
-Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM performance on diverse time series. *Mathematics*, *14*(5), 838. https://doi.org/10.3390/math14050838
+Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM performance on diverse time series. *Mathematics*, *14*(5), 838. [https://doi.org/10.3390/math14050838](https://doi.org/10.3390/math14050838)
 
-Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, *8*(5), 148. https://doi.org/10.3390/smartcities8050148
+Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, *8*(5), 148. [https://doi.org/10.3390/smartcities8050148](https://doi.org/10.3390/smartcities8050148)
 
-Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, *12*(1), 25. https://doi.org/10.3390/ijgi12010025
+Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, *12*(1), 25. [https://doi.org/10.3390/ijgi12010025](https://doi.org/10.3390/ijgi12010025)
 
-Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, *15*, 16734. https://doi.org/10.1038/s41598-025-01157-1
+Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, *15*, 16734. [https://doi.org/10.1038/s41598-025-01157-1](https://doi.org/10.1038/s41598-025-01157-1)

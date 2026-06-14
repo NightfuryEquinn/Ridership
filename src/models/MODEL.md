@@ -40,7 +40,7 @@ Located in `src/models/spatio-temporal-based/`. These models treat the feature v
 
 LSTM is selected as the foundational sequential baseline to establish the minimum performance threshold against which all subsequent architectural innovations are measured. Strigula (2026) evaluates LSTM across diverse time series benchmarks and demonstrates that it achieves consistently competitive accuracy as a general-purpose sequential model, confirming its suitability as the primary reference point before specialised architectures are introduced. In the context of Malaysian transit ridership, where temporal dependencies span daily commuter cycles and strong weekly patterns, LSTM's gated memory mechanism provides a principled minimum capability for sequential modelling without imposing additional inductive biases such as graph structure or attention. All 14 subsequent models are directly compared against LSTM in the comparison chain, allowing each architectural addition — bidirectionality, pattern attention, graph convolution, series decomposition — to be expressed as a measurable incremental gain over the sequential baseline.
 
-**Citation:** Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM performance on diverse time series. *Mathematics*, 14(5), 838. https://doi.org/10.3390/math14050838
+**Citation:** Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM performance on diverse time series. *Mathematics*, 14(5), 838. [https://doi.org/10.3390/math14050838](https://doi.org/10.3390/math14050838)
 
 #### Key Architecture
 
@@ -61,6 +61,8 @@ flowchart LR
 
     X --> LSTM --> DROP --> hT --> MLP --> OUT
 ```
+
+
 
 #### Tuned Variant
 
@@ -92,7 +94,7 @@ Hyperparameter changes: `hidden 64→128`, `layers 1→2`, `dropout 0.10→0.20`
 
 BiLSTM is selected to directly isolate the contribution of bidirectional encoding over the observed look-back window relative to the unidirectional LSTM baseline. Alajmi and Almutairi (2025) demonstrate that BiLSTM achieves measurable improvements over standard LSTM in traffic congestion forecasting by exposing earlier sequence positions to future-within-window context, validating the bidirectional extension for sequential transport demand tasks. In Malaysian transit ridership data, mid-window events such as public holidays or major disruptions that fall several days before the forecast horizon may be more accurately encoded when the model can contextualise them against the ridership response that follows — a capability that the LSTM's strictly causal pass precludes by design. BiLSTM isolates precisely this contribution before more complex mechanisms are introduced in the chain.
 
-**Citation:** Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, 15. https://doi.org/10.1038/s41598-025-02933-9
+**Citation:** Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, 15. [https://doi.org/10.1038/s41598-025-02933-9](https://doi.org/10.1038/s41598-025-02933-9)
 
 #### Key Architecture
 
@@ -115,6 +117,8 @@ flowchart LR
     X --> BWD --> |"h_bwd (B,64)"| CAT
     CAT --> MLP --> OUT
 ```
+
+
 
 #### Tuned Variant
 
@@ -144,7 +148,7 @@ Hyperparameter changes: `hidden 64→256`, `layers 1→3`, dropout unchanged at 
 
 TPA-LSTM is selected to determine whether pattern-level attention over recurring temporal shapes in the LSTM hidden-state sequence improves upon positional bidirectionality. Wei et al. (2023) apply TPA-LSTM to subway passenger flow forecasting in Shenzhen and demonstrate that the temporal pattern attention mechanism extracts multi-scale periodic signals — daily, weekly, and holiday-driven cycles — more effectively than standard LSTM alone, validating its application to transit demand prediction. Malaysian transit ridership exhibits pronounced multi-scale periodicity: strict weekday commuter peaks, clear weekday/weekend asymmetry, and sharp holiday suppression events. TPA-LSTM's 1-D CNN applied over the LSTM hidden-state matrix is designed to detect these recurring shapes directly rather than relying on positional proximity, making it architecturally well-matched to periodicity-heavy transit signals. It advances the comparison chain from position-level richness (bidirectionality) to shape-level richness (pattern attention).
 
-**Citation:** Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, 12(1), 25. https://doi.org/10.3390/ijgi12010025
+**Citation:** Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, 12(1), 25. [https://doi.org/10.3390/ijgi12010025](https://doi.org/10.3390/ijgi12010025)
 
 #### Key Architecture
 
@@ -180,6 +184,8 @@ flowchart TD
     hT & CTX --> CAT --> MLP
 ```
 
+
+
 #### Tuned Variant
 
 **Script:** `src/models/attention-tuned/tpalstm.py`
@@ -208,7 +214,7 @@ Hyperparameter changes: `hidden 64→256`, `filters 32→128`, `dropout 0.10→0
 
 CNN-LSTM is selected to test whether hierarchical local feature extraction by a 1-D CNN, prior to recurrent global sequence encoding, improves over attention-augmented recurrence alone. Topilin et al. (2025) demonstrate in a traffic flow prediction study that a CNN-LSTM architecture effectively decomposes the forecasting problem into a local pattern extraction stage (CNN) followed by sequential dependency modelling (LSTM), achieving improvements over purely recurrent models. In Malaysian transit ridership, short-term local patterns — within-day ridership bursts during morning and evening peaks encoded as consecutive multi-timestep excursions — are more efficiently detected by convolution than by a recurrent cell that must propagate them across the full hidden state. Three independently tested fusion modes (sequential, parallel, augmented) are included to reveal which coupling strategy best suits the flat multivariate feature representation of this dataset, providing additional granularity in the comparison chain.
 
-**Citation:** Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, 8(5), 148. https://doi.org/10.3390/smartcities8050148
+**Citation:** Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, 8(5), 148. [https://doi.org/10.3390/smartcities8050148](https://doi.org/10.3390/smartcities8050148)
 
 #### Key Architecture — Three Fusion Modes
 
@@ -227,6 +233,8 @@ flowchart LR
     X --> PERM1 --> CNN --> PERM2 --> LSTM --> hT --> MLP
 ```
 
+
+
 **Parallel mode**: CNN and LSTM process raw input independently; outputs concatenated.
 
 ```mermaid
@@ -242,6 +250,8 @@ flowchart TD
     CNN & LSTM --> CAT --> MLP
 ```
 
+
+
 **Augmented mode**: Sequential CNN→LSTM with raw-input skip connection to prevent information loss from CNN compression.
 
 ```mermaid
@@ -256,6 +266,8 @@ flowchart LR
     X --> |"global mean pool"| SKIP --> CAT
     CAT --> MLP
 ```
+
+
 
 #### Tuned Variants
 
@@ -286,7 +298,7 @@ All three modes tuned with `cnn_filters 32→64`, `dropout 0.10→0.20`. Each mo
 
 CNN-BiLSTM is selected to combine the two complementary inductive biases already validated individually — CNN local pattern extraction and BiLSTM bidirectional context — and test whether their combination yields additive or synergistic gains over either component alone. Chen et al. (2022) apply CNN-BiLSTM to short-term traffic flow prediction with multi-component sensor inputs and demonstrate that bidirectional context over CNN-extracted features reduces prediction errors more than either component in isolation. In Malaysian transit ridership, this combination is particularly relevant for mid-window events: a public holiday falling in the middle of the look-back window creates a local pattern that the CNN can detect spatially, and whose temporal position in the window is best contextualised bidirectionally. CNN-BiLSTM is the most expressive LSTM-family model before explicit spatial stream decoupling is introduced via ST-LSTM.
 
-**Citation:** Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction based on CNN-BiLSTM with multicomponent information. *Applied Sciences*, 12(17), 8714. https://doi.org/10.3390/app12178714
+**Citation:** Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction based on CNN-BiLSTM with multicomponent information. *Applied Sciences*, 12(17), 8714. [https://doi.org/10.3390/app12178714](https://doi.org/10.3390/app12178714)
 
 #### Key Architecture
 
@@ -306,6 +318,8 @@ flowchart LR
     PERM2 --> BWD --> |"h_bwd (B,64)"| CAT
     CAT --> MLP
 ```
+
+
 
 #### Tuned Variant
 
@@ -335,7 +349,7 @@ Hyperparameter changes: `hidden 64→128`, `cnn_filters 32→64`, `cnn_layers 2�
 
 ST-LSTM is selected as the canonical bridge model between the LSTM-family and graph-based series, introducing explicit spatial encoding as a separate parallel stream rather than forcing the LSTM to encode both temporal dynamics and feature interactions in a single hidden state. Cui et al. (2025) apply a multi-stream approach to urban rail passenger flow prediction using multi-source big data and demonstrate that decoupling temporal sequence modelling from cross-sensor spatial feature aggregation improves accuracy for datasets spanning structurally heterogeneous sources. In this study, the 79-feature input spans eight structurally distinct sources — ridership, fuel, rainfall, population, GTFS, OSM, GADM, and temporal — and the spatial encoder explicitly captures which feature groups persistently co-activate, a complementary signal to the temporal trajectory captured by the LSTM. ST-LSTM serves as the **canonical reference model** for the entire codebase: all subsequent model implementations follow its training loop, output structure, and comparison table logic.
 
-**Citation:** Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, 20(1), e0333094. https://doi.org/10.1371/journal.pone.0333094
+**Citation:** Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, 20(1), e0333094. [https://doi.org/10.1371/journal.pone.0333094](https://doi.org/10.1371/journal.pone.0333094)
 
 #### Key Architecture
 
@@ -363,6 +377,8 @@ flowchart TD
     X --> RESHAPE --> MLP_SP --> |"(B·T_in, 32)"| MEAN
     hT & MEAN --> CAT --> MLP_HEAD
 ```
+
+
 
 #### Tuned Variant
 
@@ -399,7 +415,7 @@ Located in `src/models/graph-based/`. These models represent the N input feature
 
 STGCN is selected as the foundational graph-based baseline because it establishes how much a fixed, pre-computed inter-feature correlation graph contributes over purely sequential or spatially-implicit models. Deng (2025) applies STGCN with a spatio-temporal kernel to traffic flow prediction and confirms that interleaving Chebyshev graph convolution with temporal gated convolution captures relational dependencies that purely recurrent models cannot, even when the graph is static and pre-computed. In this study, the 79 features originate from eight structurally heterogeneous sources whose inter-feature correlations are domain-meaningful: adjacent ridership lines co-vary across the transit network; fuel prices exhibit an inverse correlation with ridership on price-change days; rainfall co-varies with ridership suppression. Encoding these relationships as a Pearson graph allows message passing to propagate signals along correlated feature nodes rather than processing all features uniformly. STGCN marks the transition from implicit spatial encoding (ST-LSTM) to explicit graph-structured encoding.
 
-**Citation:** Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. *Electronics*, 14(7), 1410. https://doi.org/10.3390/electronics14071410
+**Citation:** Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. *Electronics*, 14(7), 1410. [https://doi.org/10.3390/electronics14071410](https://doi.org/10.3390/electronics14071410)
 
 #### Key Architecture
 
@@ -430,6 +446,8 @@ flowchart TD
     ADJ -. used in ChebConv .-> CHEB1
 ```
 
+
+
 #### Tuned Variant
 
 **Script:** `src/models/graph-tuned/stgcn.py`
@@ -458,7 +476,7 @@ Hyperparameter changes: `hidden 128→256`, `dropout 0.20→0.25`, `weight_decay
 
 ASTGCN is selected to determine whether learnable multi-head attention over both graph nodes (spatial attention) and timesteps (temporal attention) improves upon the fixed gated convolutions of STGCN. Cui et al. (2023) present ADSTGCN, a dynamic adaptive extension of ASTGCN for multi-step traffic forecasting, and demonstrate that dual spatial and temporal attention substantially improves sensitivity to non-stationary input patterns compared to static graph message-passing alone. In transit ridership forecasting, the most informative subset of features and the most predictive timesteps vary by context: on a normal weekday the commuter-line ridership and day-of-week encoding are most informative, while during a holiday period the holiday-flag features and fuel-trend features dominate. ASTGCN's per-layer dynamic re-weighting of which nodes and which timesteps to attend to allows the model to adapt this weighting per input sample. It bridges the graph-based and attention-based series by retaining the graph backbone of STGCN while adding attention on both spatial and temporal dimensions.
 
-**Citation:** Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, 23(15), 6950. https://doi.org/10.3390/s23156950
+**Citation:** Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, 23(15), 6950. [https://doi.org/10.3390/s23156950](https://doi.org/10.3390/s23156950)
 
 #### Key Architecture
 
@@ -486,6 +504,8 @@ flowchart TD
     MEAN --> FLAT --> MLP
     ADJ -. input to .-> CGCN
 ```
+
+
 
 #### Tuned Variant
 
@@ -515,7 +535,7 @@ Hyperparameter changes: `d_model 64→128`, `n_heads 4→8`, `n_blocks 2→3`, `
 
 STSGCN is selected to test whether fusing spatial and temporal graph operations into a single synchronous adjacency — rather than alternating them in separate blocks as STGCN does — captures joint spatio-temporal correlations more effectively. Chen et al. (2023) apply STSGCN to expressway traffic flow prediction during holiday periods and demonstrate that the synchronous graph approach better captures simultaneous spatial correlation changes and temporal pattern shifts during anomalous events. Malaysian transit ridership during public holidays exhibits precisely this behaviour: multiple feature nodes — ridership lines, holiday flags, fuel price indicators — shift simultaneously rather than sequentially, making joint synchronous encoding more naturally aligned with the data generating process. STSGCN tests whether replacing interleaved ST-Conv blocks with a unified 3N×3N synchronous graph delivers measurable improvement at comparable parameter count.
 
-**Citation:** Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, 18(4), e0283898. https://doi.org/10.1371/journal.pone.0283898
+**Citation:** Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, 18(4), e0283898. [https://doi.org/10.1371/journal.pone.0283898](https://doi.org/10.1371/journal.pone.0283898)
 
 #### Key Architecture
 
@@ -542,6 +562,8 @@ flowchart TD
     CENTRE --> |"repeated n_layers"| POOL
     POOL --> MLP
 ```
+
+
 
 #### Tuned Variant
 
@@ -571,7 +593,7 @@ Hyperparameter changes: `hidden 96→128`, `dropout 0.10→0.25`, `weight_decay 
 
 STFGNN is selected to test whether using two complementary graphs — one capturing cross-feature co-variation at each moment (spatial: A_spa) and one capturing similarity of intra-window temporal profiles across features (temporal: A_tem) — and fusing them via a learnable gate improves over single-graph models. Chang et al. (2025) present a related spatio-temporal fusion approach with dynamic sparse graph convolution and demonstrate that separating spatial and temporal relational priors captures distinct aspects of the data structure that a single static graph conflates. In Malaysian ridership data, two features may co-vary strongly at a single point in time (high spatial correlation in A_spa) but exhibit very different daily profiles across the 14-day window (low temporal correlation in A_tem). For example, a fuel price series and a rainfall series may both dip on the same days due to coincident conditions, giving moderate A_spa correlation, while their intra-window temporal trajectories are structurally dissimilar in A_tem. STFGNN is the only model in the study that encodes both types of inter-feature similarity simultaneously via dedicated separate graphs.
 
-**Citation:** Chang, J., Yin, J., Hao, Y., & Gao, C. (2025). STFDSGCN: Spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. *Sensors*, 25(11), 3446. https://doi.org/10.3390/s25113446
+**Citation:** Chang, J., Yin, J., Hao, Y., & Gao, C. (2025). STFDSGCN: Spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. *Sensors*, 25(11), 3446. [https://doi.org/10.3390/s25113446](https://doi.org/10.3390/s25113446)
 
 #### Key Architecture
 
@@ -601,6 +623,8 @@ flowchart TD
     POOL --> MLP
 ```
 
+
+
 #### Tuned Variant
 
 **Script:** `src/models/graph-tuned/stfgnn.py`
@@ -629,7 +653,7 @@ Hyperparameter changes: `hidden 64→128`, `dropout 0.20→0.35`, `adj_threshold
 
 PDR-STGCN is a novel architecture developed in this study within the graph-based series, designed to address two key limitations of STGCN: the static graph's inability to adapt to sample-specific inter-feature relationships, and the single-channel input's failure to explicitly encode the periodicity intrinsic to transit ridership. The architecture published in *Systems* (2026) demonstrates that combining multi-scale periodic fusion with a dynamic relational graph significantly improves traffic forecasting performance over the static-graph STGCN baseline, motivating its adoption for transit ridership which exhibits particularly strong weekly seasonality driven by Malaysian work and school calendars. The dynamic attention-based adjacency allows the model to construct a different inter-feature graph for each input sample, capturing contextual correlations that a static Pearson graph cannot represent. PDR-STGCN is the most expressive and novel graph model in this study.
 
-**Citation:** (2026). PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. *Systems*, 14(1), 102. https://doi.org/10.3390/systems14010102
+**Citation:** (2026). PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. *Systems*, 14(1), 102. [https://doi.org/10.3390/systems14010102](https://doi.org/10.3390/systems14010102)
 
 #### Key Architecture
 
@@ -665,6 +689,8 @@ flowchart TD
     TGC_OUT --> MEAN --> MLP
 ```
 
+
+
 #### Tuned Variant
 
 **Script:** `src/models/graph-tuned/pdr_stgcn.py`
@@ -687,7 +713,6 @@ Hyperparameter changes: `hidden 160→256`, `n_blocks 2→3`, `kt 3→2`, `dk 48
 
 ---
 
-
 ## 3.3.6 MTGNN — Multi-Scale Temporal Graph Neural Network
 
 **Script:** `src/models/graph-based/mtgnn.py`
@@ -698,7 +723,7 @@ Hyperparameter changes: `hidden 160→256`, `n_blocks 2→3`, `kt 3→2`, `dk 48
 
 MTGNN is selected to test whether learning the inter-feature graph adjacency end-to-end from node embedding matrices — rather than deriving it from pre-computed Pearson correlation — produces a more task-specific and expressive relational structure. Wu et al. (2025) present a multi-dynamic temporal representation GCN for traffic flow prediction and demonstrate that end-to-end learned adjacency with multi-scale dilated inception outperforms static correlation-based graph models by capturing task-relevant inter-node relationships that correlation alone cannot encode. In this study, the Pearson graph used by STGCN, STSGCN, STFGNN, and ASTGCN is an approximation of inter-feature relationships derived from training statistics; it may miss non-linear or task-specific dependencies that only become apparent during gradient descent optimisation. MTGNN's asymmetric learned adjacency (A ≠ A^T) additionally allows asymmetric influence — feature i can influence feature j without the reverse — which is appropriate for causally asymmetric relationships such as fuel price affecting ridership but not vice versa.
 
-**Citation:** Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, 15, 16734. https://doi.org/10.1038/s41598-025-01157-1
+**Citation:** Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, 15, 16734. [https://doi.org/10.1038/s41598-025-01157-1](https://doi.org/10.1038/s41598-025-01157-1)
 
 #### Key Architecture
 
@@ -724,6 +749,8 @@ flowchart TD
     M1 & M2 --> ADJ -. used in MixHop .-> MHC
     SKIP --> SAGG --> MLP
 ```
+
+
 
 #### Tuned Variant
 
@@ -761,7 +788,7 @@ Located in `src/models/attention-based/`. These models use attention mechanisms 
 
 Autoformer is selected to test whether explicit series decomposition into trend and seasonal components, combined with FFT-based autocorrelation attention, outperforms graph-based models for transit ridership — which is fundamentally a periodic multi-scale signal. Ma and Zhang (2025) extend Autoformer with multi-scale feature fusion for time series forecasting and demonstrate that the decomposition-based approach achieves stable performance on strongly periodic signals by cleanly separating trend recovery from seasonal pattern matching, validating the approach for periodic demand signals. Malaysian transit ridership in non-MCO periods exhibits largely stationary weekly and daily periodicity, making the spectral autocorrelation mechanism theoretically well-suited: it can directly discover the 7-day dominant lag from data rather than assuming it. Autoformer introduces the hypothesis that the ridership forecasting problem is better framed as signal decomposition than as graph-structured feature propagation.
 
-**Citation:** Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, 15(7), 3768. https://doi.org/10.3390/app15073768
+**Citation:** Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, 15(7), 3768. [https://doi.org/10.3390/app15073768](https://doi.org/10.3390/app15073768)
 
 #### Key Architecture
 
@@ -798,6 +825,8 @@ flowchart TD
     DD3 --> COMBINE --> LINEAR
 ```
 
+
+
 #### Tuned Variant
 
 **Script:** `src/models/attention-tuned/autoformer.py`
@@ -826,7 +855,7 @@ Hyperparameter changes: `d_model 64→128`, `n_heads 4→8`, `e_layers 2→3`, `
 
 Informer is selected as the final comparison model before HMT-TSF, representing efficient long-sequence transformer forecasting. Song et al. (2024) apply a graph attention Informer to long-term traffic flow prediction under event impact and demonstrate that ProbSparse attention with distilling achieves competitive accuracy while substantially reducing computational cost relative to full self-attention, validating the approach for transport demand forecasting. In this study at T_in=14, ProbSparse gracefully degenerates to near-full attention (u ≈ 13 of 14 queries active), eliminating approximation error at the cost of no accuracy loss — making the comparison with full-attention models fair. Informer tests whether the generative one-shot decoder, which initialises with recent encoder context and directly produces all T_out=7 steps without autoregression, provides an advantage over the decomposition-decoder approach of Autoformer for multi-step transit ridership prediction. Its empirical MCO-condition robustness (strongest baseline under distribution shift) further motivates its inclusion.
 
-**Citation:** Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, 24(15), 4796. https://doi.org/10.3390/s24154796
+**Citation:** Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, 24(15), 4796. [https://doi.org/10.3390/s24154796](https://doi.org/10.3390/s24154796)
 
 #### Key Architecture
 
@@ -857,6 +886,8 @@ flowchart TD
     PS2 --> FCA
     FCA --> PROJ
 ```
+
+
 
 #### Tuned Variant
 
@@ -891,9 +922,7 @@ Located in `src/models/hybrid/`. HMT-TSF (Hybrid Multi-scale Temporal Spatio-Fea
 HMT-TSF is proposed to address three key limitations identified across the 14 baseline models:
 
 1. **No model captures all three types of structure simultaneously.** LSTM-family models handle temporal sequences well but have no graph structure and no regime awareness; graph-based models propagate inter-feature correlations but are rigid under distributional shift; attention-based models decompose periodic signals effectively but cannot propagate domain-meaningful feature-to-feature messages. HMT-TSF fuses temporal, spatial, and regime-aware representations in parallel.
-
 2. **No model explicitly handles the MCO regime shift.** All graph-based models use static Pearson graphs computed on training data; the MCO pandemic caused a structural break in ridership patterns that invalidates these learned correlations. Static normalisation strategies compound this problem by applying fixed-scale transformations across data from fundamentally different regimes. HMT-TSF addresses this with RevIN instance normalisation and a dedicated Regime Gating Embedding.
-
 3. **No model uses domain-aware feature grouping.** All 14 baselines treat the 79 features as a flat vector, giving equal initial weight to structurally disparate sources. HMT-TSF explicitly partitions features into five semantic groups based on their data source and functional role, embedding each independently before fusion.
 
 ---
@@ -904,13 +933,15 @@ HMT-TSF is proposed to address three key limitations identified across the 14 ba
 
 All 79 input features (or 53 in the SHAP-reduced FR variant) are organised into five semantic groups. Two groups (temporal, external) are **non-contiguous** in the aligned column order, so each group is defined as one or more index segments (matching `FEAT_GROUPS` in `hmttsf.py`):
 
-| Group | Indices (full, 79F) | Indices (FR, 53F) | Count | Features |
-|-------|--------------------|--------------------|-------|---------|
-| Target context | 0–12 | 0–12 | 13 / 13 | 12 service-line ridership values + total_ridership |
-| Lag | 13–15 | 13–15 | 3 / 3 | ridership_lag_7, ridership_lag_14, ridership_lag_28 |
-| Temporal/cyclical | 16–17 ∪ 33–46 | 16–17 ∪ 24–37 | 16 / 16 | year, day_of_year + holiday flags, lead-lag holiday, DoW/month, sin/cos encodings |
-| External | 18–32 ∪ 47–61 | 18–23 ∪ 38–52 | 30 / 21 | Fuel prices (15 / 6 kept) + rainfall (×15) |
-| Static | 62–78 | — | 17 / 0 | Population + GTFS + OSM POI + GADM (all dropped in FR via SHAP) |
+
+| Group             | Indices (full, 79F) | Indices (FR, 53F) | Count   | Features                                                                          |
+| ----------------- | ------------------- | ----------------- | ------- | --------------------------------------------------------------------------------- |
+| Target context    | 0–12                | 0–12              | 13 / 13 | 12 service-line ridership values + total_ridership                                |
+| Lag               | 13–15               | 13–15             | 3 / 3   | ridership_lag_7, ridership_lag_14, ridership_lag_28                               |
+| Temporal/cyclical | 16–17 ∪ 33–46       | 16–17 ∪ 24–37     | 16 / 16 | year, day_of_year + holiday flags, lead-lag holiday, DoW/month, sin/cos encodings |
+| External          | 18–32 ∪ 47–61       | 18–23 ∪ 38–52     | 30 / 21 | Fuel prices (15 / 6 kept) + rainfall (×15)                                        |
+| Static            | 62–78               | —                 | 17 / 0  | Population + GTFS + OSM POI + GADM (all dropped in FR via SHAP)                   |
+
 
 #### Why These Features
 
@@ -996,11 +1027,13 @@ A 2-layer GCN then propagates signals across the Pearson-correlation adjacency (
 
 The MCO period represents a structural break in Malaysian transit ridership — not merely a large shock, but a change in which features predict ridership at all. During lockdown, fuel prices and population-density features became irrelevant to transit demand (which was prohibited regardless). The Regime Gating Embedding maintains K=3 learnable embedding vectors representing the three operational regimes:
 
-| Regime | Period |
-|--------|--------|
+
+| Regime    | Period                  |
+| --------- | ----------------------- |
 | Pre-COVID | 2019-01-01 – 2020-03-17 |
-| MCO | 2020-03-18 – 2021-12-31 |
-| Post-MCO | 2022-01-01 – 2025-12-31 |
+| MCO       | 2020-03-18 – 2021-12-31 |
+| Post-MCO  | 2022-01-01 – 2025-12-31 |
+
 
 At each forward pass, the mean-pooled input is projected to K=3 soft logits via a linear layer and softmax, producing a soft mixture of regime embeddings:
 
@@ -1087,6 +1120,8 @@ flowchart TD
     GF --> FH --> FTP --> REVIND --> BOOST --> OUT
 ```
 
+
+
 ---
 
 ### 3.5.5 Strengths
@@ -1112,11 +1147,13 @@ flowchart TD
 
 Fourteen mirrored fine-tuned variants of the 14 baseline models are located in three folders. HMT-TSF does not have a separate tuned variant — its hyperparameters are already set for maximum performance.
 
-| Folder | Models |
-|--------|--------|
+
+| Folder                              | Models                                      |
+| ----------------------------------- | ------------------------------------------- |
 | `src/models/spatio-temporal-tuned/` | LSTM, BiLSTM, CNN-LSTM, CNN-BiLSTM, ST-LSTM |
-| `src/models/graph-tuned/` | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN |
-| `src/models/attention-tuned/` | TPA-LSTM, ASTGCN, Autoformer, Informer |
+| `src/models/graph-tuned/`           | STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN     |
+| `src/models/attention-tuned/`       | TPA-LSTM, ASTGCN, Autoformer, Informer      |
+
 
 **Tuning strategy (Option C):** Best-configuration selection (MCO-exclusion setting + look-back window) combined with revised architecture hyperparameters. The training schedule (`epochs`, `batch_size`, `patience`) is unchanged across all 16 tuned variants; regularisation values (`dropout`, `weight_decay`) are revised per model as listed below, and STSGCN's learning rate rises from 5e-4 to 1e-3.
 
@@ -1128,24 +1165,26 @@ Fourteen mirrored fine-tuned variants of the 14 baseline models are located in t
 
 CNN-LSTM is split into three independently tuned variants — one per mode — each with its own canonical look-back window. The training schedule (epochs, batch_size, patience) is unchanged from base (STSGCN retains its base 200-epoch / 25-patience schedule); STSGCN additionally raises lr from 5e-4 to 1e-3. Parameters that did not change from base are omitted from the Key Changes column. All values below are the actual argparse defaults of the tuned scripts.
 
-| Model | Variant / Lookback | Key Changes (base → tuned) | Dropout Rationale |
-|-------|-------------------|---------------------------|-------------------|
-| LSTM | — / 14 | hidden 64→128, layers 1→2, dropout 0.10→0.20, weight_decay 1e-4→2e-4 | 2-layer regularisation |
-| BiLSTM | — / 14 | hidden 64→256, layers 1→3 | expanded recurrent capacity; base dropout retained |
-| CNN-LSTM | sequential / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| CNN-LSTM | parallel / 28 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| CNN-LSTM | augmented / 14 | cnn_filters 32→64, dropout 0.10→0.20 | MED-HIGH variance across lookbacks |
-| CNN-BiLSTM | — / 14 | hidden 64→128, cnn_filters 32→64, cnn_layers 2→1, dropout 0.10→0.25 | HIGH variance across lookbacks |
-| ST-LSTM | — / 14 | hidden 64→128, spatial_hidden 32→128, dropout 0.10→0.30 | MED-HIGH variance across lookbacks |
-| STGCN | — / 14 | hidden 128→256, dropout 0.20→0.25, weight_decay 2e-4→3e-4 | LOW variance, stable with more filters; n_blocks=2, kt=3 unchanged |
-| MTGNN | — / 14 | hidden 32→64, d_emb 10→7, dropout 0.10→0.30, weight_decay 1e-4→3e-4 | HIGH variance across lookbacks |
-| STSGCN | — / 14 | hidden 96→128, dropout 0.10→0.25, weight_decay 1e-4→2e-4, lr 5e-4→1e-3 | LOW variance, synchronous graph benefits |
-| STFGNN | — / 14 | hidden 64→128, adj_threshold 0.10→0.15, dropout 0.20→0.35 | MED-HIGH variance across lookbacks |
-| PDR-STGCN | — / 14 | hidden 160→256, n_blocks 2→3, kt 3→2 ¹, dk 48→64, dropout 0.15→0.25 | MED variance across lookbacks |
-| TPA-LSTM | — / 14 | hidden 64→256, filters 32→128, dropout 0.10→0.15 | moderate variance across lookbacks |
-| ASTGCN | — / 14 | d_model 64→128, n_heads 4→8, n_blocks 2→3, dropout 0.15→0.20, weight_decay 2e-4→1e-4 | moderate variance across lookbacks |
-| Autoformer | — / 14 | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.15→0.25 | moderate variance across lookbacks |
-| Informer | — / 14 | d_model 64→256, n_heads 4→16, e_layers 2→3, d_ff 128→512 | LOW variance, sparse attention stable; base dropout retained |
+
+| Model      | Variant / Lookback | Key Changes (base → tuned)                                                           | Dropout Rationale                                                  |
+| ---------- | ------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| LSTM       | — / 14             | hidden 64→128, layers 1→2, dropout 0.10→0.20, weight_decay 1e-4→2e-4                 | 2-layer regularisation                                             |
+| BiLSTM     | — / 14             | hidden 64→256, layers 1→3                                                            | expanded recurrent capacity; base dropout retained                 |
+| CNN-LSTM   | sequential / 14    | cnn_filters 32→64, dropout 0.10→0.20                                                 | MED-HIGH variance across lookbacks                                 |
+| CNN-LSTM   | parallel / 28      | cnn_filters 32→64, dropout 0.10→0.20                                                 | MED-HIGH variance across lookbacks                                 |
+| CNN-LSTM   | augmented / 14     | cnn_filters 32→64, dropout 0.10→0.20                                                 | MED-HIGH variance across lookbacks                                 |
+| CNN-BiLSTM | — / 14             | hidden 64→128, cnn_filters 32→64, cnn_layers 2→1, dropout 0.10→0.25                  | HIGH variance across lookbacks                                     |
+| ST-LSTM    | — / 14             | hidden 64→128, spatial_hidden 32→128, dropout 0.10→0.30                              | MED-HIGH variance across lookbacks                                 |
+| STGCN      | — / 14             | hidden 128→256, dropout 0.20→0.25, weight_decay 2e-4→3e-4                            | LOW variance, stable with more filters; n_blocks=2, kt=3 unchanged |
+| MTGNN      | — / 14             | hidden 32→64, d_emb 10→7, dropout 0.10→0.30, weight_decay 1e-4→3e-4                  | HIGH variance across lookbacks                                     |
+| STSGCN     | — / 14             | hidden 96→128, dropout 0.10→0.25, weight_decay 1e-4→2e-4, lr 5e-4→1e-3               | LOW variance, synchronous graph benefits                           |
+| STFGNN     | — / 14             | hidden 64→128, adj_threshold 0.10→0.15, dropout 0.20→0.35                            | MED-HIGH variance across lookbacks                                 |
+| PDR-STGCN  | — / 14             | hidden 160→256, n_blocks 2→3, kt 3→2 ¹, dk 48→64, dropout 0.15→0.25                  | MED variance across lookbacks                                      |
+| TPA-LSTM   | — / 14             | hidden 64→256, filters 32→128, dropout 0.10→0.15                                     | moderate variance across lookbacks                                 |
+| ASTGCN     | — / 14             | d_model 64→128, n_heads 4→8, n_blocks 2→3, dropout 0.15→0.20, weight_decay 2e-4→1e-4 | moderate variance across lookbacks                                 |
+| Autoformer | — / 14             | d_model 64→128, n_heads 4→8, e_layers 2→3, d_ff 128→256, dropout 0.15→0.25           | moderate variance across lookbacks                                 |
+| Informer   | — / 14             | d_model 64→256, n_heads 4→16, e_layers 2→3, d_ff 128→512                             | LOW variance, sparse attention stable; base dropout retained       |
+
 
 > ¹ `kt` reduction is required for correctness in PDR-STGCN: with deeper `n_blocks` stacking on T_in=14, `kt=3` shrinks the temporal dimension to zero before the output layer. `kt=2` restores validity while maintaining the increased depth.
 
@@ -1153,23 +1192,25 @@ CNN-LSTM is split into three independently tuned variants — one per mode — e
 
 ## Summary Table
 
-| # | Model | Series | Graph | Attention | AMP | Key Differentiator |
-|---|-------|--------|-------|-----------|-----|--------------------|
-| 1 | LSTM | ST | No | No | No | Causal sequential baseline — performance floor |
-| 2 | BiLSTM | ST | No | No | No | Bidirectional context over observed look-back window |
-| 3 | TPA-LSTM | ST | No | Pattern-CNN | No | Temporal pattern filters via 1-D CNN over hidden states |
-| 4 | CNN-LSTM | ST | No | No | No | Three CNN–LSTM fusion modes; hierarchical local+global extraction |
-| 5 | CNN-BiLSTM | ST | No | No | No | CNN local extraction + bidirectional global context |
-| 6 | ST-LSTM | ST | No | No | No | Explicit parallel spatial (MLP) + temporal (LSTM) streams |
-| 7 | STGCN | Graph | Static Pearson | No | No | ST-Conv blocks on fixed correlation graph |
-| 8 | ASTGCN | Attention | Static Pearson | Spatial+Temporal | Yes | Dual multi-head attention over nodes and timesteps |
-| 9 | STSGCN | Graph | Static Pearson | No | No | Synchronous 3N×3N spatio-temporal graph |
-| 10 | PDR-STGCN | Graph | Static+Dynamic | Dynamic | No | Periodicity encoding + per-sample dynamic relational graph |
-| 11 | MTGNN | Graph | Learned | No | No | End-to-end learned asymmetric adjacency + dilated inception |
-| 12 | STFGNN | Graph | Static×2 (spa+tem) | No | No | Dual spatial+temporal graphs fused by learned scalar gate |
-| 13 | Autoformer | Attention | No | Auto-Corr (FFT) | Yes | Decomposition + FFT-based periodic autocorrelation |
-| 14 | Informer | Attention | No | ProbSparse | Yes | Sparse attention + distilling; generative decoder |
-| 15 | **HMT-TSF** | **Hybrid** | **Static Pearson (GCN)** | **MHA + TCN** | **Yes** | **Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction** |
+
+| #   | Model       | Series     | Graph                    | Attention        | AMP     | Key Differentiator                                                                                       |
+| --- | ----------- | ---------- | ------------------------ | ---------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | LSTM        | ST         | No                       | No               | No      | Causal sequential baseline — performance floor                                                           |
+| 2   | BiLSTM      | ST         | No                       | No               | No      | Bidirectional context over observed look-back window                                                     |
+| 3   | TPA-LSTM    | ST         | No                       | Pattern-CNN      | No      | Temporal pattern filters via 1-D CNN over hidden states                                                  |
+| 4   | CNN-LSTM    | ST         | No                       | No               | No      | Three CNN–LSTM fusion modes; hierarchical local+global extraction                                        |
+| 5   | CNN-BiLSTM  | ST         | No                       | No               | No      | CNN local extraction + bidirectional global context                                                      |
+| 6   | ST-LSTM     | ST         | No                       | No               | No      | Explicit parallel spatial (MLP) + temporal (LSTM) streams                                                |
+| 7   | STGCN       | Graph      | Static Pearson           | No               | No      | ST-Conv blocks on fixed correlation graph                                                                |
+| 8   | ASTGCN      | Attention  | Static Pearson           | Spatial+Temporal | Yes     | Dual multi-head attention over nodes and timesteps                                                       |
+| 9   | STSGCN      | Graph      | Static Pearson           | No               | No      | Synchronous 3N×3N spatio-temporal graph                                                                  |
+| 10  | PDR-STGCN   | Graph      | Static+Dynamic           | Dynamic          | No      | Periodicity encoding + per-sample dynamic relational graph                                               |
+| 11  | MTGNN       | Graph      | Learned                  | No               | No      | End-to-end learned asymmetric adjacency + dilated inception                                              |
+| 12  | STFGNN      | Graph      | Static×2 (spa+tem)       | No               | No      | Dual spatial+temporal graphs fused by learned scalar gate                                                |
+| 13  | Autoformer  | Attention  | No                       | Auto-Corr (FFT)  | Yes     | Decomposition + FFT-based periodic autocorrelation                                                       |
+| 14  | Informer    | Attention  | No                       | ProbSparse       | Yes     | Sparse attention + distilling; generative decoder                                                        |
+| 15  | **HMT-TSF** | **Hybrid** | **Static Pearson (GCN)** | **MHA + TCN**    | **Yes** | **Feature-group fusion + Multi-Scale TCN + GCN + Regime gating + optional CatBoost residual correction** |
+
 
 ---
 
@@ -1179,32 +1220,38 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 
 ### Series 1 — Spatio-Temporal (LSTM-Family)
 
-| Model | Citation |
-|-------|----------|
-| LSTM | Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM performance on diverse time series. *Mathematics*, 14(5), 838. https://doi.org/10.3390/math14050838 |
-| BiLSTM | Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, 15. https://doi.org/10.1038/s41598-025-02933-9 |
-| TPA-LSTM | Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, 12(1), 25. https://doi.org/10.3390/ijgi12010025 |
-| CNN-LSTM | Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, 8(5), 148. https://doi.org/10.3390/smartcities8050148 |
-| CNN-BiLSTM | Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction based on CNN-BiLSTM with multicomponent information. *Applied Sciences*, 12(17), 8714. https://doi.org/10.3390/app12178714 |
-| ST-LSTM | Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, 20(1), e0333094. https://doi.org/10.1371/journal.pone.0333094 |
+
+| Model      | Citation                                                                                                                                                                                                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LSTM       | Strigula, M. (2026). Beyond traditional forecasting methods: Evaluating LSTM performance on diverse time series. *Mathematics*, 14(5), 838. [https://doi.org/10.3390/math14050838](https://doi.org/10.3390/math14050838)                                                                                                                              |
+| BiLSTM     | Alajmi, M. S., & Almutairi, S. M. (2025). Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. *Scientific Reports*, 15. [https://doi.org/10.1038/s41598-025-02933-9](https://doi.org/10.1038/s41598-025-02933-9)                                                      |
+| TPA-LSTM   | Wei, L., Guo, D., Chen, Z., Yang, J., & Feng, T. (2023). Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. *ISPRS International Journal of Geo-Information*, 12(1), 25. [https://doi.org/10.3390/ijgi12010025](https://doi.org/10.3390/ijgi12010025) |
+| CNN-LSTM   | Topilin, I., Jiang, J., Feofilova, A., & Beskopylny, N. (2025). Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. *Smart Cities*, 8(5), 148. [https://doi.org/10.3390/smartcities8050148](https://doi.org/10.3390/smartcities8050148)                                                                                         |
+| CNN-BiLSTM | Chen, W., Yang, Z., Xu, G., & Sun, Y. (2022). Short-term traffic flow prediction based on CNN-BiLSTM with multicomponent information. *Applied Sciences*, 12(17), 8714. [https://doi.org/10.3390/app12178714](https://doi.org/10.3390/app12178714)                                                                                                    |
+| ST-LSTM    | Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE*, 20(1), e0333094. [https://doi.org/10.1371/journal.pone.0333094](https://doi.org/10.1371/journal.pone.0333094)                                         |
+
 
 ### Series 2 — Graph-Based
 
-| Model | Citation |
-|-------|----------|
-| STGCN | Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. *Electronics*, 14(7), 1410. https://doi.org/10.3390/electronics14071410 |
-| MTGNN | Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, 15, 16734. https://doi.org/10.1038/s41598-025-01157-1 |
-| STSGCN | Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, 18(4), e0283898. https://doi.org/10.1371/journal.pone.0283898 |
-| STFGNN | Chang, J., Yin, J., Hao, Y., & Gao, C. (2025). STFDSGCN: Spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. *Sensors*, 25(11), 3446. https://doi.org/10.3390/s25113446 |
-| PDR-STGCN | (2026). PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. *Systems*, 14(1), 102. https://doi.org/10.3390/systems14010102 |
+
+| Model     | Citation                                                                                                                                                                                                                                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| STGCN     | Deng, H. (2025). Traffic-forecasting model with spatio-temporal kernel. *Electronics*, 14(7), 1410. [https://doi.org/10.3390/electronics14071410](https://doi.org/10.3390/electronics14071410)                                                                                                                     |
+| MTGNN     | Wu, Z., Liu, X., & Zhang, X. (2025). Multi dynamic temporal representation graph convolutional network for traffic flow prediction. *Scientific Reports*, 15, 16734. [https://doi.org/10.1038/s41598-025-01157-1](https://doi.org/10.1038/s41598-025-01157-1)                                                      |
+| STSGCN    | Chen, L., Ren, Q., Zeng, J., Zou, F., Luo, S., Tian, J., & Xing, Y. (2023). CSFPre: Expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. *PLOS ONE*, 18(4), e0283898. [https://doi.org/10.1371/journal.pone.0283898](https://doi.org/10.1371/journal.pone.0283898) |
+| STFGNN    | Chang, J., Yin, J., Hao, Y., & Gao, C. (2025). STFDSGCN: Spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. *Sensors*, 25(11), 3446. [https://doi.org/10.3390/s25113446](https://doi.org/10.3390/s25113446)                                      |
+| PDR-STGCN | (2026). PDR-STGCN: An enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. *Systems*, 14(1), 102. [https://doi.org/10.3390/systems14010102](https://doi.org/10.3390/systems14010102)                                                                            |
+
 
 ### Series 3 — Attention-Based
 
-| Model | Citation |
-|-------|----------|
-| ASTGCN | Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, 23(15), 6950. https://doi.org/10.3390/s23156950 |
-| Autoformer | Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, 15(7), 3768. https://doi.org/10.3390/app15073768 |
-| Informer | Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, 24(15), 4796. https://doi.org/10.3390/s24154796 |
+
+| Model      | Citation                                                                                                                                                                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ASTGCN     | Cui, Z., Zhang, J., Noh, G., & Park, H. J. (2023). ADSTGCN: A dynamic adaptive deeper spatio-temporal graph convolutional network for multi-step traffic forecasting. *Sensors*, 23(15), 6950. [https://doi.org/10.3390/s23156950](https://doi.org/10.3390/s23156950) |
+| Autoformer | Ma, X., & Zhang, H. (2025). Time series forecasting method based on multi-scale feature fusion and Autoformer. *Applied Sciences*, 15(7), 3768. [https://doi.org/10.3390/app15073768](https://doi.org/10.3390/app15073768)                                            |
+| Informer   | Song, Y., Luo, R., Zhou, T., Zhou, C., & Su, R. (2024). Graph attention Informer for long-term traffic flow prediction under the impact of sports events. *Sensors*, 24(15), 4796. [https://doi.org/10.3390/s24154796](https://doi.org/10.3390/s24154796)             |
+
 
 ---
 
@@ -1214,122 +1261,135 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 
 ### Shared Training Optimisations (All 14 Baseline Models)
 
-| Component | Before | After | Rationale |
-|-----------|--------|-------|-----------|
-| Optimiser | Adam | AdamW | Decoupled weight decay (Loshchilov & Hutter, 2019) |
-| Loss | MSELoss | HuberLoss(delta=1.0) (default) | Robust to ridership outliers; selectable via `--loss` |
-| LR schedule | ReduceLROnPlateau only | Linear warmup (5 ep) → ReduceLROnPlateau | Avoids unstable early updates |
+
+| Component   |  Optimisation                             | Rationale                                             |
+| ----------- | ---------------------------------------- | ----------------------------------------------------- |
+| Optimiser   | AdamW                                    | Decoupled weight decay (Loshchilov & Hutter, 2019)    |
+| Loss        | HuberLoss(delta=1.0) (default)           | Robust to ridership outliers; selectable via `--loss` |
+| LR schedule | Linear warmup (5 ep) → ReduceLROnPlateau | Avoids unstable early updates                         |
+
 
 ### Standardised Baseline Hyperparameters
 
-| Parameter | Value |
-|-----------|-------|
-| epochs | 150 |
-| batch_size | 32 |
-| lr | 1e-3 |
-| patience | 15 |
-| dropout | 0.1 |
-| weight_decay | 1e-4 |
+
+| Parameter    | Value |
+| ------------ | ----- |
+| epochs       | 150   |
+| batch_size   | 32    |
+| lr           | 1e-3  |
+| patience     | 15    |
+| dropout      | 0.1   |
+| weight_decay | 1e-4  |
+
 
 > Per-model deviations baked into the base scripts: STGCN (`dropout=0.20`, `weight_decay=2e-4`), STSGCN (`epochs=200`, `lr=5e-4`, `patience=25`), STFGNN (`dropout=0.20`, `weight_decay=3e-4`), PDR-STGCN (`dropout=0.15`, `weight_decay=2e-4`), ASTGCN (`dropout=0.15`, `weight_decay=2e-4`), Autoformer (`dropout=0.15`, `weight_decay=2e-4`).
 
 ### Baseline Performance (No Tuning) — No-MCO, Lookback 14
 
-| Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
-|------|-------|-----------|-------|------|-------|-----|-----|------|
-| 1 | Informer | 79.13 | 6.59 | 5.53 | 8.76 | 0.772 | 69,476 | 110,050 |
-| 2 | BiLSTM | 79.04 | 6.52 | 5.77 | 8.67 | 0.776 | 72,460 | 109,007 |
-| 3 | TPA-LSTM | 78.67 | 6.62 | 6.04 | 8.67 | 0.776 | 75,871 | 109,009 |
-| 4 | CNN-BiLSTM | 78.18 | 6.81 | 6.12 | 8.89 | 0.764 | 76,884 | 111,782 |
-| 5 | LSTM | 78.13 | 6.71 | 6.18 | 8.98 | 0.760 | 77,719 | 112,801 |
-| 6 | ST-LSTM | 78.01 | 6.93 | 6.27 | 8.79 | 0.770 | 78,779 | 110,453 |
-| 7 | MTGNN | 77.93 | 6.91 | 6.47 | 8.69 | 0.775 | 81,292 | 109,185 |
-| 8 | CNN-LSTM | 77.64 | 6.92 | 6.32 | 9.12 | 0.752 | 79,375 | 114,632 |
-| 9 | STSGCN | 76.97 | 7.18 | 6.42 | 9.42 | 0.736 | 80,703 | 118,391 |
-| 10 | STGCN | 76.81 | 7.24 | 6.77 | 9.17 | 0.750 | 85,077 | 115,297 |
-| 11 | ASTGCN | 75.69 | 7.42 | 6.89 | 9.99 | 0.703 | 86,631 | 125,606 |
-| 12 | CNN-LSTM-Augmented | 75.36 | 7.77 | 7.19 | 9.68 | 0.721 | 90,356 | 121,639 |
-| 13 | Autoformer | 74.73 | 7.86 | 7.51 | 9.90 | 0.708 | 94,414 | 124,408 |
-| 14 | CNN-LSTM-Parallel | 74.18 | 8.18 | 7.68 | 9.97 | 0.704 | 96,477 | 125,240 |
-| 15 | STFGNN | 73.94 | 8.21 | 7.60 | 10.25 | 0.688 | 95,547 | 128,777 |
-| 16 | PDR-STGCN | 73.91 | 8.15 | 7.70 | 10.24 | 0.688 | 96,801 | 128,694 |
+
+| Rank | Model              | Combined% | MAPE% | MAE% | RMSE% | R²    | MAE    | RMSE    |
+| ---- | ------------------ | --------- | ----- | ---- | ----- | ----- | ------ | ------- |
+| 1    | Informer           | 79.13     | 6.59  | 5.53 | 8.76  | 0.772 | 69,476 | 110,050 |
+| 2    | BiLSTM             | 79.04     | 6.52  | 5.77 | 8.67  | 0.776 | 72,460 | 109,007 |
+| 3    | TPA-LSTM           | 78.67     | 6.62  | 6.04 | 8.67  | 0.776 | 75,871 | 109,009 |
+| 4    | CNN-BiLSTM         | 78.18     | 6.81  | 6.12 | 8.89  | 0.764 | 76,884 | 111,782 |
+| 5    | LSTM               | 78.13     | 6.71  | 6.18 | 8.98  | 0.760 | 77,719 | 112,801 |
+| 6    | ST-LSTM            | 78.01     | 6.93  | 6.27 | 8.79  | 0.770 | 78,779 | 110,453 |
+| 7    | MTGNN              | 77.93     | 6.91  | 6.47 | 8.69  | 0.775 | 81,292 | 109,185 |
+| 8    | CNN-LSTM           | 77.64     | 6.92  | 6.32 | 9.12  | 0.752 | 79,375 | 114,632 |
+| 9    | STSGCN             | 76.97     | 7.18  | 6.42 | 9.42  | 0.736 | 80,703 | 118,391 |
+| 10   | STGCN              | 76.81     | 7.24  | 6.77 | 9.17  | 0.750 | 85,077 | 115,297 |
+| 11   | ASTGCN             | 75.69     | 7.42  | 6.89 | 9.99  | 0.703 | 86,631 | 125,606 |
+| 12   | CNN-LSTM-Augmented | 75.36     | 7.77  | 7.19 | 9.68  | 0.721 | 90,356 | 121,639 |
+| 13   | Autoformer         | 74.73     | 7.86  | 7.51 | 9.90  | 0.708 | 94,414 | 124,408 |
+| 14   | CNN-LSTM-Parallel  | 74.18     | 8.18  | 7.68 | 9.97  | 0.704 | 96,477 | 125,240 |
+| 15   | STFGNN             | 73.94     | 8.21  | 7.60 | 10.25 | 0.688 | 95,547 | 128,777 |
+| 16   | PDR-STGCN          | 73.91     | 8.15  | 7.70 | 10.24 | 0.688 | 96,801 | 128,694 |
+
 
 ### Tuned Performance — No-MCO, Lookback 14
 
-| Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE | Δ Combined% |
-|------|-------|-----------|-------|------|-------|-----|-----|------|-------------|
-| 1 | Informer | 79.99 | 6.16 | 5.20 | 8.64 | 0.778 | 65,360 | 108,628 | +0.87 |
-| 2 | TPA-LSTM | 79.95 | 6.19 | 5.31 | 8.55 | 0.782 | 66,703 | 107,475 | +1.28 |
-| 3 | BiLSTM | 79.44 | 6.39 | 5.85 | 8.33 | 0.793 | 73,516 | 104,667 | +0.40 |
-| 4 | ST-LSTM | 79.13 | 6.51 | 5.63 | 8.72 | 0.774 | 70,796 | 109,604 | +1.12 |
-| 5 | ASTGCN | 78.82 | 6.35 | 5.73 | 9.09 | 0.754 | 72,053 | 114,259 | +3.13 |
-| 6 | LSTM | 78.43 | 6.69 | 6.23 | 8.65 | 0.777 | 78,339 | 108,676 | +0.30 |
-| 7 | STGCN | 78.39 | 6.68 | 6.20 | 8.73 | 0.773 | 77,898 | 109,768 | +1.58 |
-| 8 | CNN-LSTM-Augmented | 77.10 | 7.13 | 6.68 | 9.09 | 0.754 | 83,948 | 114,264 | +1.74 |
-| 9 | MTGNN | 76.40 | 7.36 | 6.92 | 9.32 | 0.742 | 87,002 | 117,096 | −1.54 |
-| 10 | CNN-BiLSTM | 76.12 | 7.59 | 7.07 | 9.21 | 0.747 | 88,852 | 115,807 | −2.06 |
-| 11 | PDR-STGCN | 75.56 | 7.60 | 7.24 | 9.61 | 0.725 | 90,960 | 120,750 | +1.65 |
-| 12 | Autoformer | 75.21 | 7.77 | 6.77 | 10.26 | 0.687 | 85,023 | 128,947 | +0.48 |
-| 13 | STSGCN | 73.65 | 8.45 | 7.18 | 10.73 | 0.658 | 90,204 | 134,797 | −3.33 |
-| 14 | CNN-LSTM | 73.36 | 8.41 | 8.06 | 10.17 | 0.692 | 101,280 | 127,827 | −4.28 |
-| 15 | CNN-LSTM-Parallel | 72.53 | 8.75 | 8.24 | 10.48 | 0.673 | 103,551 | 131,732 | −1.65 |
-| 16 | STFGNN | 65.47 | 11.48 | 10.06 | 12.99 | 0.498 | 126,411 | 163,230 | −8.47 |
+
+| Rank | Model              | Combined% | MAPE% | MAE%  | RMSE% | R²    | MAE     | RMSE    | Δ Combined% |
+| ---- | ------------------ | --------- | ----- | ----- | ----- | ----- | ------- | ------- | ----------- |
+| 1    | Informer           | 79.99     | 6.16  | 5.20  | 8.64  | 0.778 | 65,360  | 108,628 | +0.87       |
+| 2    | TPA-LSTM           | 79.95     | 6.19  | 5.31  | 8.55  | 0.782 | 66,703  | 107,475 | +1.28       |
+| 3    | BiLSTM             | 79.44     | 6.39  | 5.85  | 8.33  | 0.793 | 73,516  | 104,667 | +0.40       |
+| 4    | ST-LSTM            | 79.13     | 6.51  | 5.63  | 8.72  | 0.774 | 70,796  | 109,604 | +1.12       |
+| 5    | ASTGCN             | 78.82     | 6.35  | 5.73  | 9.09  | 0.754 | 72,053  | 114,259 | +3.13       |
+| 6    | LSTM               | 78.43     | 6.69  | 6.23  | 8.65  | 0.777 | 78,339  | 108,676 | +0.30       |
+| 7    | STGCN              | 78.39     | 6.68  | 6.20  | 8.73  | 0.773 | 77,898  | 109,768 | +1.58       |
+| 8    | CNN-LSTM-Augmented | 77.10     | 7.13  | 6.68  | 9.09  | 0.754 | 83,948  | 114,264 | +1.74       |
+| 9    | MTGNN              | 76.40     | 7.36  | 6.92  | 9.32  | 0.742 | 87,002  | 117,096 | −1.54       |
+| 10   | CNN-BiLSTM         | 76.12     | 7.59  | 7.07  | 9.21  | 0.747 | 88,852  | 115,807 | −2.06       |
+| 11   | PDR-STGCN          | 75.56     | 7.60  | 7.24  | 9.61  | 0.725 | 90,960  | 120,750 | +1.65       |
+| 12   | Autoformer         | 75.21     | 7.77  | 6.77  | 10.26 | 0.687 | 85,023  | 128,947 | +0.48       |
+| 13   | STSGCN             | 73.65     | 8.45  | 7.18  | 10.73 | 0.658 | 90,204  | 134,797 | −3.33       |
+| 14   | CNN-LSTM           | 73.36     | 8.41  | 8.06  | 10.17 | 0.692 | 101,280 | 127,827 | −4.28       |
+| 15   | CNN-LSTM-Parallel  | 72.53     | 8.75  | 8.24  | 10.48 | 0.673 | 103,551 | 131,732 | −1.65       |
+| 16   | STFGNN             | 65.47     | 11.48 | 10.06 | 12.99 | 0.498 | 126,411 | 163,230 | −8.47       |
+
 
 ### Tuned Performance — MCO-Inclusive, Lookback 14
 
-| Rank | Model | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE | Δ vs no-MCO |
-|------|-------|-----------|-------|------|-------|-----|-----|------|-------------|
-| 1 | Informer | 75.79 | 7.57 | 6.94 | 9.70 | 0.742 | 85,636 | 119,628 | −4.20 |
-| 2 | ST-LSTM | 75.05 | 7.93 | 7.05 | 9.98 | 0.726 | 86,892 | 123,067 | −4.09 |
-| 3 | TPA-LSTM | 74.77 | 8.02 | 7.13 | 10.08 | 0.721 | 87,921 | 124,327 | −5.19 |
-| 4 | BiLSTM | 70.66 | 9.29 | 9.01 | 11.03 | 0.666 | 111,167 | 135,981 | −8.77 |
-| 5 | MTGNN | 68.22 | 10.38 | 9.46 | 11.94 | 0.609 | 116,720 | 147,209 | −8.18 |
-| 6 | CNN-LSTM-Parallel | 67.98 | 10.53 | 9.34 | 12.15 | 0.594 | 115,158 | 149,853 | −4.55 |
-| 7 | CNN-BiLSTM | 67.28 | 10.29 | 10.29 | 12.13 | 0.596 | 126,953 | 149,610 | −8.84 |
-| 8 | CNN-LSTM-Augmented | 66.98 | 10.50 | 10.16 | 12.36 | 0.581 | 125,325 | 152,394 | −10.12 |
-| 9 | LSTM | 66.23 | 10.80 | 10.62 | 12.35 | 0.581 | 130,969 | 152,325 | −12.20 |
-| 10 | STGCN | 64.52 | 11.29 | 11.17 | 13.02 | 0.534 | 137,757 | 160,522 | −13.87 |
-| 11 | STSGCN | 61.33 | 12.35 | 12.17 | 14.15 | 0.450 | 150,058 | 174,473 | −12.31 |
-| 12 | PDR-STGCN | 61.14 | 12.87 | 12.28 | 13.72 | 0.483 | 151,397 | 169,173 | −14.42 |
-| 13 | Autoformer | 60.64 | 12.49 | 11.87 | 15.00 | 0.382 | 146,439 | 184,919 | −14.57 |
-| 14 | ASTGCN | 60.50 | 12.63 | 12.50 | 14.37 | 0.432 | 154,102 | 177,240 | −18.32 |
-| 15 | CNN-LSTM | 48.90 | 16.18 | 16.54 | 18.38 | 0.072 | 203,993 | 226,622 | −24.45 |
-| 16 | STFGNN | 42.46 | 18.38 | 18.25 | 20.91 | −0.201 | 225,079 | 257,858 | −23.01 |
+
+| Rank | Model              | Combined% | MAPE% | MAE%  | RMSE% | R²     | MAE     | RMSE    | Δ vs no-MCO |
+| ---- | ------------------ | --------- | ----- | ----- | ----- | ------ | ------- | ------- | ----------- |
+| 1    | Informer           | 75.79     | 7.57  | 6.94  | 9.70  | 0.742  | 85,636  | 119,628 | −4.20       |
+| 2    | ST-LSTM            | 75.05     | 7.93  | 7.05  | 9.98  | 0.726  | 86,892  | 123,067 | −4.09       |
+| 3    | TPA-LSTM           | 74.77     | 8.02  | 7.13  | 10.08 | 0.721  | 87,921  | 124,327 | −5.19       |
+| 4    | BiLSTM             | 70.66     | 9.29  | 9.01  | 11.03 | 0.666  | 111,167 | 135,981 | −8.77       |
+| 5    | MTGNN              | 68.22     | 10.38 | 9.46  | 11.94 | 0.609  | 116,720 | 147,209 | −8.18       |
+| 6    | CNN-LSTM-Parallel  | 67.98     | 10.53 | 9.34  | 12.15 | 0.594  | 115,158 | 149,853 | −4.55       |
+| 7    | CNN-BiLSTM         | 67.28     | 10.29 | 10.29 | 12.13 | 0.596  | 126,953 | 149,610 | −8.84       |
+| 8    | CNN-LSTM-Augmented | 66.98     | 10.50 | 10.16 | 12.36 | 0.581  | 125,325 | 152,394 | −10.12      |
+| 9    | LSTM               | 66.23     | 10.80 | 10.62 | 12.35 | 0.581  | 130,969 | 152,325 | −12.20      |
+| 10   | STGCN              | 64.52     | 11.29 | 11.17 | 13.02 | 0.534  | 137,757 | 160,522 | −13.87      |
+| 11   | STSGCN             | 61.33     | 12.35 | 12.17 | 14.15 | 0.450  | 150,058 | 174,473 | −12.31      |
+| 12   | PDR-STGCN          | 61.14     | 12.87 | 12.28 | 13.72 | 0.483  | 151,397 | 169,173 | −14.42      |
+| 13   | Autoformer         | 60.64     | 12.49 | 11.87 | 15.00 | 0.382  | 146,439 | 184,919 | −14.57      |
+| 14   | ASTGCN             | 60.50     | 12.63 | 12.50 | 14.37 | 0.432  | 154,102 | 177,240 | −18.32      |
+| 15   | CNN-LSTM           | 48.90     | 16.18 | 16.54 | 18.38 | 0.072  | 203,993 | 226,622 | −24.45      |
+| 16   | STFGNN             | 42.46     | 18.38 | 18.25 | 20.91 | −0.201 | 225,079 | 257,858 | −23.01      |
+
 
 ### Cross-Lookback Analysis — Tuned No-MCO
 
-| Model | lb14 Combined% | lb28 Combined% | lb56 Combined% | Best |
-|-------|----------------|----------------|----------------|------|
-| Informer | **79.99** | 78.73 | 77.51 | **14** |
-| TPA-LSTM | **79.95** | 79.30 | 79.33 | **14** |
-| BiLSTM | **79.44** | 78.33 | 75.90 | **14** |
-| ST-LSTM | **79.13** | 77.85 | 78.51 | **14** |
-| ASTGCN | **78.82** | 68.22 | 73.60 | **14** |
-| LSTM | **78.43** | 77.27 | 73.93 | **14** |
-| STGCN | **78.39** | 76.68 | 73.04 | **14** |
-| CNN-LSTM-Augmented | 77.10 | **77.30** | 74.22 | **28** |
-| MTGNN | **76.40** | 74.51 | 74.20 | **14** |
-| CNN-BiLSTM | **76.12** | 75.00 | 75.65 | **14** |
-| PDR-STGCN | 75.56 | **75.64** | 69.97 | **28** |
-| Autoformer | 75.21 | **76.66** | 70.98 | **28** |
-| STSGCN | 73.65 | 74.67 | **76.31** | **56** |
-| CNN-LSTM | 73.36 | 74.99 | **75.29** | **56** |
-| CNN-LSTM-Parallel | 72.53 | **74.39** | 72.59 | **28** |
-| STFGNN | **65.47** | 46.34 | 45.83 | **14** |
+
+| Model              | lb14 Combined% | lb28 Combined% | lb56 Combined% | Best   |
+| ------------------ | -------------- | -------------- | -------------- | ------ |
+| Informer           | **79.99**      | 78.73          | 77.51          | **14** |
+| TPA-LSTM           | **79.95**      | 79.30          | 79.33          | **14** |
+| BiLSTM             | **79.44**      | 78.33          | 75.90          | **14** |
+| ST-LSTM            | **79.13**      | 77.85          | 78.51          | **14** |
+| ASTGCN             | **78.82**      | 68.22          | 73.60          | **14** |
+| LSTM               | **78.43**      | 77.27          | 73.93          | **14** |
+| STGCN              | **78.39**      | 76.68          | 73.04          | **14** |
+| CNN-LSTM-Augmented | 77.10          | **77.30**      | 74.22          | **28** |
+| MTGNN              | **76.40**      | 74.51          | 74.20          | **14** |
+| CNN-BiLSTM         | **76.12**      | 75.00          | 75.65          | **14** |
+| PDR-STGCN          | 75.56          | **75.64**      | 69.97          | **28** |
+| Autoformer         | 75.21          | **76.66**      | 70.98          | **28** |
+| STSGCN             | 73.65          | 74.67          | **76.31**      | **56** |
+| CNN-LSTM           | 73.36          | 74.99          | **75.29**      | **56** |
+| CNN-LSTM-Parallel  | 72.53          | **74.39**      | 72.59          | **28** |
+| STFGNN             | **65.47**      | 46.34          | 45.83          | **14** |
+
 
 ### HMT-TSF vs Best Tuned Baselines
 
-| Condition | Model | Combined% | R² | Δ vs Best Baseline |
-|-----------|-------|-----------|-----|-------------------|
-| No-MCO, lb14 | **HMT-TSF-FR** | **86.59** | **0.906** | **+6.60 pp** vs Informer tuned (79.99) |
-| No-MCO, lb14 | HMT-TSF | 85.78 | 0.897 | +5.79 pp vs Informer tuned (79.99) |
-| No-MCO, lb14 | Informer (tuned) | 79.99 | 0.778 | — best baseline |
-| MCO, lb14 | **HMT-TSF** | **81.99** | **0.859** | **+6.20 pp** vs Informer tuned (75.79) |
-| MCO, lb14 | HMT-TSF-FR | 78.74 | 0.780 | +2.95 pp vs Informer tuned |
-| MCO, lb14 | Informer (tuned) | 75.79 | 0.742 | — best baseline |
 
-> HMT-TSF figures regenerated 2026-06-11 with the corrected pipeline (`REVISION.md`). HMT-TSF is the only model receiving known-future calendar inputs (`X_future`).
+| Condition    | Model            | Combined% | R²        | Δ vs Best Baseline                     |
+| ------------ | ---------------- | --------- | --------- | -------------------------------------- |
+| No-MCO, lb14 | **HMT-TSF-FR**   | **86.59** | **0.906** | **+6.60 pp** vs Informer tuned (79.99) |
+| No-MCO, lb14 | HMT-TSF          | 85.78     | 0.897     | +5.79 pp vs Informer tuned (79.99)     |
+| No-MCO, lb14 | Informer (tuned) | 79.99     | 0.778     | — best baseline                        |
+| MCO, lb14    | **HMT-TSF**      | **81.99** | **0.859** | **+6.20 pp** vs Informer tuned (75.79) |
+| MCO, lb14    | HMT-TSF-FR       | 78.74     | 0.780     | +2.95 pp vs Informer tuned             |
+| MCO, lb14    | Informer (tuned) | 75.79     | 0.742     | — best baseline                        |
+
 
 **Metric definitions:** Combined% = max(0, 100 − MAPE − MAE% − RMSE%); all percentage terms use mean-demand normalisation. Targets: Combined% ≥ 75%, R² ≥ 0.70.
 
 ---
+
