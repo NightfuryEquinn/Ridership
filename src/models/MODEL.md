@@ -163,7 +163,7 @@ cat([h_T, context]) → MLP → (B,T_out)
 ```
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, F=79)"]
     LSTM["**LSTM**\nhidden=64 · layers=1"]
     H["H: full hidden seq\n(B, T_in, 64)"]
@@ -238,7 +238,7 @@ flowchart LR
 **Parallel mode**: CNN and LSTM process raw input independently; outputs concatenated.
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, F=79)"]
     CNN["**CNN Branch**\nConv1d×2 → global avg pool\n(B, 32)"]
     LSTM["**LSTM Branch**\nhidden=64 → h_T (B, 64)"]
@@ -356,7 +356,7 @@ ST-LSTM is selected as the canonical bridge model between the LSTM-family and gr
 Two parallel streams are computed independently and concatenated before the MLP head. The spatial MLP is **weight-shared across all T_in timesteps** (time-invariant): it captures which features consistently co-activate in the window rather than when. Mean pooling over the time axis collapses temporal order to produce a persistent cross-feature summary.
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, F=79)"]
 
     subgraph TS["Temporal Stream"]
@@ -422,7 +422,7 @@ STGCN is selected as the foundational graph-based baseline because it establishe
 Input features are treated as N=79 graph nodes each carrying a scalar temporal signal over T_in timesteps. The architecture alternates temporal gated convolutions (GLU) and Chebyshev graph convolutions in stacked ST-Conv blocks, with BatchNorm after each block.
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, N=79)"]
     ADJ["**Static Adjacency A**\n|Pearson corr| ≥ 0.1\nsym-norm Laplacian L̃\nfixed model buffer"]
     RESHAPE["reshape → (B, N, 1, T_in)\nsingle channel per node"]
@@ -483,7 +483,7 @@ ASTGCN is selected to determine whether learnable multi-head attention over both
 Uses AMP (fp16 + GradScaler) for memory efficiency on the A100.
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, N=79)"]
     PROJ["Input projection\n(B, T_in, N) → (B, T_in, N, d_model=64)"]
     ADJ["**Static Adjacency A**\nL̃ = −A_sym Laplacian\nfixed buffer"]
@@ -542,7 +542,7 @@ STSGCN is selected to test whether fusing spatial and temporal graph operations 
 The 3N×3N synchronous graph (STSG) encodes both spatial adjacency (A_spa within each timestep) and temporal adjacency (identity blocks I linking adjacent timesteps). Each STSGCL layer applies Chebyshev convolution on the full STSG over a sliding 3-timestep window and then extracts the centre N nodes.
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, N=79)"]
     PROJ["Input projection\n(B, T_in, N, hidden=96)"]
     STSG["**STSG Matrix (3N×3N)**\n[[A_spa, I, 0],\n [I, A_spa, I],\n [0, I, A_spa]]\nencodes spatial + temporal edges"]
@@ -598,7 +598,7 @@ STFGNN is selected to test whether using two complementary graphs — one captur
 #### Key Architecture
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, N=79)"]
     PROJ["Input projection\n(B, hidden=64, N, T_in)"]
     Aspa["**A_spa**\n|Pearson corr(features)| ≥ 0.1\nsym-norm · fixed buffer"]
@@ -660,7 +660,7 @@ PDR-STGCN is a novel architecture developed in this study within the graph-based
 A two-channel input (original signal + weekly lag-difference) feeds a modified STGCN backbone where each graph convolution replaces the fixed Chebyshev adjacency with a mixed static/dynamic adjacency controlled by a learned scalar λ.
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, N=79)"]
     DIFF["**Periodic Diff Encoder**\nx_diff[t] = x[t] − x[t−7]\nzero-pad for t < 7\n→ (B, N, 2, T_in)\n2 channels: original + weekly diff"]
     Asym["**Static A_sym**\n|Pearson corr| ≥ 0.1\nsym-norm · fixed"]
@@ -728,7 +728,7 @@ MTGNN is selected to test whether learning the inter-feature graph adjacency end
 #### Key Architecture
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, N=79)"]
     M1["Node embedding M1\n(N, d_emb=10)"]
     M2["Node embedding M2\n(N, d_emb=10)"]
@@ -795,7 +795,7 @@ Autoformer is selected to test whether explicit series decomposition into trend 
 FFT operations are explicitly cast to `float32` inside `autocast` for numerical stability under AMP.
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in, F=79)"]
     EMBD["Input embedding + positional\n→ (B, T_in, d_model=64)"]
 
@@ -862,7 +862,7 @@ Informer is selected as the final comparison model before HMT-TSF, representing 
 Uses AMP (fp16 + GradScaler). At T_in=14, the single distilling step halves the encoder sequence to length 7, and ProbSparse selects approximately 13 of 14 queries (near-full attention).
 
 ```mermaid
-flowchart TD
+flowchart LR
     X["**Input X**\n(B, T_in=14, F=79)"]
     EMBD["Input embedding + positional\n→ (B, 14, d_model=64)"]
     DEC_IN["Decoder input:\n[X[:, −T_label:, :], zeros(B, T_out, F)]\nT_label = T_in//2 = 7\n→ (B, 14, F)"]
@@ -1085,7 +1085,7 @@ After neural training, a CatBoost (or sklearn MLP) model is fitted on training-s
 ### 3.5.4 Architecture Diagram
 
 ```mermaid
-flowchart TD
+flowchart LR
     IN79["Input X · (B, T_in, F=79) · MinMax-scaled"]
     SHAP["SHAP Reduction (script default ON → FR variant)\n79 → 53 features\n−9 fuel-price · −17 static\n(FR is the study headline at nomco_lb14;\n--no-feat-reduce retains F=79 — preferred under MCO)"]
     IN53["Input X · (B, T_in, F=53 or 79)"]
