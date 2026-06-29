@@ -51,7 +51,7 @@ X (B, T_in, F) → LSTM → h_T (B, hidden) → MLP → (B, T_out)
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     LSTM["**LSTM**\nhidden=64 · layers=1\nbatch_first=True"]
     DROP["Dropout p=0.1\n(inter-layer, layers>1)"]
@@ -105,7 +105,7 @@ X (B, T_in, F) → BiLSTM → cat([h_fwd, h_bwd]) (B, hidden×2) → MLP → (B,
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     FWD["Forward LSTM\nhidden=64"]
     BWD["Backward LSTM\nhidden=64"]
@@ -163,7 +163,7 @@ cat([h_T, context]) → MLP → (B,T_out)
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     LSTM["**LSTM**\nhidden=64 · layers=1"]
     H["H: full hidden seq\n(B, T_in, 64)"]
@@ -221,7 +221,7 @@ CNN-LSTM is selected to test whether hierarchical local feature extraction by a 
 **Sequential mode** (default): CNN extracts local temporal features, which the LSTM then processes for global sequential context. LSTM input is CNN output, not raw features.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     PERM1["permute\n(B, F, T_in)"]
     CNN["**Conv1d × 2 blocks**\nfilters=32 · k=3 · same-pad\nBatchNorm1d · ReLU\n→ (B, 32, T_in)"]
@@ -238,7 +238,7 @@ flowchart LR
 **Parallel mode**: CNN and LSTM process raw input independently; outputs concatenated.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     CNN["**CNN Branch**\nConv1d×2 → global avg pool\n(B, 32)"]
     LSTM["**LSTM Branch**\nhidden=64 → h_T (B, 64)"]
@@ -255,7 +255,7 @@ flowchart LR
 **Augmented mode**: Sequential CNN→LSTM with raw-input skip connection to prevent information loss from CNN compression.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     CNN_LSTM["**CNN→LSTM**\nSequential path\nh_T (B, 64)"]
     SKIP["mean(X, dim=1)\nskip: (B, F=79)"]
@@ -303,7 +303,7 @@ CNN-BiLSTM is selected to combine the two complementary inductive biases already
 #### Key Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     PERM1["permute\n(B, F, T_in)"]
     CNN["**Conv1d × 2 blocks**\nfilters=32 · k=3 · same-pad\nBatchNorm1d · ReLU\n→ (B, 32, T_in)"]
@@ -356,7 +356,7 @@ ST-LSTM is selected as the canonical bridge model between the LSTM-family and gr
 Two parallel streams are computed independently and concatenated before the MLP head. The spatial MLP is **weight-shared across all T_in timesteps** (time-invariant): it captures which features consistently co-activate in the window rather than when. Mean pooling over the time axis collapses temporal order to produce a persistent cross-feature summary.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
 
     subgraph TS["Temporal Stream"]
@@ -422,15 +422,15 @@ STGCN is selected as the foundational graph-based baseline because it establishe
 Input features are treated as N=79 graph nodes each carrying a scalar temporal signal over T_in timesteps. The architecture alternates temporal gated convolutions (GLU) and Chebyshev graph convolutions in stacked ST-Conv blocks, with BatchNorm after each block.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, N=79)"]
     ADJ["**Static Adjacency A**\n|Pearson corr| ≥ 0.1\nsym-norm Laplacian L̃\nfixed model buffer"]
     RESHAPE["reshape → (B, N, 1, T_in)\nsingle channel per node"]
 
     subgraph B1["ST-Conv Block 1"]
-        TGC1a["**TemporalGatedConv** (GLU)\n(B, N, C_in, T) → (B, N, C_mid, T−kt+1)"]
-        CHEB1["**ChebGraphConv** K=3\nL̃-based k-hop diffusion\n(B·T′, N, C_mid)"]
-        TGC1b["**TemporalGatedConv** (GLU)\n→ (B, N, C_out, T′−kt+1)"]
+        TGC1a["**TemporalGatedConv**\n(GLU)\n(B, N, C_in, T) → (B, N, C_mid, T−kt+1)"]
+        CHEB1["**ChebGraphConv**\nK=3\nL̃-based k-hop diffusion\n(B·T′, N, C_mid)"]
+        TGC1b["**TemporalGatedConv**\n(GLU)\n→ (B, N, C_out, T′−kt+1)"]
         BN1["BatchNorm2d"]
     end
 
@@ -483,14 +483,14 @@ ASTGCN is selected to determine whether learnable multi-head attention over both
 Uses AMP (fp16 + GradScaler) for memory efficiency on the A100.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, N=79)"]
     PROJ["Input projection\n(B, T_in, N) → (B, T_in, N, d_model=64)"]
     ADJ["**Static Adjacency A**\nL̃ = −A_sym Laplacian\nfixed buffer"]
 
     subgraph BK["ASTGCN Block (×n_blocks=2)"]
         SA["**Spatial Attention**\nMulti-head (n_heads=4) over N nodes\nproduces per-sample node weights"]
-        CGCN["**Chebyshev GCN** K=3\nK-hop diffusion on attention-weighted A"]
+        CGCN["**Chebyshev GCN**\nK=3\nK-hop diffusion on attention-weighted A"]
         TA["**Temporal Attention**\nMulti-head (n_heads=4) over T steps\nproduces per-sample timestep weights"]
         FFN["**Position-wise FFN**"]
     end
@@ -542,14 +542,14 @@ STSGCN is selected to test whether fusing spatial and temporal graph operations 
 The 3N×3N synchronous graph (STSG) encodes both spatial adjacency (A_spa within each timestep) and temporal adjacency (identity blocks I linking adjacent timesteps). Each STSGCL layer applies Chebyshev convolution on the full STSG over a sliding 3-timestep window and then extracts the centre N nodes.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, N=79)"]
     PROJ["Input projection\n(B, T_in, N, hidden=96)"]
     STSG["**STSG Matrix (3N×3N)**\n[[A_spa, I, 0],\n [I, A_spa, I],\n [0, I, A_spa]]\nencodes spatial + temporal edges"]
 
     subgraph STSGCL["STSGCL Layer (×n_layers=3)"]
         UNFOLD["unfold T into windows of 3\n(B, T−2, 3N, hidden)"]
-        CHEB["**ChebConv on STSG** K=3\n+ GLU gating\n→ (B, T−2, 3N, hidden)"]
+        CHEB["**ChebConv on STSG**\nK=3\n+ GLU gating\n→ (B, T−2, 3N, hidden)"]
         CENTRE["extract centre N nodes\n→ (B, T−2, N, hidden)"]
     end
 
@@ -598,7 +598,7 @@ STFGNN is selected to test whether using two complementary graphs — one captur
 #### Key Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, N=79)"]
     PROJ["Input projection\n(B, hidden=64, N, T_in)"]
     Aspa["**A_spa**\n|Pearson corr(features)| ≥ 0.1\nsym-norm · fixed buffer"]
@@ -660,13 +660,13 @@ PDR-STGCN is a novel architecture developed in this study within the graph-based
 A two-channel input (original signal + weekly lag-difference) feeds a modified STGCN backbone where each graph convolution replaces the fixed Chebyshev adjacency with a mixed static/dynamic adjacency controlled by a learned scalar λ.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, N=79)"]
     DIFF["**Periodic Diff Encoder**\nx_diff[t] = x[t] − x[t−7]\nzero-pad for t < 7\n→ (B, N, 2, T_in)\n2 channels: original + weekly diff"]
     Asym["**Static A_sym**\n|Pearson corr| ≥ 0.1\nsym-norm · fixed"]
 
     subgraph BK["PDR-ST Block (×n_blocks=2)"]
-        TGC1["**TemporalGatedConv** (GLU)\n→ (B, N, C_mid, T−kt+1)"]
+        TGC1["**TemporalGatedConv**\n(GLU)\n→ (B, N, C_mid, T−kt+1)"]
 
         subgraph DRG["Dynamic Relational Graph Conv"]
             STAT["Static path:\nA_sym @ h @ W_static"]
@@ -674,7 +674,7 @@ flowchart LR
             MIX["mix: σ(λ)·static + (1−σ(λ))·dynamic\nλ learned scalar, init=0"]
         end
 
-        TGC2["**TemporalGatedConv** (GLU)\n→ (B, N, C_out, T′−kt+1)"]
+        TGC2["**TemporalGatedConv**\n(GLU)\n→ (B, N, C_out, T′−kt+1)"]
         BN["BatchNorm2d"]
     end
 
@@ -728,7 +728,7 @@ MTGNN is selected to test whether learning the inter-feature graph adjacency end
 #### Key Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, N=79)"]
     M1["Node embedding M1\n(N, d_emb=10)"]
     M2["Node embedding M2\n(N, d_emb=10)"]
@@ -795,7 +795,7 @@ Autoformer is selected to test whether explicit series decomposition into trend 
 FFT operations are explicitly cast to `float32` inside `autocast` for numerical stability under AMP.
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in, F=79)"]
     EMBD["Input embedding + positional\n→ (B, T_in, d_model=64)"]
 
@@ -818,7 +818,7 @@ flowchart LR
     end
 
     COMBINE["trend_accum[:, −T_out:] + seasonal_dec[:, −T_out:]"]
-    LINEAR["**Linear(F, 1)** per step\n→ (B, T_out=7)"]
+    LINEAR["**Linear(F, 1)**\nper step\n→ (B, T_out=7)"]
 
     X --> EMBD --> EAC --> ED1 --> EFFN --> ED2
     ED2 --> DEC_IN --> DAC --> DD1 --> DCAC --> DD2 --> DFFN --> DD3
@@ -862,16 +862,16 @@ Informer is selected as the final comparison model before HMT-TSF, representing 
 Uses AMP (fp16 + GradScaler). At T_in=14, the single distilling step halves the encoder sequence to length 7, and ProbSparse selects approximately 13 of 14 queries (near-full attention).
 
 ```mermaid
-flowchart LR
+flowchart TD
     X["**Input X**\n(B, T_in=14, F=79)"]
     EMBD["Input embedding + positional\n→ (B, 14, d_model=64)"]
     DEC_IN["Decoder input:\n[X[:, −T_label:, :], zeros(B, T_out, F)]\nT_label = T_in//2 = 7\n→ (B, 14, F)"]
     DEC_EMBD["Decoder embedding\n→ (B, 14, d_model=64)"]
 
     subgraph ENC["Encoder (e_layers=2)"]
-        PS1["**ProbSparse Attention** (layer 1)\ntop-u = c·⌈ln(L_K)⌉ queries\nremaining queries: mean-of-V fallback"]
+        PS1["**ProbSparse Attention**\n(layer 1)\ntop-u = c·⌈ln(L_K)⌉ queries\nremaining queries: mean-of-V fallback"]
         CONV["**ConvLayer (distilling)**\nConv1d + ELU + MaxPool1d(2)\nT: 14 → 7"]
-        PS2["**ProbSparse Attention** (layer 2, no distil)"]
+        PS2["**ProbSparse Attention**\n(layer 2, no distil)"]
     end
 
     subgraph DEC["Decoder (d_layers=1)"]
@@ -1085,33 +1085,33 @@ After neural training, a CatBoost (or sklearn MLP) model is fitted on training-s
 ### 3.5.4 Architecture Diagram
 
 ```mermaid
-flowchart LR
-    IN79["Input X · (B, T_in, F=79) · MinMax-scaled"]
-    SHAP["SHAP Reduction (script default ON → FR variant)\n79 → 53 features\n−9 fuel-price · −17 static\n(FR is the study headline at nomco_lb14;\n--no-feat-reduce retains F=79 — preferred under MCO)"]
-    IN53["Input X · (B, T_in, F=53 or 79)"]
-    REVIN["RevIN\nx̂ = (x−μ)/σ × γ + β\nper-sample · per-feature\nlearnable γ, β per feature"]
+flowchart TD
+    IN79["**Input X**\n(B, T_in, F=79) · MinMax-scaled"]
+    SHAP["**SHAP Reduction**\n(script default ON → FR variant)\n79 → 53 features\n−9 fuel-price · −17 static\n(FR is the study headline at nomco_lb14;\n--no-feat-reduce retains F=79 — preferred under MCO)"]
+    IN53["**Input X**\n(B, T_in, F=53 or 79)"]
+    REVIN["**RevIN**\nx̂ = (x−μ)/σ × γ + β\nper-sample · per-feature\nlearnable γ, β per feature"]
 
-    FGF["Feature Group Fusion → (B, T_in, d_model)\nTarget ctx 0–12 → MLP → d/2\nLag 13–15 → MLP → d/2\nTemporal/Cyc 16–17 ∪ 24–37 → MLP → d/2\nExternal 18–23 ∪ 38–52 → MLP → d/2\nconcat × softmax(group_gate)\nLinear→d · GELU · Dropout · Linear→d · LayerNorm"]
+    FGF["**Feature Group Fusion**\n→ (B, T_in, d_model)\nTarget ctx 0–12 → MLP → d/2\nLag 13–15 → MLP → d/2\nTemporal/Cyc 16–17 ∪ 24–37 → MLP → d/2\nExternal 18–23 ∪ 38–52 → MLP → d/2\nconcat × softmax(group_gate)\nLinear→d · GELU · Dropout · Linear→d · LayerNorm"]
 
-    TTB["Temporal Transformer Block\nLearnable positional embeddings\nMultiheadAttention (n_heads)\nPost-LN residual · FFN d→d"]
+    TTB["**Temporal Transformer Block**\nLearnable positional embeddings\nMultiheadAttention (n_heads)\nPost-LN residual · FFN d→d"]
 
-    TCN["Multi-Scale TCN (DropPath)\nScale 1: full T_in\nScale 2: T_in/2 (T_in≥28)\nScale 3: T_in/4 (T_in≥56)\nCausalConv · WaveNet-gated (tanh⊙σ)\nexponential dilation 1,2,4,...\nlearned scale attn pool → h_t (B,d)"]
+    TCN["**Multi-Scale TCN (DropPath)**\nScale 1: full T_in\nScale 2: T_in/2 (T_in≥28)\nScale 3: T_in/4 (T_in≥56)\nCausalConv · WaveNet-gated (tanh⊙σ)\nexponential dilation 1,2,4,...\nlearned scale attn pool → h_t (B,d)"]
 
-    GCN["Feature Graph Encoder\nlearned time-attn over T → (B, F, 1) node feats\n2-layer GCN · Pearson adj |corr|≥0.1 · sym-norm\nglobal mean pool → h_s (B,d)"]
+    GCN["**Feature Graph Encoder**\nlearned time-attn over T → (B, F, 1) node feats\n2-layer GCN · Pearson adj |corr|≥0.1 · sym-norm\nglobal mean pool → h_s (B,d)"]
 
-    RGE["Regime Gating Embedding\nx̂.mean(T) → Linear → K=3 logits\nsoftmax gate · Σ gate_k·E_k\nK=3 regimes: pre-MCO / MCO / post-MCO\nh_r (B,d)"]
+    RGE["**Regime Gating Embedding**\nx̂.mean(T) → Linear → K=3 logits\nsoftmax gate · Σ gate_k·E_k\nK=3 regimes: pre-MCO / MCO / post-MCO\nh_r (B,d)"]
 
-    GF["Gated Fusion (SE bottleneck)\nh = cat[h_t, h_s, h_r] (B, 3d)\ng = σ(SE: 3d→3d//4→3d)\nLinear(g⊙h→d) · GELU · Dropout · LayerNorm"]
+    GF["**Gated Fusion (SE bottleneck)**\nh = cat[h_t, h_s, h_r] (B, 3d)\ng = σ(SE: 3d→3d//4→3d)\nLinear(g⊙h→d) · GELU · Dropout · LayerNorm"]
 
-    FH["Dual Forecast Heads\nPrimary: h→d→d→T_out (highway+LN)\nBoosting: h→d→T_out × σ(α), α init=−2.0\ny = y_primary + y_boost"]
+    FH["**Dual Forecast Heads**\nPrimary: h→d→d→T_out (highway+LN)\nBoosting: h→d→T_out × σ(α), α init=−2.0\ny = y_primary + y_boost"]
 
-    FTP["Future Temporal Projection (optional)\nrequires X_future: (B, T_out, n_temporal)\nMLP: n_t→max(2n_t,32)→1 per step\nzero-init (starts as no-op)"]
+    FTP["**Future Temporal Projection (optional)**\nrequires X_future: (B, T_out, n_temporal)\nMLP: n_t→max(2n_t,32)→1 per step\nzero-init (starts as no-op)"]
 
-    REVIND["RevIN Denormalise\n→ MinMax-scaled space"]
+    REVIND["**RevIN Denormalise**\n→ MinMax-scaled space"]
 
-    BOOST["Post-hoc Residual Booster (optional)\nCatBoost / sklearn MLP\ntrained on train residuals\ny_final += 0.5 × Δ_boost"]
+    BOOST["**Post-hoc Residual Booster (optional)**\nCatBoost / sklearn MLP\ntrained on train residuals\ny_final += 0.5 × Δ_boost"]
 
-    OUT["Output · (B, T_out=7) · MinMax-scaled\n→ scaler_y.inverse_transform()\n→ raw ridership counts"]
+    OUT["**Output**\n(B, T_out=7) · MinMax-scaled\n→ scaler_y.inverse_transform()\n→ raw ridership counts"]
 
     IN79 --> SHAP --> IN53 --> REVIN
     REVIN --> FGF --> TTB --> TCN --> |h_t| GF
