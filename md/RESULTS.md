@@ -77,7 +77,7 @@ Sorted by Combined% (best → worst). HMT-TSF reference row appended.
 - **Tuning is not uniformly beneficial.** Largest gains: ASTGCN (+3.13), STGCN (+1.58), CNN-LSTM-Augmented (+1.74). Largest regressions: **STFGNN (−8.47)**, CNN-LSTM (−4.28), STSGCN (−3.32). STFGNN's catastrophic tuning regression (65.47 from 73.94) is the most severe across the entire study.
 - MTGNN and CNN-BiLSTM also regress under tuning (−1.54, −2.06) — additional capacity hurts both.
 - PDR-STGCN gains +1.65 (previous runs showed +5.58; current results are more moderate).
-- **PDR-STGCN caveat:** the base runs were executed with `--period` equal to the look-back (14/28/56) instead of the weekly default 7; since the periodic diff encoder zero-pads for t < period, the second input channel was all zeros — base PDR-STGCN effectively ran without its periodicity encoding. Tuned runs used `period=7` correctly, so part of the +1.65 tuning gain reflects re-enabling that channel rather than capacity changes (see `src/models/MODEL.md`, PDR-STGCN section).
+- **PDR-STGCN caveat:** the base runs were executed with `--period` equal to the look-back (14/28/56) instead of the weekly default 7; since the periodic diff encoder zero-pads for t < period, the second input channel was all zeros — base PDR-STGCN effectively ran without its periodicity encoding. Tuned runs used `period=7` correctly, so part of the +1.65 tuning gain reflects re-enabling that channel rather than capacity changes (see `MODEL.md`, PDR-STGCN section).
 - On Combined% the median tuning effect is roughly flat (~+0.5). Test-set gains do **not** imply better generalisation; the diagnostics file shows tuned variants overfit more (higher gap ratios).
 
 ---

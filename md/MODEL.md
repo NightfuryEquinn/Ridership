@@ -913,7 +913,7 @@ Hyperparameter changes: `d_model 64→256`, `n_heads 4→16`, `e_layers 2→3`, 
 
 **Script:** `src/models/hybrid/hmttsf.py`
 
-Located in `src/models/hybrid/`. HMT-TSF (Hybrid Multi-scale Temporal Spatio-Feature Forecaster) is the proposed SOTA model purpose-built for this study. Full component rationale and Scopus-indexed journal references per component are in `src/models/hybrid/HMT-TSF.md`.
+Located in `src/models/hybrid/`. HMT-TSF (Hybrid Multi-scale Temporal Spatio-Feature Forecaster) is the proposed SOTA model purpose-built for this study. Full component rationale and Scopus-indexed journal references per component are in `HMT-TSF.md`.
 
 ---
 

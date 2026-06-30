@@ -133,7 +133,7 @@ def _group_indices(segments) -> list:
 # SHAP-derived feature reduction (applied at load time in main())
 #
 # 26 features with zero or near-zero importance across all 10 HMT-TSF runs
-# (see HMT-TSF-RESULTS.md §10): 9 fuel-price columns (largely administered/
+# (see md/HMT-TSF-RESULTS.md §10): 9 fuel-price columns (largely administered/
 # frozen prices in the post-MCO window, hence near-constant) and all 17
 # static features (time-invariant, no day-to-day variance).  Dropped indices
 # are sourced from the original 79-feature space; the 53 survivors are
@@ -200,7 +200,7 @@ _KEPT_TEMPORAL_POSITIONS: list = sorted(
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-lookback baseline defaults
 # Applied in main() only when the user has NOT overridden the flag explicitly.
-# Rationale for each adjustment is documented in HMT-TSF.md.
+# Rationale for each adjustment is documented in md/HMT-TSF.md.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _LOOKBACK_DEFAULTS: dict = {
@@ -1542,7 +1542,7 @@ def main():
     # ── SHAP-derived feature reduction: 79 → 53 features ─────────────────────
     # Applied unless --no-feat-reduce is set. The 26 dropped features have
     # zero (or near-zero) SHAP importance across all 10 HMT-TSF configs;
-    # see HMT-TSF-RESULTS.md §10 for the full removal rationale.
+    # see md/HMT-TSF-RESULTS.md §10 for the full removal rationale.
     if not args.no_feat_reduce:
         print(f"\nFeature reduction: retaining {len(_KEPT_FEAT_INDICES)}/{n_features} features "
               f"({len(_DROPPED_FEAT_INDICES)} zero-importance features dropped)")

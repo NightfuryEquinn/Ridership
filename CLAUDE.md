@@ -32,7 +32,7 @@ All scripts are run from the **repository root**. Each model file manually inser
 
 ## Running the Feature Pipeline
 
-Full step-by-step instructions are in `src/features/PIPELINE.md`. The short version:
+Full step-by-step instructions are in `md/PIPELINE.md`. The short version:
 
 ```bash
 # 1a–1d. Core independent cleaning (any order)
@@ -82,7 +82,7 @@ python src/models/graph-based/pdr_stgcn.py
 
 Each model script accepts `--seq-dir`, `--epochs`, `--batch-size`, `--lr`, `--patience`, `--device`, `--seed`, and model-specific hyperparameter flags. See the docstring at the top of each file. `--device auto` selects CUDA → MPS → CPU automatically.
 
-Each model script docstring includes a `References` section citing one Scopus-indexed journal article (2022–2027) that discusses the architecture. Full citations are also listed in `src/models/MODEL.md` under the **Journal References** section.
+Each model script docstring includes a `References` section citing one Scopus-indexed journal article (2022–2027) that discusses the architecture. Full citations are also listed in `md/MODEL.md` under the **Journal References** section.
 
 ## Running the Hybrid SOTA Model
 
@@ -133,7 +133,7 @@ python src/features/sequence_builder.py --T-in 7
 python src/features/sequence_builder.py --T-in 84
 ```
 
-Output is written to `src/outputs/hmttsf/{YYYYMMDD_HHMMSS}/`. Full architecture details and per-component Scopus-indexed journal references (2022–2027) are in `src/models/hybrid/HMT-TSF.md`.
+Output is written to `src/outputs/hmttsf/{YYYYMMDD_HHMMSS}/`. Full architecture details and per-component Scopus-indexed journal references (2022–2027) are in `md/HMT-TSF.md`.
 
 ## Running a Tuned Model
 
@@ -168,7 +168,7 @@ python src/models/spatio-temporal-tuned/cnnlstm.py --mode parallel   --lookback 
 python src/models/spatio-temporal-tuned/cnnlstm.py --mode augmented  --lookback 14
 ```
 
-Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full rationale and per-model details are in `src/models/MODEL.md`.
+Tuned outputs are written to `src/outputs/{model_name}_tuned/`. Full rationale and per-model details are in `md/MODEL.md`.
 
 New shared flags added to all 15 models:
 
@@ -180,7 +180,7 @@ New shared flags added to all 15 models:
 
 Sequence directory auto-resolution (base models): `--lookback 14` → `data/sequences/lstm/`, `--lookback 28` → `data/sequences/lookback_28/`, `--lookback 56` → `data/sequences/lookback_56/`.
 
-HMT-TSF additionally supports `--lookback 7` → `data/sequences/lookback_7/` and `--lookback 84` → `data/sequences/lookback_84/` (build both MCO conditions first — see `src/features/PIPELINE.md` Step 3).
+HMT-TSF additionally supports `--lookback 7` → `data/sequences/lookback_7/` and `--lookback 84` → `data/sequences/lookback_84/` (build both MCO conditions first — see `md/PIPELINE.md` Step 3).
 
 ## Architecture
 
@@ -256,7 +256,7 @@ LSTM (2-way) → BiLSTM (3-way) → TPA-LSTM (4-way) → CNN-LSTM (5-way)
 
 ### Shared Utilities (`src/utils/`)
 
-- **`metrics.py`** — `compute_metrics(y_true, y_pred)` returns `Combined%`, `MAPE%`, `MAE%`, `RMSE%`, `R²`, `MAE`, `RMSE`. Combined% = `max(0, 100 − MAPE − MAE% − RMSE%)`. All percentage terms use mean-demand normalisation so they are directly addable. See `src/METRICS.md` for full definitions.
+- **`metrics.py`** — `compute_metrics(y_true, y_pred)` returns `Combined%`, `MAPE%`, `MAE%`, `RMSE%`, `R²`, `MAE`, `RMSE`. Combined% = `max(0, 100 − MAPE − MAE% − RMSE%)`. All percentage terms use mean-demand normalisation so they are directly addable. See `md/METRICS.md` for full definitions.
 - **`comparison_table.py`** — `print_comparison_table()` renders an N-way console table; `plot_comparison()` saves a 6-panel PNG (bar charts for overall metrics + per-horizon line charts). Both are called at the end of every model script.
 
 ### AMP (Mixed Precision)
@@ -337,4 +337,4 @@ Hyperparameters changed in the tuned scripts (values are the actual argparse def
 | Autoformer (tuned) | `d_model=128`, `n_heads=8`, `e_layers=3`, `d_ff=256`, `dropout=0.25`, `weight_decay=2e-4` |
 | Informer (tuned) | `d_model=256`, `n_heads=16`, `e_layers=3`, `d_ff=512`, `dropout=0.1`, `weight_decay=1e-4` |
 
-Full per-model rationale is in `src/models/MODEL.md`.
+Full per-model rationale is in `md/MODEL.md`.

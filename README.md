@@ -12,7 +12,7 @@ Public transit unreliability in Malaysia manifests as demand–supply mismatch: 
 - **Headway adjustment** — anticipated demand troughs (holidays, monsoon days) justify schedule thinning without stranding passengers, and forecasted surges justify densified headways before queues form;
 - **Demand–supply matching** — per-service-line forecasts (12 lines + system total) expose which corridors are chronically under- or over-served, feeding the EDA-identified underserved-zone analysis (`src/eda/multivariate/`).
 
-The modelling scope is therefore **demand-side forecasting**: this study does not model supply-side reliability events (delays, breakdowns, cancellations) directly — no AVL/on-time-performance data is publicly available for Malaysian operators at daily granularity. Integrating such data is the principal future-work direction (see `src/FUTURE.md` and `REVISION.md`).
+The modelling scope is therefore **demand-side forecasting**: this study does not model supply-side reliability events (delays, breakdowns, cancellations) directly — no AVL/on-time-performance data is publicly available for Malaysian operators at daily granularity. Integrating such data is the principal future-work direction (see `md/FUTURE.md` and `REVISION.md`).
 
 ---
 
@@ -32,7 +32,7 @@ Performance targets for this study are **Combined% ≥ 75%** and **R² ≥ 0.7**
 | 4 | TPA-LSTM (tuned) | 79.95% | 0.782 | 66,703 | 107,475 | Yes — both |
 | 5 | BiLSTM (tuned) | 79.44% | 0.794 | 73,516 | 104,667 | Yes — both |
 
-**HMT-TSF-FR** (the SHAP-guided 53-feature variant) sets the study-wide headline at nomco·lb14: Combined% 86.59%, R² 0.906, lowest MAE (46,323) — +0.81 pp over the full model and **+6.60 pp over the best baseline** (Informer tuned). Full baseline and tuned results are in `src/models/MODEL.md`; HMT-TSF cross-configuration results are in `src/outputs/HMT-TSF-RESULTS.md`.
+**HMT-TSF-FR** (the SHAP-guided 53-feature variant) sets the study-wide headline at nomco·lb14: Combined% 86.59%, R² 0.906, lowest MAE (46,323) — +0.81 pp over the full model and **+6.60 pp over the best baseline** (Informer tuned). Full baseline and tuned results are in `md/MODEL.md`; HMT-TSF cross-configuration results are in `md/HMT-TSF-RESULTS.md`.
 
 ### Tuned Models vs. HMT-TSF (no-MCO · lb14)
 
@@ -221,15 +221,14 @@ Ridership/
 │   │   ├── graph-tuned/             # Tuned graph variants
 │   │   ├── attention-tuned/         # Tuned attention variants
 │   │   ├── hybrid/                  # Hybrid SOTA model (HMT-TSF)
-│   │   └── MODEL.md                 # All model descriptions + tuning rationale
 │   ├── outputs/            # Model outputs (organized by model and timestamp)
 │   └── utils/              # Shared utilities (metrics, comparison)
+├── md/                     # Project documentation (metrics, pipeline, models, EDA, results)
 ├── docs/                   # Documentation (PDFs, reports, presentations)
 ├── journal_articles/       # Supporting research papers
 ├── CLAUDE.md               # Detailed project guidance for Claude Code
 ├── check_cuda.py           # GPU/CUDA verification script
 ├── LICENSE
-├── METRICS.md              # Detailed metric definitions
 └── README.md               # This file
 ```
 
@@ -256,7 +255,7 @@ python check_cuda.py  # Should print True if CUDA is available
 
 ## Running the Feature Pipeline
 
-All data processing scripts are in `src/features/`. Full step-by-step instructions are in `src/features/PIPELINE.md`. The short version:
+All data processing scripts are in `src/features/`. Full step-by-step instructions are in `md/PIPELINE.md`. The short version:
 
 ### Step 1 — Independent Cleaning (any order)
 ```bash
@@ -360,7 +359,7 @@ python src/models/hybrid/hmttsf.py \
   --epochs 150
 ```
 
-See `src/models/hybrid/HMT-TSF.md` for the full architecture diagram, component rationale, and scaling recommendations.
+See `md/HMT-TSF.md` for the full architecture diagram, component rationale, and scaling recommendations.
 
 ### Fine-Tuned Models
 
@@ -451,7 +450,7 @@ Three models in `src/models/attention-based/`; tuned variants in `src/models/att
 
 ### 4.4 Hybrid SOTA
 
-`src/models/hybrid/hmttsf.py`; full architecture in `src/models/hybrid/HMT-TSF.md`.
+`src/models/hybrid/hmttsf.py`; full architecture in `md/HMT-TSF.md`.
 
 | Model | Key Architecture | Strengths | Weaknesses |
 |-------|-----------------|-----------|------------|
@@ -503,7 +502,7 @@ Three models in `src/models/attention-based/`; tuned variants in `src/models/att
 
 lb14 is optimal for 11 of 14 models. MTGNN uniquely prefers lb56 (its learned asymmetric adjacency benefits from quarterly context). Autoformer, STFGNN, and STSGCN collapse at lb56 (FFT/synchronous graph operations amplify noise over long windows).
 
-Full detailed results, including the MCO-inclusive table and tuning effectiveness summary, are in `src/models/MODEL.md` → Experimental Results section.
+Full detailed results, including the MCO-inclusive table and tuning effectiveness summary, are in `md/MODEL.md` → Experimental Results section.
 
 ---
 
@@ -571,7 +570,7 @@ The comparison system generates console tables and 6-panel PNG visualisations (o
 
 ## Evaluation Metrics
 
-See `src/METRICS.md` for detailed definitions.
+See `md/METRICS.md` for detailed definitions.
 
 | Metric | Formula | Better direction |
 |--------|---------|-----------------|
@@ -600,8 +599,8 @@ As outlined in `CLAUDE.md`:
 
 ## References
 
-Each model script docstring cites one Scopus-indexed journal article (2022–2027) for its architecture. The full citation list is in `src/models/MODEL.md` → Journal References, grouped by model series.
+Each model script docstring cites one Scopus-indexed journal article (2022–2027) for its architecture. The full citation list is in `md/MODEL.md` → Journal References, grouped by model series.
 
-HMT-TSF has per-component Scopus-indexed citations (one per architectural block). These are in `src/models/hybrid/HMT-TSF.md` → Journal References.
+HMT-TSF has per-component Scopus-indexed citations (one per architectural block). These are in `md/HMT-TSF.md` → Journal References.
 
 Additional supporting research papers are in `journal_articles/`.

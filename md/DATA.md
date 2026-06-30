@@ -2,7 +2,7 @@
 
 > Last updated: 2026-05-22
 
-This document describes the layout, contents, and conventions of every directory under `data/`. The pipeline that produces these artefacts is documented in `src/features/PIPELINE.md`.
+This document describes the layout, contents, and conventions of every directory under `data/`. The pipeline that produces these artefacts is documented in `PIPELINE.md`.
 
 ---
 
@@ -183,7 +183,7 @@ Output of `src/features/feature_align.py`. This is the single source of truth fo
 > **Lag MCO-bridging note:** in `features_aligned_no_mco.csv`, the
 > `ridership_lag_{7,14,28}` columns at the start of the post-MCO window
 > reference dates inside the excluded MCO period (e.g., lag_28 at
-> 2022-01-01 → 2021-12-04). Deliberate — see `src/features/PIPELINE.md`.
+> 2022-01-01 → 2021-12-04). Deliberate — see `PIPELINE.md`.
 
 ### Feature column breakdown (~79 columns)
 

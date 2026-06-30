@@ -271,7 +271,7 @@ class TPALSTMForecaster(nn.Module):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Metrics  (identical to lstm_baseline.py — definitions from METRICS.md)
+# Metrics  (identical to lstm_baseline.py — definitions from md/METRICS.md)
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ══════════════════════════════════════════════════════════════════════════════
