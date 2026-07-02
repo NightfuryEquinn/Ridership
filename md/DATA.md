@@ -1,8 +1,10 @@
-# DATA.md
+# Data Directory Guide
 
-> Last updated: 2026-05-22
+> Last updated: 2026-07-02
 
-This document describes the layout, contents, and conventions of every directory under `data/`. The pipeline that produces these artefacts is documented in `PIPELINE.md`.
+This is a map of everything under `data/` — what each folder holds, what each file is,
+and the naming conventions used throughout. The pipeline that produces these files is
+documented in `PIPELINE.md`.
 
 ---
 

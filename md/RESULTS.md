@@ -1,9 +1,15 @@
 # Baseline & Tuned Model Results
 
-> Source: `src/outputs/aggregate_results.csv` · Generated 2026-06-05
+> Last updated: 2026-07-02 · Source: `src/outputs/aggregate_results.csv`
 > Companion files: `HMT-TSF-RESULTS.md` (proposed model), `DIAGNOSTICS.md` (fit diagnostics)
-> Scope: 16 model variants × 12 configurations. HMT-TSF appears here **only as a reference row**; full treatment in `HMT-TSF-RESULTS.md`.
-> **Caveat:** all figures are single-run point estimates (seed=42) without confidence intervals or significance tests — treat sub-percentage-point ranking gaps as indicative (see `REVISION.md`). Baseline results are unaffected by the 2026-06-11 feature-order fix.
+
+This page reports how the 16 baseline models scored, across 12 settings each (with/without
+the COVID period, three look-back windows, base and tuned versions). HMT-TSF appears here
+only as a reference row for comparison — its full results are in `HMT-TSF-RESULTS.md`. Each
+table is followed by a plain-language read-out.
+
+> **One caveat:** every number is a single run (fixed random seed), so treat gaps smaller
+> than about one point as indicative rather than definitive.
 
 ## 1. Scope & conventions
 

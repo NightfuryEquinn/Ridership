@@ -1,8 +1,12 @@
 # Evaluation Metrics
 
-> Last updated: 2026-06-09
+> Last updated: 2026-07-02
 
-This document defines the five evaluation metrics used throughout this study and provides the rationale for each metric's inclusion within the evaluation framework. All metrics are computed by `src/utils/metrics.py` via `compute_metrics(y_true, y_pred)`.
+This page explains the five measures used to score every model, and why each one is
+included. In plain terms: they check how close the forecasts are, in percentage terms,
+in passenger counts, and in how well the model tracks the ups and downs of demand. All
+are computed by `src/utils/metrics.py` via `compute_metrics(y_true, y_pred)`. Each
+section is written as **Main Idea → Evidence → Analysis → Link**.
 
 ---
 

@@ -1,10 +1,16 @@
 # HMT-TSF Results (Proposed Model)
 
-> Source: `src/outputs/aggregate_hmttsf.csv` · Generated 2026-06-11 (regenerated after the feature-order fix — see `REVISION.md`)
+> Last updated: 2026-07-02 · Source: `src/outputs/aggregate_hmttsf.csv`
 > Companion files: `RESULTS.md` (16 baselines), `DIAGNOSTICS.md` (fit diagnostics)
-> Scope: HMT-TSF and HMT-TSF-FR across `{nomco, mco}` × `{lb7, lb14, lb28, lb56, lb84}` = 10 configs each, with naive-persistence reference, Δ-vs-naive block, 3-block walk-forward validation, and fit diagnosis.
-> These runs use the corrected pipeline: semantic feature groups aligned to the true column order, `X_future` carrying the 16 known-future calendar features, and the residual-boost decision gated on **validation** metrics (`--use-catboost` enabled; the boost was applied in 5 of 20 runs, all at extreme lookbacks — full: nomco_lb7/nomco_lb84/mco_lb84; FR: nomco_lb7/mco_lb84).
-> All figures are single-run point estimates (seed=42) — see the caveat in `RESULTS.md`.
+
+This page reports the proposed model's results in full. It covers two versions —
+HMT-TSF (all 79 features) and HMT-TSF-FR (a slimmed 53-feature version) — each tested
+with and without the COVID period across five look-back windows. Alongside raw scores it
+includes a comparison against a naive "same as last week" baseline, a three-block
+stability check, and an over-/under-fitting diagnosis.
+
+> **One caveat:** every number is a single run (fixed random seed), so treat very small
+> gaps as indicative rather than definitive.
 
 ## 1. Conventions
 

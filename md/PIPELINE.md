@@ -1,10 +1,11 @@
 # Feature Engineering Pipeline
 
-> Last updated: 2026-05-22
+> Last updated: 2026-07-02
 
-End-to-end guide for generating cleaned data and building model-ready sequences
-from all 8 spatio-temporal feature sources. All commands are run from the
-**repository root**.
+This is the step-by-step guide for turning the raw data into model-ready inputs. It
+runs in three stages: clean each of the 8 data sources, merge them into one daily
+table, then slice that table into sliding windows for the models. All commands are
+run from the **repository root**.
 
 ---
 

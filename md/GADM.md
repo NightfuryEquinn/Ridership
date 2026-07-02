@@ -1,21 +1,68 @@
-# GADM EDA Results
+# State Boundaries (GADM): What the Data Shows
 
-> Last updated: 2026-05-22
+> Last updated: 2026-07-02
 
-Exploratory data analysis of Malaysia's Level-1 administrative boundaries from the GADM dataset (`gadm_mys_l1.json`), covering all 16 states and federal territories (13 states + KL + Labuan + Putrajaya).
+This dataset holds Malaysia's state and federal-territory boundaries — all 16 units
+(13 states plus Kuala Lumpur, Labuan, and Putrajaya). It provides the geographic
+backbone for connecting states to each other and for placing other data (population,
+rainfall) on the map. Each section uses **Main idea**, **Evidence**, **Analysis**,
+and **Link**.
 
 ---
 
-## Spatial Visualisations
+## Pattern 1 — Peninsular States Are Connected; Borneo Is Separate
 
-### adjacency_network.png
-**What:** Network graph where nodes are Malaysian states/territories and edges represent shared land borders, with edge weights proportional to shared border length in km.
-**Analysis:** The adjacency network is the graph structure ultimately consumed by GADM-aware model variants. Malaysia's peninsular states form a dense connected component; Sabah and Sarawak (East Malaysia) are spatially isolated from Peninsular states (separated by the South China Sea) and thus contribute no edges in the network. The `gadm_adj_matrix.npy` binary matrix encodes this structure. Key high-connectivity nodes include Pahang (borders 6 peninsular states) and Perak (borders 5). Federal territories (KL, Labuan, Putrajaya) are small enclaves with 1–2 border edges each.
+**Main idea.** Malaysia splits into two well-defined groups: a densely connected
+Peninsula and the isolated East Malaysian states of Sabah and Sarawak.
 
-The adjacency structure is used in `gadm.py` to export `gadm_adj_matrix_weighted.npy` (border-length-weighted) and `gadm_adj_edges.csv`. The three scalar summaries broadcast to all dates in `feature_align.py` (`gadm_n_states=16`, `gadm_n_border_pairs`, `gadm_mean_border_km`) encode this spatial connectivity in the flat feature matrix consumed by LSTM-family and attention-based models.
+**Evidence.** Building a network where states are linked if they share a land border
+produces one large connected cluster on the Peninsula. Sabah and Sarawak share no
+land border with Peninsular states (they are across the South China Sea) and so have
+no connections in that network. Pahang is the most connected state (six neighbours),
+followed by Perak (five). The federal territories are small enclaves with only one or
+two borders each.
 
-### area_shape_analysis.png
-**What:** Bar chart or scatter of state area (km²) and shape compactness (e.g., perimeter²/area ratio) for all 16 administrative units.
-**Analysis:** Sarawak is by far the largest state (~124,000 km²), followed by Sabah (~73,000 km²). Peninsular states range from ~1,000 km² (Perlis) to ~36,000 km² (Pahang). Shape compactness reveals elongated states (Kelantan, Kedah) vs. compact ones (Melaka, Perlis). This analysis confirms that GADM boundaries correctly parsed all 16 Level-1 units without geometry errors — the `gadm.py` validation check `len(cleaned_features) != 16` is satisfied.
+**Analysis.** This border structure is exactly the kind of relationship graph-based
+models can use. The pipeline saves it both as a simple yes/no connection matrix and
+as a version weighted by how long each shared border is, so a model can treat a long
+shared boundary as a stronger link than a short one.
 
-State centroids extracted in `gadm.py` (lat/lon per state) are available for distance-based edge weighting in future graph model extensions.
+**Link.** The connectivity is summarised into a few simple numbers (total states,
+number of bordering pairs, average border length) that travel into the main feature
+table.
+
+---
+
+## Pattern 2 — States Vary Hugely in Size and Shape
+
+**Main idea.** Malaysian states range from tiny to enormous, and from compact to
+elongated.
+
+**Evidence.** Sarawak is by far the largest (~124,000 km²), followed by Sabah
+(~73,000 km²). Peninsular states run from about 1,000 km² (Perlis) to ~36,000 km²
+(Pahang). Some states are stretched and thin (Kelantan, Kedah), others compact
+(Melaka, Perlis).
+
+**Analysis.** Checking these sizes and shapes is also a data-quality step: it confirms
+all 16 boundaries were read in correctly with no geometry errors. The cleaning script
+explicitly verifies that exactly 16 units are present.
+
+**Link.** Each state's centre point (centroid) is also computed and stored, ready for
+distance-based map work in future model versions.
+
+---
+
+## What Goes Into the Model
+
+Three simple numbers summarise the geography for the main feature table: the state
+count (16), the number of bordering state pairs, and the average shared-border length.
+These give the models a compact sense of the country's spatial connectivity
+(Song et al., 2024; Wang et al., 2024).
+
+---
+
+## References
+
+Song, J., Ding, J., Gui, X., & Zhu, Y. (2024). Assessment and solutions for vulnerability of urban rail transit network based on complex network theory: A case study of Chongqing. *Heliyon, 10*(5), e27237. https://doi.org/10.1016/j.heliyon.2024.e27237
+
+Wang, Z., Huang, K., Massobrio, R., Bombelli, A., & Cats, O. (2024). Quantification and comparison of hierarchy in public transport networks. *Physica A: Statistical Mechanics and Its Applications, 634*, 129479. https://doi.org/10.1016/j.physa.2023.129479

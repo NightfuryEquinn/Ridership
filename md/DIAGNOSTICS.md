@@ -1,8 +1,12 @@
-# Fit Diagnostics (Overfit / Underfit Analysis)
+# Fit Diagnostics: Did the Models Learn or Just Memorise?
 
-> Source: `src/outputs/aggregate_diagnosis.csv` (14 baseline/tuned models × 6 configs) + diagnosis columns of `aggregate_hmttsf.csv` (HMT-TSF × 10 configs) · Generated 2026-06-05
+> Last updated: 2026-07-02 · Source: `src/outputs/aggregate_diagnosis.csv` and the diagnosis columns of `aggregate_hmttsf.csv`
 > Companion files: `RESULTS.md`, `HMT-TSF-RESULTS.md`
-> This document is **descriptive** — it characterises the fit verdicts and their drivers. No remediation recommendations.
+
+A model can score well on the test set yet still be unreliable if it simply memorised
+the training data. This page checks each model for that problem — separating models that
+genuinely learned the patterns from those that overfitted. It describes what happened and
+why; it does not prescribe fixes.
 
 ## 1. Methodology
 
@@ -122,7 +126,7 @@ Largest validation-loss drift above the best checkpoint — the strongest "train
 
 ## 7. HMT-TSF (proposed model)
 
-HMT-TSF (2026-06-11 regenerated runs — see `REVISION.md`) is `good_fit` on **9 of 10 configs**; the feature-reduced variant on **all 10** — a 19/20 record no baseline family approaches. Full tables in `HMT-TSF-RESULTS.md` §6 and §11.
+HMT-TSF is `good_fit` on **9 of 10 configs**; the feature-reduced variant on **all 10** — a 19/20 record no baseline family approaches. Full tables in `HMT-TSF-RESULTS.md` §6 and §11.
 
 - **gap_ratio range 1.57× – 2.72×** (both variants) — always under the 3× threshold, including all MCO-included configs. No memorisation signal in any configuration; the headline nomco_lb14 run posts the study's cleanest profile (1.57×, drift 0.61%).
 - **The sole exception is full-model nomco_lb84** — `overfit` on validation drift (+36.9% above its early best, epoch 18/48). The 84-day window over a 7-day horizon is the study's clearest "too much context" case; feature reduction repairs it (FR nomco_lb84 `good_fit`, drift 11.1%).

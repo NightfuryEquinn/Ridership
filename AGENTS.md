@@ -1,8 +1,8 @@
-# CLAUDE.md
+# AGENTS.md
 
-> Last updated: 2026-06-11
+> Last updated: 2026-07-02
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Cursor, and any other agent that reads `AGENTS.md`) when working with code in this repository. Human-oriented documentation lives in `README.md`; the same guidance is mirrored in `CURSOR.md`.
 
 > **2026-06-11 revision notes** (full audit in `REVISION.md`):
 > - `cuda.py` was renamed `check_cuda.py` (the old name shadowed the `cuda.bindings` package that newer PyTorch builds import).

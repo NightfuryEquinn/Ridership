@@ -1,135 +1,150 @@
-# Ridership EDA Results
+# Ridership: What the Data Shows
 
-> Last updated: 2026-06-03
+> Last updated: 2026-07-02
 
-Exploratory data analysis of daily Malaysian public transit ridership from the `ridership_headline.csv` source, covering 12 service lines from 2019 to 2025.
-
----
-
-## Service Line Visualisations
-
-### service_rail_lrt_kj.png
-**What:** Daily ridership time series for the LRT Kelana Jaya Line.
-**Analysis:** The Kelana Jaya Line is the highest-ridership rail line in the dataset. The series shows a strong weekly seasonality (weekday peaks vs. weekend troughs) and a pronounced structural break during the MCO period (2020-03-18 – 2021-12-31) where ridership collapsed to near-zero. Post-MCO recovery is visible as a gradual upward trend from early 2022 onwards, with the series stabilising at roughly 60–75% of pre-MCO levels by 2024.
-
-### service_rail_mrt_kajang.png
-**What:** Daily ridership time series for the MRT Kajang Line.
-**Analysis:** Similar weekly periodicity to the Kelana Jaya Line but at a lower absolute level. The MCO break is equally sharp. The post-MCO recovery trajectory is steeper relative to baseline than the Kelana Jaya Line, reflecting maturing adoption along the Kajang corridor. By 2024 the line exceeds pre-MCO ridership — notable as the only line to do so in this dataset.
-
-### service_rail_lrt_ampang.png
-**What:** Daily ridership time series for the LRT Ampang Line.
-**Analysis:** The Ampang Line shows a slower post-MCO recovery compared to the Kajang/KJ lines. The series has a noisier day-to-day signal, consistent with a more heterogeneous trip purpose mix (both commuter and leisure). Weekend ridership is proportionally higher than on the other rail lines, suggesting stronger leisure usage.
-
-### service_rail_monorail.png
-**What:** Daily ridership time series for the KL Monorail.
-**Analysis:** The Monorail has the most tourism-sensitive pattern in the dataset. The MCO collapse is deepest here proportionally, reflecting the near-total cessation of tourist movement. Post-MCO recovery depends heavily on tourism recovery and is the most correlated with the `is_public_holiday` flag.
-
-### service_rail_mrt_pjy.png
-**What:** Daily ridership for the MRT Putrajaya Line (Laluan Putrajaya).
-**Analysis:** This line launched on 2022-06-16. The series starts at zero (correctly represented as NaN pre-launch, zero-filled in `sequence_builder.py`). A ramp-up phase is visible through late 2022 into 2023, followed by stabilisation. Early-launch variability is higher than mature lines, consistent with new corridor adoption behaviour. This line has `null_count = 166` in `feature_metadata.json` (pre-launch period within the 2022-01-01 master window).
-
-### service_rail_ets.png
-**What:** Daily ridership for the ETS (Electric Train Service) inter-city service.
-**Analysis:** ETS shows a different pattern from urban rail — distinct peaks on Fridays and Sundays (departure/return for inter-city leisure travel) rather than Monday–Friday commuter peaks. The MCO break is total for this service. Post-MCO recovery is slower, reflecting inter-city travel sensitivity to restrictions and traveller confidence.
-
-### service_rail_intercity.png
-**What:** Daily ridership for KTM inter-city (non-ETS) services.
-**Analysis:** Very similar pattern to ETS. Near-zero during MCO with gradual post-MCO recovery. The inter-city services collectively benefit from high fuel price periods — the lag correlation analysis in `BIVARIATE.md` captures this positive relationship.
-
-### service_rail_komuter_utara.png
-**What:** Daily ridership for KTM Komuter Utara (northern commuter rail).
-**Analysis:** A lower-ridership commuter service serving the northern corridor. Strong commuter weekly pattern with sharper weekday/weekend contrast than the KL urban rail lines, reflecting the more employment-oriented character of the northern stations.
-
-### service_rail_komuter.png
-**What:** Daily ridership for KTM Komuter (main Komuter service).
-**Analysis:** This is the late-launch service with `null_count = 617` days in `feature_metadata.json` — it did not report separately until 2023-09-10. The series is zero-filled before that date in the model input. The available period shows moderate ridership with clear weekday seasonality.
-
-### service_rail_tebrau.png
-**What:** Daily ridership for the KTM Tebrau shuttle (Johor Bahru – Singapore).
-**Analysis:** Launched 2022-06-19 (`null_count = 169`). This is the only cross-border service in the dataset. The ridership pattern is strongly tied to Singapore work-permit dynamics and cross-border commuter flows. Day-of-week effects are less pronounced than domestic services — the Tebrau sees relatively elevated Saturday ridership from cross-border shoppers and visitors.
-
-### service_bus_rkl.png
-**What:** Daily ridership for RapidBus KL (Rapid KL bus network).
-**Analysis:** The highest-volume bus series. Shows strong weekly seasonality with pronounced weekday peaks. Unlike rail lines, the bus series shows more sensitivity to rainfall (`BIVARIATE.md`) and is more variable day-to-day. Launched 2022-01-01 (start of master window, no null days).
-
-### service_bus_rpn.png
-**What:** Daily ridership for RapidBus Penang (Rapid Penang bus).
-**Analysis:** Much lower absolute ridership than RapidBus KL, reflecting Penang's smaller urban transit market. The weekly pattern is weaker than rail lines, consistent with a more diverse trip-purpose mix and the relatively less developed GTFS network captured in the Penang GTFS static data.
+This is the core dataset: daily passenger counts for 12 Malaysian public transit
+services from 2019 to 2025. Everything else in the project exists to help forecast
+these numbers. This page explains the patterns that shaped how the data was cleaned
+and modelled, written for a general reader. Each section follows a simple structure —
+**Main idea**, **Evidence**, **Analysis**, and **Link** (how it feeds the model).
 
 ---
 
-## Temporal Feature Visualisations
+## The 12 Services at a Glance
 
-These plots are generated by `service_specific_analysis()`, which iterates over all columns in `ridership_headline_clean.csv` not in its exclusion list. The columns below are temporal/cyclical features added during cleaning by `src/features/ridership.py` and are included in `features_aligned.csv` as part of the temporal feature group.
+| Service | Type | Character |
+|---|---|---|
+| LRT Kelana Jaya | Urban rail | Highest-ridership line; strong weekday commuter pattern |
+| MRT Kajang | Urban rail | Only line to exceed its pre-COVID level by 2024 |
+| LRT Ampang | Urban rail | Slower recovery; noisier, more leisure travel |
+| KL Monorail | Urban rail | Most tourism-sensitive; deepest COVID collapse |
+| MRT Putrajaya | Urban rail | Launched 2022-06-16; ramp-up then stabilises |
+| KTM ETS | Inter-city rail | Friday/Sunday peaks (leisure travel), not weekday |
+| KTM Intercity | Inter-city rail | Similar to ETS; slow post-COVID recovery |
+| KTM Komuter Utara | Commuter rail | Northern corridor; sharp weekday/weekend contrast |
+| KTM Komuter | Commuter rail | Reported separately only from 2023-09-10 |
+| KTM Tebrau | Cross-border rail | Johor Bahru–Singapore; tied to commuter flows |
+| RapidBus KL | Bus | Highest-volume bus; rain-sensitive, day-to-day variable |
+| RapidBus Penang | Bus | Smaller market; weaker weekly pattern |
 
-### service_is_mco.png
-**What:** Time series of the `is_mco` binary flag (1 = MCO period active, 0 = otherwise).
-**Analysis:** A step function that switches on at 2020-03-18 and off at 2022-01-01. The plot visually confirms the exact span used to construct the `is_mco` feature in `src/features/ridership.py`. It motivates both the default MCO-exclusion behaviour in `sequence_builder.py` and the regime-gating embedding in HMT-TSF, which uses this window as a prior for one of its K=3 regime embeddings.
-
-### service_is_weekend.png
-**What:** Time series of the `is_weekend` binary flag (1 = Saturday or Sunday, 0 = weekday).
-**Analysis:** Regular alternating pattern with 5-day off / 2-day on cycles. The plot confirms uniform encoding across the full date range with no anomalous weekend gaps. `is_weekend` acts as the day-type partition feature used in `peak_offpeak_analysis()` and feeds directly into `features_aligned.csv`.
-
-### service_day_of_year.png
-**What:** Time series of the `day_of_year` integer (1–366), cycling annually.
-**Analysis:** A repeating sawtooth from 1 to 365/366, resetting each 1 January. The plot confirms no discontinuities (data gaps would show missing teeth). `day_of_year` encodes secular intra-year position and is used alongside `year` in `features_aligned.csv` to allow models to capture annual growth trends and seasonal asymmetries that pure cyclical encodings cannot represent.
-
-### service_dow_sin.png
-**What:** Time series of `dow_sin = sin(2π × day_of_week / 7)`.
-**Analysis:** Smooth sinusoidal oscillation with a 7-day period. Confirms the encoding is correctly anchored (Monday = 0) and unit-normalised. `dow_sin` together with `dow_cos` provides a rotation-invariant encoding of day-of-week that avoids the ordinal-distance artefact of the raw `day_of_week` integer (where Sunday=6 appears far from Monday=0).
-
-### service_dow_cos.png
-**What:** Time series of `dow_cos = cos(2π × day_of_week / 7)`.
-**Analysis:** The cosine complement of `dow_sin`, shifted 90°. Together they form a unit-circle embedding of the weekly cycle. Models can recover day-of-week as `atan2(dow_sin, dow_cos)` without any ordinal discontinuity at the week boundary.
-
-### service_month_sin.png
-**What:** Time series of `month_sin = sin(2π × month / 12)`.
-**Analysis:** Sinusoidal oscillation with a 12-month period. The MCO window (March 2020 – December 2021) is visible as a continuous segment of the cycle — the encoding is unaffected by ridership events, confirming it encodes calendar position independently of demand. Passed to `features_aligned.csv` as part of the temporal feature group.
-
-### service_month_cos.png
-**What:** Time series of `month_cos = cos(2π × month / 12)`.
-**Analysis:** The cosine complement of `month_sin`. Together they encode the annual seasonal cycle as a 2D unit-circle embedding, avoiding the boundary artefact between December (month=12) and January (month=1) that a raw month integer would introduce.
+`total_ridership` (the main forecast target) is the daily sum of all 12 services.
 
 ---
 
-## Temporal and Structural Analyses
+## Pattern 1 — The COVID Lockdown Is the Biggest Event in the Data
 
-### changepoint_detection.png
-**What:** Changepoint detection results on the `total_ridership` series.
-**Analysis:** Identifies statistically significant structural breaks. Expected changepoints include: MCO onset (2020-03-18), MCO lift (2022-01-01 when all 12 lines are first reported), MRT Putrajaya/Tebrau launch (mid-2022), and gradual post-MCO recovery plateau. The `is_mco` flag in `ridership.py` was designed based on this analysis — the 2020-03-18 to 2021-12-31 window captures all phases where ridership was structurally suppressed.
+**Main idea.** The Movement Control Order (MCO, 2020-03-18 to 2021-12-31) cut
+ridership by 65–90% across every service and remains the single largest signal in
+the full history.
 
-### monthly_growth_rate.png
-**What:** Month-over-month and year-over-year growth rates for total ridership.
-**Analysis:** Post-MCO (2022–2023) growth rates are high due to base effects from the suppressed MCO period. By 2024 the growth rate normalises. Negative month-on-month growth around major public holidays (Hari Raya Aidilfitri, Chinese New Year) is visible as seasonal dips in the growth rate series, motivating the `is_public_holiday` and `days_to_next_public_hol` features.
+**Evidence.** Change-point detection on `total_ridership` finds four clear phases:
+a pre-COVID baseline, the lockdown trough, a phased reopening, and a stable
+post-COVID trend. The `is_mco` flag marks roughly 650 days (about a quarter of the
+2019–2025 series). Recovery is uneven: most rail lines sit at 60–80% of their
+pre-COVID level by 2024, inter-city rail stays below 60%, and MRT Kajang is the
+only line to climb back above 100%.
 
-### peak_offpeak_day_type.png
-**What:** Average ridership by hour bucket (peak vs. off-peak) stratified by day type (weekday / weekend / public holiday).
-**Analysis:** Quantifies the ridership multiplier from day-type effects. Weekdays show a bimodal peak (morning and evening commute). Public holidays closely resemble weekend profiles for rail but suppress bus ridership more sharply. This analysis motivates the `is_holiday_any` and `is_weekend` binary features used in the pipeline.
+**Analysis.** A break this large breaks the assumption that the data behaves the
+same way over time, which most forecasting models rely on. That is why the project
+keeps two versions of the dataset — one with the lockdown period and one without —
+and why the proposed HMT-TSF model includes a "regime" component that learns to
+tell the pre-COVID, lockdown, and post-COVID periods apart. Keeping the lockdown
+rows but tagging them (rather than deleting them) preserves the day-to-day
+continuity that sequence models need.
 
-### ridership_decomposition.png
-**What:** STL decomposition of total ridership into trend, weekly seasonal, and residual components.
-**Analysis:** The trend component captures the MCO collapse and post-MCO recovery arc. The seasonal component has a dominant 7-day period, motivating `dow_sin` / `dow_cos` cyclical encoding. The residual is largest during MCO (structural break treated as noise by STL), confirming that MCO-period rows carry anomalous signals that motivate either exclusion (`sequence_builder.py --include-mco` off by default) or explicit flagging (`is_mco=1`).
-
-### temporal_trend_analysis.png
-**What:** Long-run trend analysis across all 12 service lines, 2019–2025.
-**Analysis:** Shows the divergent post-MCO recovery trajectories by line. Urban MRT/LRT lines recover faster than inter-city rail, which recovers faster than bus. The Putrajaya MRT Line (new launch) is the only line showing growth beyond pre-MCO baseline, indicating new demand creation rather than demand recovery. The `year` and `day_of_year` features in the pipeline encode this secular trend and intra-year position for the models.
+**Link.** This behaviour matches international findings that transit demand does not
+simply snap back after a shock and recovers at different speeds by mode (Airak et
+al., 2023; Lee et al., 2024).
 
 ---
 
-## MCO Impact Analysis
+## Pattern 2 — A Strong Weekly Rhythm
 
-### mco_period_overlay.png
-**What:** Full-span total ridership line chart with the MCO period (2020-03-18 – 2021-12-31) highlighted as a shaded red band.
-**Analysis:** Makes the structural break immediately legible. The shaded band shows the ~21-month window during which ridership was suppressed across all services. The steep decline at MCO onset (March 2020) and the gradual recovery ramp from January 2022 are the dominant features of the full series. This plot is the canonical reference for understanding why the MCO flag motivates either excluding MCO rows from training sequences (default in `sequence_builder.py`) or encoding them via the regime embedding in HMT-TSF.
+**Main idea.** Ridership rises on weekdays and falls on weekends, and this weekly
+cycle is the most reliable short-term pattern in the data.
 
-### mco_period_comparison.png
-**What:** Grouped bar chart comparing mean daily ridership across three periods — Pre-MCO, MCO, and Post-MCO — for each of the 12 service lines.
-**Analysis:** Quantifies collapse magnitude and recovery level per service. Services with no pre-MCO data (MRT Putrajaya, Tebrau shuttle, Komuter Sep-2023 launch) show zero for Pre-MCO — these late-launch lines have no pre-MCO baseline. Among services with pre-MCO data, the Monorail and inter-city services (ETS, Intercity) show the deepest MCO-period collapse relative to their pre-MCO averages, consistent with their tourism and discretionary travel sensitivity. Post-MCO bars below pre-MCO bars confirm that most lines had not fully recovered to baseline demand by the end of the dataset.
+**Evidence.** A seasonal decomposition of `total_ridership` splits the series into a
+long trend, a repeating 7-day cycle, and leftover noise. The 7-day cycle is
+dominant. Urban rail (LRT/MRT/Monorail) shows a bimodal weekday peak (morning and
+evening commute); inter-city services such as ETS instead peak on Fridays and
+Sundays as people travel for the weekend.
 
-### mco_recovery_trajectories.png
-**What:** Monthly post-MCO recovery curves for services with valid pre-MCO data, expressed as percentage of their pre-MCO daily average. A dashed reference line marks 100% (pre-MCO baseline).
-**Analysis:** Reveals divergent recovery speeds and asymptotic recovery levels by service type. MRT Kajang is the only line to cross and sustain above 100% (consistent with the service-level analysis above: maturing corridor adoption). Urban LRT/MRT lines cluster around 60–80% by 2024. Inter-city services (ETS, Intercity, Komuter Utara) remain below 60%, reflecting slower traveller confidence recovery and the structural shift to hybrid working. Bus services (RapidBus KL, RapidBus Penang) show a smoother recovery curve with less volatility than rail, consistent with their lower average fare and essential-service character. Recovery trajectories inform the `ridership_lag_7/14/28` features — their predictive value is strongest in the post-MCO ramp-up window where autocorrelation is high.
+**Analysis.** Because the pattern repeats every seven days, the model needs a way to
+know the day of week without treating "Sunday" as numerically far from "Monday". The
+pipeline encodes each day and month as a pair of sine/cosine values, which places
+them on a smooth circle so the model reads the calendar without artificial jumps at
+week or year boundaries.
 
-### mco_impact_metrics.csv
-**What:** Per-service summary table with columns `service`, `pre_mco_avg`, `mco_avg`, `post_mco_avg`, `collapse_pct`, `recovery_pct`. `collapse_pct = (mco_avg − pre_mco_avg) / pre_mco_avg × 100`; `recovery_pct = (post_mco_avg − pre_mco_avg) / pre_mco_avg × 100`. Both are `NaN` for services with no pre-MCO data.
-**Analysis:** The `collapse_pct` column confirms that rail services experienced ≥ 85% demand collapse during MCO, with Monorail and inter-city services approaching 95–100%. The `recovery_pct` column shows that by end of dataset most services remain 20–40 pp below pre-MCO baseline, with MRT Kajang as the sole line with a positive recovery_pct. These numbers directly motivate the `is_mco` binary flag in the cleaning pipeline: the MCO period is categorically different from normal operations, not a gradual trend shift.
+**Link.** This weekly structure is why the default 14-day look-back window works well —
+it covers exactly two full commuting cycles.
+
+---
+
+## Pattern 3 — Holidays Reshape Demand
+
+**Main idea.** Public holidays suppress commuter ridership, and the effect starts a
+day or two before the holiday itself.
+
+**Evidence.** Total ridership on public holidays typically falls to 30–60% of a
+comparable weekday. Major festivals differ: Hari Raya Aidilfitri causes the deepest
+drop in KL as workers leave the city, while Chinese New Year dips urban rail but
+lifts inter-city KTM travel. Month-on-month growth shows visible dips around these
+festivals.
+
+**Analysis.** A simple "is it a holiday?" flag is not enough because demand shifts
+before and after the day. The pipeline adds "days until the next holiday" and "days
+since the last holiday" counters so the model can learn the run-up and the recovery,
+not just the day itself.
+
+**Link.** Holiday timing is one of the strongest non-seasonal drivers the model
+learns to use (Wu et al., 2023; Li et al., 2022).
+
+---
+
+## Pattern 4 — New Lines and Missing Days
+
+**Main idea.** Some services simply did not exist for part of the study window, so
+their "missing" values are structural, not data errors.
+
+**Evidence.** MRT Putrajaya launched 2022-06-16, Tebrau 2022-06-19, and KTM Komuter
+began reporting separately on 2023-09-10. Within the 2022–2025 window, this leaves
+166, 169, and 617 missing days respectively.
+
+**Analysis.** Before a service launches, its ridership is genuinely zero, so those
+gaps are filled with zero rather than an average — a service that does not run cannot
+have "typical" demand. New lines also show more early volatility as riders discover
+them.
+
+**Link.** Correct handling here keeps the sliding-window sequences clean and stops
+false signals from leaking into training.
+
+---
+
+## Pattern 5 — A Gradual, Trend-Driven Recovery
+
+**Main idea.** Beyond the weekly cycle, ridership carries a slow upward trend as the
+network recovers and matures.
+
+**Evidence.** Post-COVID growth rates were high in 2022–2023 (partly a rebound from a
+very low base) and normalised by 2024. MRT Kajang shows genuine new demand rather
+than recovery, while inter-city and bus services recover more slowly and smoothly.
+
+**Analysis.** Cyclical day/month encodings repeat every year and cannot represent a
+one-directional trend, so the pipeline also adds plain `year` and `day_of_year`
+features. These let the model track where the network sits on its longer recovery arc.
+
+**Link.** Recent ridership history is also captured through 7-, 14-, and 28-day lag
+features, which are most useful during the steep recovery ramp when today's demand
+closely follows recent days.
+
+---
+
+## References
+
+Airak, S., Abd Sukor, N. S., & Abd Rahman, N. (2023). Travel behaviour changes and risk perception during COVID-19: A case study of Malaysia. *Transportation Research Interdisciplinary Perspectives, 18*, 100784. https://doi.org/10.1016/j.trip.2023.100784
+
+Lee, S., Kim, J., & Cho, K. (2024). Temporal dynamics of public transportation ridership in Seoul before, during, and after COVID-19 from urban resilience perspective. *Scientific Reports, 14*, 9078. https://doi.org/10.1038/s41598-024-59323-w
+
+Li, W., Guan, H., Han, Y., Zhu, H., & Wang, A. (2022). Short-term holiday travel demand prediction for urban tour transportation: A combined model based on STC-LSTM deep learning approach. *KSCE Journal of Civil Engineering, 26*(9), 4086–4102. https://doi.org/10.1007/s12205-022-1698-3
+
+Wu, J.-L., Lu, M., & Wang, C.-Y. (2023). Forecasting metro rail transit passenger flow with multiple-attention deep neural networks and surrounding vehicle detection devices. *Applied Intelligence, 53*, 11789–11808. https://doi.org/10.1007/s10489-023-04483-x

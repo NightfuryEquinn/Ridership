@@ -1,8 +1,11 @@
-# Feature Engineering & EDA Analysis
+# Feature Engineering & Key Findings
 
-> Last updated: 2026-06-11 (curated to the 10 most significant EDA findings; supporting analyses folded into their parent findings)
+> Last updated: 2026-07-02 (curated to the 10 most significant findings; supporting analyses folded into their parent findings)
 
-Detailed account of all exploratory data analysis (EDA) and engineering decisions made across the eight spatio-temporal feature sources that feed the forecasting pipeline. The pipeline produces two aligned feature matrices: `features_aligned_no_mco.csv` — **79 features × 1,461 days** (2022-01-01 → 2025-12-31, MCO period excluded) used as the default model input — and `features_aligned.csv` — **79 features × 2,557 days** (2019-01-01 → 2025-12-31, MCO period retained) used for MCO-robustness experiments.
+This page records how the raw data became model features, and the ten most important
+things the data analysis revealed. The first part walks through each of the eight data
+sources and the cleaning decisions made; the second part presents the headline
+findings, each written as **Main Idea → Evidence → Analysis → Link**. The pipeline produces two aligned feature matrices: `features_aligned_no_mco.csv` — **79 features × 1,461 days** (2022-01-01 → 2025-12-31, MCO period excluded) used as the default model input — and `features_aligned.csv` — **79 features × 2,557 days** (2019-01-01 → 2025-12-31, MCO period retained) used for MCO-robustness experiments.
 
 ---
 

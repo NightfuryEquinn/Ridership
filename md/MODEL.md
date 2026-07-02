@@ -1,8 +1,12 @@
-# Model Descriptions — Chapter 3: Methodology
+# Model Descriptions
 
-> Last updated: 2026-06-09
+> Last updated: 2026-07-02
 
-This document constitutes the model description component of Chapter 3 (Methodology) for the Malaysian transit ridership forecasting study. It covers model selection rationale, key architecture, strengths, and limitations for all 14 baseline deep-learning models, and provides a full architecture and feature analysis for the proposed HMT-TSF model. Experimental results are reported separately in Chapter 4.
+This page describes every model in the study: why it was chosen, how it works, and its
+strengths and weaknesses. It covers the 14 baseline deep-learning models plus the
+proposed HMT-TSF model. Each model's selection rationale is written as
+**Main Idea → Evidence → Analysis → Link**, backed by a recent journal reference.
+Results are reported separately in `RESULTS.md` and `HMT-TSF-RESULTS.md`.
 
 All 14 baseline models share the same input/output dimensions (look-back window T_in ∈ {14, 28, 56} days, forecast horizon T_out = 7 days), the same 79-feature dataset derived from eight spatio-temporal sources, and the same training optimisations: AdamW optimiser with decoupled weight decay, HuberLoss (selectable via `--loss`), and a five-epoch linear LR warm-up followed by ReduceLROnPlateau. The proposed model (HMT-TSF) extends look-back support to {7, 14, 28, 56, 84} days.
 
@@ -1074,7 +1078,7 @@ Step 1 (1-day-ahead) has weight 1.0; step 7 (7-day-ahead) receives weight 0.9^6 
 
 #### Future Temporal Projection — Known-Future Calendar Conditioning
 
-The 16 temporal features are deterministic for any future calendar date, so `sequence_builder.py` pre-computes them for the `T_out` forecast steps of each window as `X_future: (B, T_out, 16)`. A per-step MLP (`n_t → max(2·n_t, 32) → 1`, zero-initialised so it starts as a no-op) learns an additive correction from this known-future context — letting the model anticipate weekend dips and holiday effects inside the forecast horizon rather than extrapolating them from the look-back window. HMT-TSF is the **only** model in the study that receives this input, so its margin over the baselines reflects architecture plus conditioning (see the comparison-fairness note in `REVISION.md`).
+The 16 temporal features are deterministic for any future calendar date, so `sequence_builder.py` pre-computes them for the `T_out` forecast steps of each window as `X_future: (B, T_out, 16)`. A per-step MLP (`n_t → max(2·n_t, 32) → 1`, zero-initialised so it starts as a no-op) learns an additive correction from this known-future context — letting the model anticipate weekend dips and holiday effects inside the forecast horizon rather than extrapolating them from the look-back window. HMT-TSF is the **only** model in the study that receives this input, so its margin over the baselines reflects architecture plus conditioning.
 
 #### Optional Post-Hoc Residual Boosting (Phase 3)
 
@@ -1255,9 +1259,11 @@ Scopus-indexed journal articles (2022–2027) cited in each model script's docst
 
 ---
 
-## Experimental Results (Chapter 4 Reference)
+## Results Snapshot
 
-> The following tables belong to Chapter 4. They are retained here as a co-located reference for model development but do not constitute part of the Chapter 3 methodology narrative.
+> These tables summarise how the models actually performed. Full results, robustness
+> tests, and fit diagnostics are in `RESULTS.md`, `HMT-TSF-RESULTS.md`, and
+> `DIAGNOSTICS.md`.
 
 ### Shared Training Optimisations (All 14 Baseline Models)
 

@@ -1,33 +1,92 @@
-# Thematic EDA Results
+# The Big Picture: Network-Wide Themes
 
-> Last updated: 2026-05-22
+> Last updated: 2026-07-02
 
-Cross-source thematic visualisations synthesising ridership with the spatial and contextual feature sources in this project.
-
----
-
-## Network and Spatial Summaries
-
-### network_performance_summary.png
-**What:** Summary dashboard of Malaysian public transit network performance: total ridership trends by mode (bus vs. rail sub-groups), modal share breakdown, and year-over-year growth rates, 2022–2025.
-**Analysis:** Rail modes (LRT/MRT) dominate the ridership total, with bus providing a substantial but lower share. The network performance summary confirms the post-MCO recovery trajectory is predominantly rail-led. Bus ridership (RapidBus KL and Penang) is recovering more slowly, consistent with the mode-level analysis in `RIDERSHIP.md`. This aggregate view motivates forecasting `total_ridership` as the primary target while retaining all 12 service-line ridership values as contextual target features in the pipeline (feature group 0–12 in HMT-TSF's `FEAT_GROUPS`).
-
-### population_poi_network_overlap.png
-**What:** Spatial overlay visualisation of population density, OSM POI density, and GTFS transit stop locations for the Klang Valley area.
-**Analysis:** The three layers show strong co-location: high-population-density areas (Ampang, Chow Kit, Bangsar) have dense POI counts and multiple GTFS stops within 500 m. This spatial co-occurrence validates the feature construction logic in `population.py` and `osm.py` — the population-at-stops and POI-at-stops features encode genuine spatial demand signals rather than noise. The `gtfs_n_stops`, `osm_poi_total_mean`, and `pop_density_median` static features collectively describe this spatial context in the flat model input.
-
-### ridership_by_mode.png
-**What:** Stacked bar or line chart of daily ridership broken down by modal group (urban rail, inter-city rail, bus) from 2022 to 2025.
-**Analysis:** Urban rail (LRT/MRT/Monorail) consistently accounts for ~55–65% of total ridership. Bus (RapidBus KL + Penang) contributes ~25–30%. Inter-city rail (KTM ETS, Intercity, Komuter) makes up the remainder. This decomposition explains why some models perform better on `total_ridership` (dominated by urban rail, which has the most predictable weekday/weekend pattern) than on individual service lines (inter-city and new-launch lines have higher residual noise).
+This page pulls together the whole picture — how ridership, geography, and context fit
+together across the network. It sits above the single-source pages and explains the
+system-level story. Each section uses **Main idea**, **Evidence**, **Analysis**, and
+**Link**.
 
 ---
 
-## Feature Interaction Analyses
+## Theme 1 — Rail Leads the Network
 
-### feature_correlation_heatmap.png (if present)
-**What:** Pearson correlation matrix of the 79 features in `features_aligned.csv`, computed on the training split (2022-01-01 to ~2023-12).
-**Analysis:** This is the feature-level adjacency used by all graph-based models (STGCN, MTGNN, STSGCN, STFGNN, PDR-STGCN, ASTGCN, HMT-TSF) with threshold=0.1. High-correlation blocks expected: (1) all 13 ridership target features correlated with each other; (2) fuel price levels within each fuel type; (3) rainfall states with geographically proximate neighbours; (4) `dow_sin`/`dow_cos` correlated with ridership and `is_weekend`. Static features (population, GTFS, GADM) have near-zero correlation with dynamic features — they provide constant graph nodes, which is intentional.
+**Main idea.** The Malaysian transit network is rail-dominated, and its recovery is
+rail-led.
 
-### mcо_impact_summary.png (if present)
-**What:** Comparison of ridership distributions before, during, and after the MCO period (2020-03-18 – 2021-12-31) for selected service lines.
-**Analysis:** Confirms the MCO structural break is the dominant signal in the full historical series. Post-MCO distribution shifts right (increasing ridership) but does not return to pre-MCO levels for most services by 2025. The regime-gating component in HMT-TSF (K=3: pre-MCO / MCO / post-MCO) directly addresses this distributional non-stationarity by learning separate regime embeddings — the regime gate learns to weight the post-MCO embedding during inference without requiring `is_mco` as an explicit input feature at inference time.
+**Evidence.** Urban rail (LRT/MRT/Monorail) accounts for roughly 55–65% of total
+ridership, bus for 25–30%, and inter-city rail for the rest. The two bus services are
+each smaller than any single rail line, and the busiest days are rail days.
+
+**Analysis.** Because one aggregate number would be dominated by rail and hide bus
+dynamics, the project keeps all 12 services as separate values while forecasting the
+combined total as the main target. This preserves the ability to see each mode's
+behaviour.
+
+**Link.** Modelling services separately avoids masking the smaller but distinct bus
+patterns (Yang et al., 2023).
+
+---
+
+## Theme 2 — People, Places, and Stops Line Up
+
+**Main idea.** Population, nearby destinations, and transit stops all concentrate in
+the same places.
+
+**Evidence.** Overlaying population density, points of interest, and transit stops for
+the Klang Valley shows strong co-location: dense neighbourhoods (Ampang, Chow Kit,
+Bangsar) have both many destinations and several stops within walking distance.
+
+**Analysis.** This confirms the population and POI features encode real demand signals,
+not noise — the places with the most people and activity are the places with the most
+transit. It validates building these features around stop catchments.
+
+**Link.** The spatial features carry genuine demand information that the models can use
+(Li et al., 2024).
+
+---
+
+## Theme 3 — The COVID Break Dominates the Long History
+
+**Main idea.** The lockdown period is the defining event in the full 2019–2025 record.
+
+**Evidence.** Ridership before, during, and after the lockdown shows a deep drop and a
+partial, uneven recovery — most services had not returned to pre-COVID levels by 2025.
+
+**Analysis.** This one event changes the statistical behaviour of the data so much that
+the project treats the pre-COVID, lockdown, and post-COVID periods as distinct
+regimes. The proposed model learns to recognise which regime it is in without being
+told the date, which is what makes it robust when the break is included.
+
+**Link.** Handling this structural break is the central design challenge the modelling
+work addresses (Lee et al., 2024).
+
+---
+
+## Theme 4 — Calendar and Weather Are the Everyday Drivers
+
+**Main idea.** Day-to-day, ridership is driven mostly by the calendar, with weather and
+fuel as secondary influences.
+
+**Evidence.** The weekly cycle, holidays, and seasonal position explain most of the
+routine variation; rainfall and fuel prices add smaller, context-specific effects.
+
+**Analysis.** This ordering guides the feature design: calendar features are central,
+while weather and fuel are supporting signals that matter mainly at specific times
+(monsoon season, price revisions). The model's own importance analysis later confirms
+this ranking.
+
+**Link.** A multi-source view of demand drivers is consistent with recent urban-rail
+forecasting work (Cui et al., 2025).
+
+---
+
+## References
+
+Cui, H., Si, B., Chi, D., Li, Y., Li, G., & Chen, Y. (2025). Short-term passenger flow prediction for urban rail systems: A deep learning approach utilizing multi-source big data. *PLOS ONE, 20*(1), e0333094. https://doi.org/10.1371/journal.pone.0333094
+
+Lee, S., Kim, J., & Cho, K. (2024). Temporal dynamics of public transportation ridership in Seoul before, during, and after COVID-19 from urban resilience perspective. *Scientific Reports, 14*, 9078. https://doi.org/10.1038/s41598-024-59323-w
+
+Li, Y., Zhang, Q., & Wang, H. (2024). An efficient approach for identifying potential bus passenger demand based on multisource data. *Journal of Advanced Transportation, 2024*, 5368577. https://doi.org/10.1155/2024/5368577
+
+Yang, C., Yu, C., Dong, W., & Yuan, Q. (2023). Substitutes or complements? Examining effects of urban rail transit on bus ridership using longitudinal city-level data. *Transportation Research Part A: Policy and Practice, 174*, 103489. https://doi.org/10.1016/j.tra.2023.103489

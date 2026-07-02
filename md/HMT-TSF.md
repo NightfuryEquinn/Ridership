@@ -1,6 +1,12 @@
 # HMT-TSF — Hybrid Multi-scale Temporal Spatio-Feature Forecaster
 
-> Last updated: 2026-06-04
+> Last updated: 2026-07-02
+
+HMT-TSF is the study's proposed model. In plain terms, it reads the same daily data as
+the other models but processes it through three parallel "views" at once — a time view,
+a relationship view, and a regime (before/during/after COVID) view — then blends them
+into a seven-day forecast. This page documents its architecture, settings, and results.
+The reasoning behind each novel piece is in `NOVEL.md`.
 
 ## Architecture Diagram
 
@@ -454,7 +460,7 @@ python src/models/hybrid/hmttsf.py \
 
 ## Achieved Results
 
-All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and evaluated for both the full-feature model (F=79) and the feature-reduced variant (F=53), using the corrected pipeline of 2026-06-11 (`REVISION.md`): true-layout feature groups, calendar-feature `X_future`, validation-gated residual boost (`--use-catboost`; applied only at extreme lookbacks — full: nomco_lb7/nomco_lb84/mco_lb84; FR: nomco_lb7/mco_lb84). Aggregate results are stored in `src/outputs/aggregate_hmttsf.csv`. Run IDs are recorded therein.
+All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and evaluated for both the full-feature model (F=79) and the feature-reduced variant (F=53), using the corrected pipeline: true-layout feature groups, calendar-feature `X_future`, validation-gated residual boost (`--use-catboost`; applied only at extreme lookbacks — full: nomco_lb7/nomco_lb84/mco_lb84; FR: nomco_lb7/mco_lb84). Aggregate results are stored in `src/outputs/aggregate_hmttsf.csv`. Run IDs are recorded therein.
 
 **Optimisation targets:** Combined% ≥ 75%, R² ≥ 0.70 (both simultaneously). **HMT-TSF (F=79): 10 of 10** configurations meet both targets. **HMT-TSF-FR (F=53): 9 of 10** — only mco_lb84 (73.23%, R² 0.680) falls below both thresholds.
 
@@ -479,7 +485,7 @@ All 10 configurations (nomco + mco × lb7/14/28/56/84) have been trained and eva
 
 ### HMT-TSF Feature-Reduced (FR, F=53)
 
-SHAP-guided ablation removed 26 zero-importance features (corrected labels, 2026-06-11 — see `REVISION.md`): 9 fuel-price columns (administered prices frozen or near-constant in the post-MCO window, plus East Malaysia variants) and all 17 static features (population, GTFS route/stop counts, OSM POI counts, GADM area metrics). The retained 53 features span: 13 target-context columns, 3 ridership lag features, 16 temporal/cyclical encodings (year, day_of_year, holiday flags/lead–lag, dow/month encodings), and 21 external series (6 fuel-price + 15 rainfall). Outputs are in `src/outputs/hmttsf_feat_reduced/`.
+SHAP-guided ablation removed 26 zero-importance features: 9 fuel-price columns (administered prices frozen or near-constant in the post-MCO window, plus East Malaysia variants) and all 17 static features (population, GTFS route/stop counts, OSM POI counts, GADM area metrics). The retained 53 features span: 13 target-context columns, 3 ridership lag features, 16 temporal/cyclical encodings (year, day_of_year, holiday flags/lead–lag, dow/month encodings), and 21 external series (6 fuel-price + 15 rainfall). Outputs are in `src/outputs/hmttsf_feat_reduced/`.
 
 ### HMT-TSF-FR (F=53) — Overall Performance
 
@@ -536,7 +542,7 @@ The post-fix runs cleanly split the FR trade-off along the regime axis. **Under 
 | ASTGCN (tuned) | 78.82 | 0.754 | 72,053 | 114,259 |
 | LSTM (tuned) | 78.43 | 0.777 | 78,339 | 108,676 |
 
-HMT-TSF-FR sets the study-wide headline at nomco_lb14: Combined% 86.59% and R² 0.906, leading all 16 models on every metric, with HMT-TSF Full second at 85.78%. The next baseline tier (Informer, TPA-LSTM, BiLSTM) sits 6.6–7.2 pp below FR. Part of this margin reflects HMT-TSF's exclusive access to known-future calendar conditioning (`X_future`) — see the comparison-fairness note in `REVISION.md`.
+HMT-TSF-FR sets the study-wide headline at nomco_lb14: Combined% 86.59% and R² 0.906, leading all 16 models on every metric, with HMT-TSF Full second at 85.78%. The next baseline tier (Informer, TPA-LSTM, BiLSTM) sits 6.6–7.2 pp below FR. Part of this margin reflects HMT-TSF's exclusive access to known-future calendar conditioning (`X_future`).
 
 ---
 

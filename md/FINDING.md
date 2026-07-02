@@ -97,12 +97,21 @@ A systematic sweep across lb14, lb28, and lb56 reveals that longer historical co
 | Informer | **79.13** | 78.63 | 77.17 | lb14 |
 | BiLSTM | **79.04** | 76.97 | 77.09 | lb14 |
 | TPA-LSTM | 78.67 | **79.08** | 76.36 | lb28 |
+| CNN-BiLSTM | **78.18** | 72.65 | 74.72 | lb14 |
+| LSTM | **78.13** | 77.48 | 75.98 | lb14 |
+| ST-LSTM | 78.01 | **78.86** | 75.60 | lb28 |
 | MTGNN | 77.93 | **78.11** | 77.76 | lb28 |
-| STGCN | 76.81 | **77.68** | 74.93 | lb28 |
 | CNN-LSTM | **77.64** | 73.90 | 74.33 | lb14 |
+| STSGCN | **76.97** | 75.02 | 75.15 | lb14 |
+| STGCN | 76.81 | **77.68** | 74.93 | lb28 |
+| ASTGCN | 75.69 | **76.89** | 75.15 | lb28 |
+| CNN-LSTM-Augmented | **75.36** | 74.73 | 74.04 | lb14 |
+| Autoformer | **74.73** | 73.61 | 73.40 | lb14 |
+| CNN-LSTM-Parallel | 74.18 | **76.55** | 74.33 | lb28 |
 | STFGNN | **73.94** | 61.30 | 43.25 | lb14 |
+| PDR-STGCN | **73.91** | 72.35 | 72.20 | lb14 |
 
-*Table 4.4.1. Look-back sensitivity for selected models (`base_nomco`). Full results cover all 16 variants.*
+*Table 4.4.1. Look-back sensitivity (Combined%) across lb14, lb28, and lb56 for all 16 baseline variants (`base_nomco`). The best window per model is shown in bold: lb14 is optimal for 10 models, lb28 for 6, and lb56 for none.*
 
 Fourteen days span exactly two weekly commuting cycles — the periodicity Chapter 3's EDA and Section 4.8's SHAP analysis identify as the dominant short-horizon structure — while slower seasonal variation is supplied explicitly through calendar features rather than recovered from extended history. Ma and Zhang (2025) similarly report that decomposition-based forecasters require sequence lengths matched to dominant periodicity; here, additional days contribute redundancy and, for fragile architectures, noise.
 
@@ -118,13 +127,23 @@ The MCO period represents a severe distributional discontinuity in which daily b
 | ----- | ----- | --- | ---------- | ------ |
 | Informer | 79.13 | 73.25 | −5.88 | 0.705 |
 | BiLSTM | 79.04 | 72.74 | −6.29 | 0.699 |
+| CNN-LSTM-Parallel | 74.18 | 66.89 | −7.29 | 0.577 |
+| TPA-LSTM | 78.67 | 71.05 | −7.61 | 0.669 |
 | STGCN | 76.81 | 68.55 | −8.27 | 0.615 |
 | MTGNN | 77.93 | 67.33 | −10.60 | 0.581 |
+| PDR-STGCN | 73.91 | 63.10 | −10.81 | 0.494 |
+| CNN-LSTM-Augmented | 75.36 | 64.50 | −10.86 | 0.531 |
+| ST-LSTM | 78.01 | 66.75 | −11.26 | 0.584 |
+| STSGCN | 76.97 | 64.20 | −12.77 | 0.531 |
+| ASTGCN | 75.69 | 61.69 | −14.00 | 0.471 |
+| CNN-BiLSTM | 78.18 | 60.59 | −17.59 | 0.427 |
+| LSTM | 78.13 | 58.92 | −19.21 | 0.390 |
+| Autoformer | 74.73 | 51.26 | −23.47 | 0.121 |
 | CNN-LSTM | 77.64 | 45.58 | −32.06 | −0.050 |
 | STFGNN | 73.94 | 41.00 | −32.94 | −0.306 |
 | **HMT-TSF** | **85.78** | **81.99** | **−3.79** | **0.859** |
 
-*Table 4.5.1. MCO robustness at lb14 for selected models. HMT-TSF included for reference.*
+*Table 4.5.1. MCO robustness at lb14 for all 16 baseline variants, ranked by Δ Combined% (least to most degradation). HMT-TSF included for reference.*
 
 The degradation spread among baselines runs from −5.88 (Informer) to −32.94 (STFGNN). Informer and BiLSTM are the most robust recurrent baselines; Song et al. (2024) attribute Informer's sparse attention to reduced sensitivity to distributional anomalies because only the most predictive query-key pairs are engaged across regime boundaries. Two models fail in a technically meaningful sense: CNN-LSTM sequential (R² = −0.050) and STFGNN (R² = −0.306) produce forecasts less accurate than predicting the training-set mean — despite CNN-LSTM ranking eighth under normal conditions. Topilin et al. (2025) note that sequential CNN-LSTM architectures can memorise local temporal patterns at the expense of adaptability, consistent with the −32.06 Combined% degradation observed here.
 

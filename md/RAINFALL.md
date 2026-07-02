@@ -1,37 +1,91 @@
-# Rainfall EDA Results
+# Rainfall: What the Data Shows
 
-> Last updated: 2026-05-22
+> Last updated: 2026-07-02
 
-Exploratory data analysis of Malaysian sub-national rainfall data from `mys_rainfall_subnat_2019_2026.csv` (OCHA HDX / FEWS NET source), processed by `rainfall.py` into a wide-format daily matrix of per-state rainfall in mm.
-
----
-
-## Distribution Analyses
-
-### extreme_events_by_state.png
-**What:** Count or magnitude of extreme rainfall events (above a threshold, e.g., 90th percentile daily mm) per Malaysian state, 2019–2025.
-**Analysis:** Northeast Monsoon states (Kelantan `MY03`, Terengganu `MY11`, Pahang `MY06`) show the highest frequency of extreme events, consistent with the November–February northeast monsoon season when these east-coast states receive the highest annual rainfall totals. West-coast states (Selangor `MY10`, Penang `MY07`) show a bimodal extreme-event pattern from both monsoon seasons. This spatial heterogeneity motivates retaining per-state rainfall columns (`rainfall_mm__MY{pcode}`) rather than a national average — ridership impacts in KL may differ markedly from Kota Bharu on the same day.
-
-### extreme_events_distribution.png
-**What:** Statistical distribution (histogram or density) of extreme daily rainfall values across all states and years.
-**Analysis:** The distribution is highly right-skewed with a long tail of extreme flood events. Malaysia's rainfall follows a log-normal-like distribution with monthly rainfall accumulations ranging from ~30 mm (dry spell) to >600 mm (monsoon flood peak). The `anomaly_rf` columns (retained in `rainfall_combined_final.csv` but excluded from `features_aligned.csv`) quantify deviations from climatological norms — available for future use if anomaly-based features are found to be more predictive than absolute mm values.
-
-### extreme_events_frequency.png
-**What:** Annual count of extreme rainfall days per state, 2019–2025.
-**Analysis:** No systematic upward trend in frequency is visible at the 6-year study scale, though inter-annual variability is high (La Niña years, e.g., 2021–2022, show notably higher extreme-event counts in east-coast states). The 2021–2022 period coincides with MCO recovery — disentangling rainfall suppression from MCO suppression is handled in the models by including both `is_mco` context and per-state rainfall features simultaneously.
-
-### extreme_events_seasonal.png (if present)
-**What:** Monthly distribution of extreme rainfall events aggregated across all states.
-**Analysis:** Shows the bimodal rainfall seasonality: Northeast Monsoon peak (November–January, east-coast states) and Southwest Monsoon / inter-monsoon peak (April–May, west-coast states). This seasonal pattern motivates the `month_sin` / `month_cos` cyclical features — the model can implicitly learn the interaction between monsoon season (month encoding) and per-state rainfall values.
+Weather affects travel, so daily rainfall for each Malaysian state (2019–2025) is
+part of the dataset. This page explains the rainfall patterns and why the data is
+kept at state level rather than a single national figure. Each section uses
+**Main idea**, **Evidence**, **Analysis**, and **Link**.
 
 ---
 
-## Time Series Analyses
+## Pattern 1 — Rainfall Is Strongly Seasonal
 
-### state_time_series.png (if present)
-**What:** Multi-panel time series of daily `rainfall_mm` for a representative sample of Malaysian states (e.g., MY01, MY07, MY10).
-**Analysis:** The panel confirms temporal coverage is contiguous after the linear interpolation applied in `rainfall.py` (interior gaps ≤ 7 days; edge gaps bfill/ffill). The null count before vs. after interpolation (logged by `rainfall.py`) should show zero remaining nulls in the final `rainfall_wide_daily.csv`. The 15 `rainfall_mm__MY{pcode}` columns in `features_aligned.csv` (MY01–MY17, excluding MY14/MY16) cover all states for which `final`-version observations are available.
+**Main idea.** Heavy rain concentrates in the Northeast Monsoon season, roughly
+November to January.
 
-### monsoon_seasonality.png (if present)
-**What:** Average monthly rainfall by state, visualising the northeast/southwest monsoon pattern.
-**Analysis:** The distinct seasonality confirms the value of per-state rainfall features over a single national average: during the Northeast Monsoon (Nov–Jan), Kelantan/Terengganu receive 5–10× more rainfall than Selangor/Penang, which would be masked by averaging. The models are expected to learn this spatial-temporal interaction when processing the 15 rainfall columns alongside the `month_sin`/`month_cos` temporal features.
+**Evidence.** Wet-day ratios and counts of extreme days (over 50 mm) peak in
+November–January. The overall distribution is heavily skewed, with monthly totals
+ranging from around 30 mm in dry spells to over 600 mm at monsoon peaks.
+
+**Analysis.** Because the heavy-rain season lines up with the calendar, the model can
+connect rainfall to the time of year through its month sine/cosine features. The
+seasonal signal is real and repeats, which makes it learnable.
+
+**Link.** This is why weather is modelled alongside calendar features rather than in
+isolation.
+
+---
+
+## Pattern 2 — The East Coast Is Much Wetter Than the West
+
+**Main idea.** East-coast states get far more extreme rainfall than west-coast states.
+
+**Evidence.** Kelantan, Terengganu, and Pahang record 8–12 extreme-rain days in the
+Q4–Q1 monsoon window, versus 2–4 for Selangor and Kuala Lumpur. West-coast states
+show a milder, two-season pattern.
+
+**Analysis.** A single national rainfall average would hide this east–west split. The
+same day can be a flood in Kota Bharu and dry in KL, and those two places have very
+different transit demand responses. Keeping all 15 state columns lets the model learn
+location-specific effects.
+
+**Link.** Retaining state-level detail matters because weather's impact on ridership
+varies by region and mode (Ngo & Bashar, 2024).
+
+---
+
+## Pattern 3 — Filling Small Gaps Without Overreaching
+
+**Main idea.** The raw rainfall series has occasional missing days that must be filled
+carefully.
+
+**Evidence.** Before cleaning, joining the rainfall data to a daily calendar leaves
+gaps. Interior gaps are filled by linear interpolation, but only up to seven days;
+gaps at the very start or end are filled from the nearest known value.
+
+**Analysis.** The seven-day cap is deliberate. A typical monsoon event lasts a few
+days, so seven days is long enough to bridge one event but short enough not to blur
+two separate events into one. Over-filling would invent weather that never happened.
+
+**Link.** This matches the event durations seen in the data and keeps the seasonal
+peaks intact.
+
+---
+
+## What Goes Into the Model
+
+The pipeline uses 15 daily state-level rainfall columns (`rainfall_mm__MY01` through
+`MY17`, excluding the two federal-territory codes merged into neighbouring states).
+Accumulation and anomaly columns are cleaned and stored but left out of the model
+input to keep the feature count manageable.
+
+---
+
+## A Note on the Rain–Ridership Relationship
+
+The link between rain and ridership is not one-directional. Light rain slightly
+discourages travel, but very heavy rain can *increase* transit use as people avoid
+driving in dangerous conditions. Keeping rainfall as a continuous value (rather than
+a simple wet/dry flag) lets the model represent both sides of this response
+(Chen et al., 2022; Jiang & Cai, 2023).
+
+---
+
+## References
+
+Chen, J., Zhou, Z., Li, S., & Shi, W. (2022). Spatiotemporal variations in Shanghai metro commuting flows during rainfall events. *Weather, Climate, and Society, 14*(3), 785–799. https://doi.org/10.1175/WCAS-D-21-0167.1
+
+Jiang, S., & Cai, C. (2023). The impacts of weather conditions on metro ridership: An empirical study from three mega cities in China. *Travel Behaviour and Society, 31*, 200–210. https://doi.org/10.1016/j.tbs.2022.12.003
+
+Ngo, N. S., & Bashar, B. (2024). The impacts of extreme weather events on U.S. public transit ridership. *Transportation Research Part D: Transport and Environment, 137*, 104504. https://doi.org/10.1016/j.trd.2024.104504

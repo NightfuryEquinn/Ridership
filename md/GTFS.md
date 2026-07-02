@@ -1,29 +1,81 @@
-# GTFS EDA Results
+# Transit Network (GTFS): What the Data Shows
 
-> Last updated: 2026-05-22
+> Last updated: 2026-07-02
 
-Exploratory data analysis of Malaysian public transit GTFS feeds for four operators: Rapid Rail KL, RapidBus KL, RapidBus Penang, and KTMB. The `gtfs.py` cleaning script was run once per operator and exported stop-node and stop-edge tables consumed downstream by `population.py`, `osm.py`, and `feature_align.py`.
+GTFS is the standard format transit operators use to publish their routes, stops, and
+schedules. This project uses feeds from four operators — Rapid Rail KL, RapidBus KL,
+RapidBus Penang, and KTMB — to describe the physical transit network. Each section
+uses **Main idea**, **Evidence**, **Analysis**, and **Link**.
 
 ---
 
-## Network Topology Visualisations
+## Pattern 1 — Rail Routes Are Long; Bus Routes Are Short
 
-### 01_route_length_coverage.png
-**What:** Distribution of route lengths (km) across all operators and route types.
-**Analysis:** Rail routes (KTMB, Rapid Rail KL) are much longer than bus routes (RapidBus KL/Penang). KTM inter-city routes reach 300–400+ km. Rapid Rail KL routes (LRT/MRT/Monorail) are 10–60 km. RapidBus routes cluster under 30 km, consistent with urban feeder network design. Route length is included in the GTFS static features via `gtfs_avg_segment_s` — shorter average segment travel times indicate denser stop spacing.
+**Main idea.** Route length varies enormously by mode.
 
-### 02_stop_density_clustering.png
-**What:** Spatial clustering of transit stops (from all four GTFS operators) across Malaysia.
-**Analysis:** Two dominant clusters emerge: the Klang Valley metro area (high density, all four operators present) and the Penang island/mainland corridor (RapidBus Penang + Penang ferry). KTMB stops form a linear spine along the Peninsular rail corridor from Johor Bahru to Padang Besar. Isolated stop clusters correspond to KTM Tebrau (JB area) and KTM Komuter Utara (Ipoh–Butterworth). The spatial distribution confirms the feature pipeline correctly captures transit network coverage predominantly in high-ridership urban areas.
+**Evidence.** KTM inter-city routes reach 300–400+ km, Rapid Rail KL lines run 10–60
+km, and most RapidBus routes are under 30 km. The short bus segments reflect dense,
+closely spaced stops typical of an urban feeder network.
 
-### 03_operator_comparison.png (if present)
-**What:** Side-by-side comparison of route counts, stop counts, and directed edge counts across all four operators.
-**Analysis:** Rapid Rail KL has the fewest routes but the most riders per route (high-capacity rail). RapidBus KL has the highest route and stop counts. KTMB has the most directed edges due to the length of inter-city routes. RapidBus Penang is the smallest operator. These per-operator statistics aggregate into the four scalar GTFS features broadcast to all dates in `features_aligned.csv`: `gtfs_n_stops`, `gtfs_n_routes`, `gtfs_n_directed_edges`, `gtfs_avg_segment_s`.
+**Analysis.** Average segment travel time is a useful summary: shorter segments mean
+stops are closer together and service is denser. This becomes one of the network
+statistics the model sees.
 
-### 04_service_schedule_coverage.png (if present)
-**What:** Heatmap of service coverage by day-of-week for each operator (from `calendar.txt`).
-**Analysis:** Rapid Rail KL and RapidBus KL provide 7-day service, with slightly different headways on weekends. KTMB inter-city/ETS services show 7-day operation. Some Komuter services have modified weekend schedules. This analysis confirms the `expected_service_ids` operator presets in `gtfs.py` are correctly specified and validates that the model's `is_weekend` feature aligns with actual service availability.
+**Link.** These route characteristics feed the network summary features described
+below.
 
-### 05_stop_connectivity.png (if present)
-**What:** Distribution of stop out-degree (number of unique next stops reachable in one trip) per operator.
-**Analysis:** Terminal stops have out-degree 1; transfer hubs have higher degrees. Rail terminal/transfer stations (e.g., KL Sentral, Masjid Jamek) show the highest connectivity. This confirms the graph artefact export in `gtfs.py` (`gtfs_stop_edges_{operator}.csv`) correctly encodes the network topology. The `gtfs_n_directed_edges` scalar in the flat feature matrix is the aggregate count of these edges.
+---
+
+## Pattern 2 — The Network Is Concentrated in Two Areas
+
+**Main idea.** Transit stops cluster heavily in the Klang Valley and, to a lesser
+extent, Penang.
+
+**Evidence.** Clustering the combined stops from all four operators produces two
+dominant groups: the Klang Valley metro area (all four operators present) and the
+Penang corridor. KTMB stops form a long line along the Peninsular rail spine from
+Johor Bahru to Padang Besar, with smaller clusters around Tebrau (JB) and the
+northern Komuter corridor.
+
+**Analysis.** This concentration confirms the transit network is effectively
+single-centred on Greater Kuala Lumpur. It also means the network features mostly
+describe conditions in that corridor — which is fine, because that corridor also
+generates most of the ridership.
+
+**Link.** The heavy skew is why the model uses a few national network totals rather
+than trying to split the network by region (Li et al., 2024).
+
+---
+
+## Pattern 3 — Operators Differ in Scale and Role
+
+**Main idea.** Each operator plays a different role in the network.
+
+**Evidence.** Rapid Rail KL has the fewest routes but the most riders per route
+(high-capacity rail). RapidBus KL has the most routes and stops. KTMB has the most
+connections because of its long inter-city lines. RapidBus Penang is the smallest.
+Major interchange stations (KL Sentral, Masjid Jamek) show the highest connectivity.
+
+**Analysis.** These per-operator differences are combined into four national totals so
+the model gets a single, stable picture of network scale rather than sparse
+per-operator detail that would be noisy for smaller networks (Wang et al., 2024).
+
+**Link.** The four network features are: total stops, total routes, total connections
+between consecutive stops, and average segment travel time.
+
+---
+
+## Data Quality
+
+The feeds were validated and cleaned per operator. Genuine problems — such as stop
+references that pointed nowhere, or trips with too few stops — were fixed. Cosmetic
+issues that do not affect the model (capitalisation of stop names, expired historical
+service dates, route colours) were left as-is. Full detail is in `DATA.md`.
+
+---
+
+## References
+
+Li, Y., Zhang, Q., & Wang, H. (2024). An efficient approach for identifying potential bus passenger demand based on multisource data. *Journal of Advanced Transportation, 2024*, 5368577. https://doi.org/10.1155/2024/5368577
+
+Wang, Z., Huang, K., Massobrio, R., Bombelli, A., & Cats, O. (2024). Quantification and comparison of hierarchy in public transport networks. *Physica A: Statistical Mechanics and Its Applications, 634*, 129479. https://doi.org/10.1016/j.physa.2023.129479
