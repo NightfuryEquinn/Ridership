@@ -1825,6 +1825,18 @@ def main():
     torch.save(model.state_dict(), f"{out_dir}/model.pt")
     np.save(f"{out_dir}/predictions.npy", y_pred)
 
+    if boost_applied and boost_corrector is not None:
+        joblib.dump(
+            {
+                "corrector":    boost_corrector,
+                "boost_scale":  0.5,
+                "n_features":   n_features,
+                "kept_indices": (_KEPT_FEAT_INDICES if not args.no_feat_reduce
+                                 else list(range(79))),
+            },
+            f"{out_dir}/boost_corrector.pkl",
+        )
+
     results = {
         "run_id":  run_id,
         "model":   "HMTTSFForecaster",
