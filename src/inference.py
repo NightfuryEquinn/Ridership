@@ -41,7 +41,7 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from src.models.hybrid.hmttsf import HMTTSFForecaster, _KEPT_FEAT_INDICES
+from src.models.hybrid.hmttsf import HMTTSFForecaster, _KEPT_FEAT_INDICES, apply_residual_boost
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION  ← change these constants to adjust defaults project-wide
@@ -526,10 +526,16 @@ def run_inference(
     y_pred = scaler_y.inverse_transform(y_np.reshape(-1, 1)).flatten()
 
     if boost_pack is not None:
-        corrector   = boost_pack["corrector"]
         boost_scale = boost_pack.get("boost_scale", 0.5)
         x_np = X.cpu().numpy()
-        correction = corrector(x_np)
+        if "kind" in boost_pack and "models" in boost_pack:
+            correction = apply_residual_boost(
+                boost_pack["kind"], boost_pack["models"], x_np
+            )
+        elif "corrector" in boost_pack:
+            correction = boost_pack["corrector"](x_np)
+        else:
+            raise KeyError("boost_corrector.pkl missing 'kind'/'models' or legacy 'corrector'")
         if correction.ndim == 1:
             correction = correction.reshape(1, -1)
         y_pred = y_pred + boost_scale * correction.flatten()

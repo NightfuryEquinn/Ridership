@@ -1,5 +1,7 @@
 # Chapter 4: Findings and Results
 
+> **Change log (2026-07-06):** Updated for `--no-x-future` ablation (20 runs: 10 full + 10 FR). **New §4.7.1** and Table 4.7.2; **revised §4.7** (post-Table 4.7.1), **§4.10** (conclusions 1–2). Headline with-`X_future` numbers in Tables 4.7.1 / 4.5.1 are unchanged.
+
 ---
 
 ## 4.1 Overview of Experimental Evaluation
@@ -180,11 +182,48 @@ HMT-TSF was evaluated across ten configurations (two MCO conditions × five look
 
 *Table 4.7.1. HMT-TSF (full, F=79) results across all ten configurations. Bold rows denote best nomco and mco configurations. The feature-reduced variant exceeds these values at every nomco lookback ≥14 (Section 4.9).*
 
-Performance peaks at lb14 under both MCO conditions (nomco 85.78%, mco 81.99%), declining at longer windows once `X_future` supplies explicit future calendar structure. At nomco_lb14, HMT-TSF leads every baseline on every headline metric — +6.65 Combined% over Informer (79.13%) and 28.2% lower MAE (49,897 versus 69,476); the best tuned baseline (Informer, 79.99%) remains 5.79 points below HMT-TSF and 6.60 below HMT-TSF-FR (86.59%, Section 4.9). One qualification applies: HMT-TSF alone receives the known-future calendar tensor (`X_future`), so the comparison reflects architecture-plus-conditioning versus architecture-only baselines. The gain stems from parallel multi-scale TCN, Pearson GCN message passing, RevIN, K=3 regime gating, and feature-group fusion — a combination no single-paradigm baseline implements.
+Performance peaks at lb14 under both MCO conditions (nomco 85.78%, mco 81.99%), declining at longer windows once `X_future` supplies explicit future calendar structure. At nomco_lb14, the full deployable system (with `X_future`) leads every baseline on every headline metric — +6.65 Combined% over Informer (79.13%) and 28.2% lower MAE (49,897 versus 69,476); the best tuned baseline (Informer, 79.99%) remains 5.79 points below HMT-TSF and 6.60 below HMT-TSF-FR (86.59%, Section 4.9). HMT-TSF alone receives the known-future calendar tensor (`X_future`); Section 4.7.1 quantifies how much of this margin is conditioning versus hybrid architecture. The gain with `X_future` enabled reflects parallel multi-scale TCN, Pearson GCN message passing, RevIN, K=3 regime gating, feature-group fusion, and future-calendar projection — a combination no single-paradigm baseline implements.
 
-HMT-TSF is also the most MCO-robust model at lb14 (Δ −3.79 versus Informer −5.88), retaining the highest absolute MCO accuracy (81.99%) despite weaker FR robustness under structural break (Section 4.9). It posts 19/20 `good_fit` verdicts (gap ratios 1.57×–2.64×); only nomco_lb84 is `overfit` (+36.9% validation drift).
+HMT-TSF with `X_future` is also the most MCO-robust model at lb14 (Δ −3.79 versus Informer −5.88), retaining the highest absolute MCO accuracy (81.99%) despite weaker FR robustness under structural break (Section 4.9). It posts 19/20 `good_fit` verdicts with `X_future` enabled (gap ratios 1.57×–2.64×); only nomco_lb84 is `overfit` (+36.9% validation drift). Without `X_future`, each variant records 9/10 good-fit verdicts, with nomco_lb56 overfit for both full and FR models (Section 4.7.1).
 
-Three sequential non-overlapping out-of-sample blocks test whether headline performance depends on a single favourable temporal partition. The main idea is that a model fit to one chronological split may exploit idiosyncratic seasonal segments; walk-forward evaluation exposes such dependence before deployment. The evidence shows that no block falls below 71.99 Combined% or 0.707 R² across all ten configurations; at nomco_lb14, block Combined% is 90.62, 82.14, and 85.12, with Block 2 weakest under nomco and Block 1 (lockdown-adjacent) weakest under mco. The analysis further shows that mco_lb84 is the most temporally stable configuration (block spread 3.7 Combined%) while nomco_lb14 spreads 8.5 points, linking peak-accuracy deployment to nomco_lb14 or HMT-TSF-FR and cross-period consistency to longer MCO-trained windows at the accuracy cost in Table 4.7.1.
+Three sequential non-overlapping out-of-sample blocks test whether headline performance depends on a single favourable temporal partition. The main idea is that a model fit to one chronological split may exploit idiosyncratic seasonal segments; walk-forward evaluation exposes such dependence before deployment. The evidence shows that no block falls below 71.99 Combined% or 0.707 R² across all ten with-`X_future` configurations; at nomco_lb14, block Combined% is 90.62, 82.14, and 85.12, with Block 2 weakest under nomco and Block 1 (lockdown-adjacent) weakest under mco. The analysis further shows that mco_lb84 is the most temporally stable configuration (block spread 3.7 Combined%) while nomco_lb14 spreads 8.5 points, linking peak-accuracy deployment to nomco_lb14 or HMT-TSF-FR and cross-period consistency to longer MCO-trained windows at the accuracy cost in Table 4.7.1.
+
+---
+
+### 4.7.1 Known-Future Calendar Ablation (`--no-x-future`)
+
+To isolate the contribution of known-future calendar conditioning, all ten HMT-TSF configurations were retrained with `--no-x-future` (July 2026 runs; `use_x_future=false` in `results.json`). Baselines were not given equivalent `X_future` inputs, so this ablation measures HMT-TSF with and without its future-calendar projection module under an otherwise identical protocol.
+
+Table 4.7.2 compares headline configurations. With `X_future` disabled, Combined% at nomco_lb14 falls by 4.89 points (full) and 5.36 points (FR), and MAE rises from 49,897 to 62,836 (full) and from 46,323 to 62,547 (FR). Mean Δ Combined% across all ten configurations is +4.17 (full) and +3.68 (FR), confirming that `X_future` contributes roughly half to three-quarters of the headline lead over Informer — largest at lb14 under nomco (+4.89 / +5.36) and still material under MCO (e.g. mco_lb14 Δ +6.50 / +4.73).
+
+| Variant | `X_future` | nomco_lb14 Combined% | nomco_lb14 R² | nomco_lb14 MAE | Δ vs Informer (79.13%) | mco_lb14 Combined% | MCO Δ (nomco→mco) |
+| ------- | ---------- | -------------------- | ------------- | -------------- | ---------------------- | ------------------ | ----------------- |
+| HMT-TSF (full) | On | **85.78** | **0.897** | **49,897** | **+6.65** | **81.99** | **−3.79** |
+| HMT-TSF (full) | Off | 80.89 | 0.790 | 62,836 | +1.76 | 75.49 | −5.40 |
+| HMT-TSF-FR | On | **86.59** | **0.906** | **46,323** | **+7.46** | 78.74 | −7.85 |
+| HMT-TSF-FR | Off | 81.23 | 0.802 | 62,547 | +2.10 | 74.01 | −7.22 |
+| Informer (baseline) | — | 79.13 | 0.772 | 69,476 | — | 73.25 | −5.88 |
+
+*Table 4.7.2. `X_future` ablation at lb14. MCO Δ = Combined% change from nomco_lb14 to mco_lb14 for the same variant and `X_future` setting.*
+
+Three implications follow. **First**, without `X_future`, HMT-TSF still leads Informer at nomco_lb14 (+1.76 Combined% full, +2.10 FR) and cuts MAE by approximately 10% (versus 28–33% with `X_future`) — a modest but positive architecture-only margin within the 1.5 Combined% baseline saturation band (Section 4.2). **Second**, `X_future` is not merely a deployment convenience: disabling it worsens MCO lb14 degradation for the full model (−5.40 versus −3.79 with `X_future`), indicating that future-known holiday and weekend structure also aids structural-break transfer. **Third**, lb14 remains the optimum under both conditions, but nomco_lb56 becomes `overfit` for both full and FR ablation runs (replacing nomco_lb84 as the sole overfit case for the full model when `X_future` is on), linking calendar conditioning to generalisation at intermediate look-backs.
+
+Table 4.7.3 reports the complete without-`X_future` grid for the full model; HMT-TSF-FR follows the same pattern (headline nomco_lb14 81.23%, mco_lb14 74.01%).
+
+| Configuration | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | Fit verdict |
+| ------------- | --------- | ----- | ---- | ----- | -- | --- | ----------- |
+| nomco_lb7 | 78.47 | 6.03 | 5.52 | 7.98 | 0.759 | 73,940 | good_fit |
+| **nomco_lb14** | **80.89** | **5.72** | **5.00** | **8.39** | **0.790** | **62,836** | good_fit |
+| nomco_lb28 | 80.87 | 5.73 | 5.03 | 8.37 | 0.794 | 63,216 | good_fit |
+| nomco_lb56 | 79.46 | 6.12 | 5.62 | 8.80 | 0.781 | 70,395 | overfit |
+| nomco_lb84 | 76.32 | 6.99 | 6.59 | 9.29 | 0.715 | 79,639 | good_fit |
+| mco_lb7 | 74.60 | 7.41 | 6.79 | 9.20 | 0.697 | 86,066 | good_fit |
+| mco_lb14 | 75.49 | 7.18 | 6.59 | 9.73 | 0.716 | 83,592 | good_fit |
+| mco_lb28 | 74.84 | 7.32 | 6.74 | 9.10 | 0.704 | 86,528 | good_fit |
+| mco_lb56 | 76.02 | 7.01 | 6.44 | 9.53 | 0.723 | 80,440 | good_fit |
+| mco_lb84 | 74.82 | 7.12 | 6.58 | 9.50 | 0.705 | 85,938 | good_fit |
+
+*Table 4.7.3. HMT-TSF (full, F=79) without `X_future` across all ten configurations. Aggregate source: `src/outputs/aggregate_hmttsf_no_x_future.csv` (July 2026 runs).*
 
 ---
 
@@ -212,9 +251,9 @@ The trade-off emerges under structural break: HMT-TSF-FR loses to the full model
 
 Five thematic conclusions emerge from the empirical evaluation.
 
-**First, HMT-TSF outperforms all 16 baselines.** At nomco_lb14, Combined% reaches 85.78 (86.59 for FR), leading Informer (79.13%) by 6.65 points and reducing MAE by 28.2% (33.3% for FR). The gain reflects multi-scale TCN encoding, GCN message passing, RevIN, regime gating, and known-future calendar conditioning (`X_future`) — an input advantage unique to HMT-TSF.
+**First, the full HMT-TSF system (with `X_future`) outperforms all 16 baselines; without `X_future`, the architecture-only margin is modest.** At nomco_lb14 with `X_future`, Combined% reaches 85.78 (86.59 for FR), leading Informer (79.13%) by 6.65 points and reducing MAE by 28.2% (33.3% for FR). Ablating `X_future` (Section 4.7.1) lowers Combined% to 80.89 (81.23 FR) — still +1.76 / +2.10 above Informer but within the saturated baseline band — while `X_future` accounts for mean +4.17 / +3.68 Combined% across ten configurations. The deployable advantage combines hybrid architecture with legitimate future-calendar conditioning available at inference.
 
-**Second, HMT-TSF is the most MCO-robust and most generalisable model.** MCO degradation at lb14 is Δ −3.79; retained MCO accuracy (81.99%) leads the field by 6.2 Combined%; and the 19/20 good-fit record is unmatched.
+**Second, HMT-TSF with `X_future` is the most MCO-robust and most generalisable configuration.** MCO degradation at lb14 is Δ −3.79 (versus −5.40 without `X_future` for the full model); retained MCO accuracy (81.99%) leads the field; and the 19/20 good-fit record with `X_future` (9/10 per variant without) is unmatched among compared models.
 
 **Third, LSTM-family models dominate the top eight yet overfit systematically.** BiLSTM and TPA-LSTM achieve the highest baseline R² (0.776) but zero good-fit verdicts across all 12 configurations. Informer is the sole baseline with a clean base fit record and the most deployable alternative.
 

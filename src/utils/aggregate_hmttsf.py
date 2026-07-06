@@ -1,5 +1,5 @@
 """
-aggregate_hmttsf.py — Collect all HMT-TSF run results into a summary table.
+aggregate_hmttsf.py — Collect all HMT-TSF run results into summary tables.
 
 Scans src/outputs/hmttsf/ and src/outputs/hmttsf_feat_reduced/ for results.json
 files and aggregates across two model variants:
@@ -13,6 +13,11 @@ Each variant covers the same MCO × lookback configurations:
            | "exclude" (train start >= 2022-01-01)
   Lookback : 7 | 14 | 28 | 56 | 84 days  (from hparams.T_in or split_dates.T_in)
 
+Runs are partitioned by known-future calendar conditioning:
+
+  use_x_future=True  : default headline runs (legacy results.json omit the field)
+  use_x_future=False : --no-x-future ablation runs
+
 6 primary configurations (matching the base-model comparison dimensions):
   No MCO  × [lb14, lb28, lb56]
   With MCO × [lb14, lb28, lb56]
@@ -21,7 +26,7 @@ Each variant covers the same MCO × lookback configurations:
   No MCO  × [lb7, lb84]
   With MCO × [lb7, lb84]
 
-Total: 2 variants × 10 configs = 20 cells per metric.
+Total: 2 variants × 10 configs = 20 cells per metric per X_future slice.
 
 Output sections
 ---------------
@@ -32,12 +37,18 @@ Output sections
   5. Detailed Fit Diagnosis pivot tables
   6. Verdict Summary      — counts with % bar charts
   7. Flagged Notes        — severity-sorted annotations
+  8. X_future ablation delta (when --x-future both)
 
-  CSV: src/outputs/aggregate_hmttsf.csv  (wide-format, one row per variant)
+  CSV (default --x-future both):
+    src/outputs/aggregate_hmttsf.csv             (use_x_future=True)
+    src/outputs/aggregate_hmttsf_no_x_future.csv (use_x_future=False)
 
 Usage
 -----
   python src/utils/aggregate_hmttsf.py
+  python src/utils/aggregate_hmttsf.py --x-future with
+  python src/utils/aggregate_hmttsf.py --x-future without
+  python src/utils/aggregate_hmttsf.py --x-future both
   python src/utils/aggregate_hmttsf.py --outputs-root src/outputs
   python src/utils/aggregate_hmttsf.py --csv-out my_hmttsf.csv --no-table
   python src/utils/aggregate_hmttsf.py --no-color     # plain ASCII output
@@ -231,6 +242,14 @@ def _get_lookback(data):
     return int(lb) if lb is not None else None
 
 
+def _get_use_x_future(data):
+    """True when known-future calendar conditioning was enabled (legacy default)."""
+    hparams = data.get("hparams") or {}
+    if "use_x_future" not in hparams:
+        return True
+    return bool(hparams["use_x_future"])
+
+
 def _get_overall(data):
     return (data.get("test_metrics") or {}).get("overall") or {}
 
@@ -309,6 +328,7 @@ def scan_hmttsf_results(outputs_root):
                 "variant":           variant_label,
                 "mco":               mco,
                 "lookback":          lb,
+                "use_x_future":      _get_use_x_future(data),
                 "run_id":            run_id,
                 "timestamp":         ts,
                 "metrics":           overall,
@@ -332,15 +352,17 @@ def scan_hmttsf_results(outputs_root):
 
 # ── Selection: newest run per (variant, mco, lookback) ────────────────────────
 
-def select_runs(records):
+def select_runs(records, use_x_future=None):
     """
     Group records by (variant, mco, lookback) and keep the newest run in each
-    group.
+    group.  When use_x_future is True/False, restrict to that conditioning slice.
 
     Returns a dict keyed by (variant, mco, lookback) → row dict.
     """
     groups = defaultdict(list)
     for r in records:
+        if use_x_future is not None and r["use_x_future"] != use_x_future:
+            continue
         key = (r["variant"], r["mco"], r["lookback"])
         groups[key].append(r)
 
@@ -391,14 +413,82 @@ def select_runs(records):
             "fit_diagnosis":   newest["fit_diagnosis"],
             "notes":           newest["notes"],
             "run_id":          newest["run_id"],
+            "use_x_future":    newest["use_x_future"],
             "path":            newest["path"],
         }
     return selected
 
 
+# ── X_future ablation delta ───────────────────────────────────────────────────
+
+def print_x_future_ablation_table(pivot_with, pivot_without):
+    """Print Combined% / R² deltas (with − without) for paired configurations."""
+    pairs = []
+    for key in sorted(set(pivot_with) | set(pivot_without)):
+        row_w = pivot_with.get(key)
+        row_n = pivot_without.get(key)
+        if row_w is None or row_n is None:
+            continue
+        c_w, c_n = row_w.get("Combined%"), row_n.get("Combined%")
+        r_w, r_n = row_w.get("R²"), row_n.get("R²")
+        if c_w is None or c_n is None:
+            continue
+        pairs.append({
+            "variant": key[0],
+            "mco":     key[1],
+            "lookback": key[2],
+            "with_c":  c_w,
+            "without_c": c_n,
+            "delta_c": round(c_w - c_n, 4),
+            "with_r2": r_w,
+            "without_r2": r_n,
+            "delta_r2": round(r_w - r_n, 4) if (r_w is not None and r_n is not None) else None,
+            "run_with": row_w.get("run_id"),
+            "run_without": row_n.get("run_id"),
+        })
+
+    if not pairs:
+        print("[INFO] No paired with/without X_future configurations for ablation table.")
+        return
+
+    total_w = 96
+    eq = _c("═" * total_w, _C.CYAN)
+    print(f"\n{eq}")
+    print(_c("  X_future Ablation  (with − without)", _C.CYAN, _C.BOLD))
+    print(eq)
+    hdr = (
+        f"  {'Variant':<12} {'MCO':<8} {'lb':>2}  "
+        f"{'With%':>7} {'NoFut%':>7} {'ΔComb':>7}  "
+        f"{'With R²':>8} {'NoFut R²':>8} {'ΔR²':>7}"
+    )
+    print(_c(hdr, _C.BOLD))
+    print(f"  {'─' * (total_w - 2)}")
+
+    for p in pairs:
+        mco_tag = "nomco" if p["mco"] == "exclude" else "mco"
+        delta_c = p["delta_c"]
+        delta_r = p["delta_r2"]
+        dc_str = f"{delta_c:+.2f}"
+        dr_str = f"{delta_r:+.4f}" if delta_r is not None else "—"
+        if _color_on() and delta_c > 0:
+            dc_str = _c(dc_str, _C.GREEN)
+        line = (
+            f"  {p['variant']:<12} {mco_tag:<8} {p['lookback']:>2}  "
+            f"{p['with_c']:7.2f} {p['without_c']:7.2f} {dc_str:>7}  "
+            f"{p['with_r2']:8.4f} {p['without_r2']:8.4f} {dr_str:>7}"
+        )
+        print(line)
+
+    avg_delta = sum(p["delta_c"] for p in pairs) / len(pairs)
+    print(f"  {'─' * (total_w - 2)}")
+    print(f"  Mean Δ Combined% (with − without): {avg_delta:+.2f}  "
+          f"({len(pairs)} paired configs)")
+    print(eq)
+
+
 # ── Console pivot table ────────────────────────────────────────────────────────
 
-def print_results_table(pivot):
+def print_results_table(pivot, title_suffix=""):
     """
     Print one pivot table per metric.
 
@@ -455,7 +545,8 @@ def print_results_table(pivot):
 
     for metric, _ in _PIVOT_METRICS:
         print(f"\n{eq}")
-        print(f"  {metric}  ·  HMT-TSF Variants  ×  [No MCO / With MCO  ·  Lookback]")
+        suffix = f"  ·  {title_suffix}" if title_suffix else ""
+        print(f"  {metric}  ·  HMT-TSF Variants  ×  [No MCO / With MCO  ·  Lookback]{suffix}")
         print(eq)
         print(_sub_hdr())
         print(_col_hdr())
@@ -488,7 +579,7 @@ def print_results_table(pivot):
 
 # ── Walk-forward stability section ────────────────────────────────────────────
 
-def print_walk_forward_table(pivot):
+def print_walk_forward_table(pivot, title_suffix=""):
     """
     Print a walk-forward temporal stability table for every configuration
     that has walk_forward data.
@@ -508,7 +599,8 @@ def print_walk_forward_table(pivot):
     lbl_w  = 30   # "HMT-TSF-FR  MCO=exclude / lb=14 [pri]"
 
     print(f"\n{'═' * 80}")
-    print("  Walk-Forward Temporal Stability  (3 equal test blocks, newest last)")
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    print(f"  Walk-Forward Temporal Stability  (3 equal test blocks, newest last){suffix}")
     print(f"{'═' * 80}")
 
     for metric_label, metric_key in [("Combined%", "Combined"), ("R²", "R2")]:
@@ -533,7 +625,7 @@ def print_walk_forward_table(pivot):
     print("  Note: temporal stability improves if block 3 Combined% ≥ block 1 Combined%")
 
 
-def print_model_vs_naive_table(pivot):
+def print_model_vs_naive_table(pivot, title_suffix=""):
     """
     Print a table showing model performance vs naive persistence baseline.
 
@@ -557,7 +649,8 @@ def print_model_vs_naive_table(pivot):
     label_w  = 12   # fits "HMT-TSF-FR"
 
     print(f"\n{'═' * 80}")
-    print("  Model vs Naive Persistence Baseline  (delta: model - naive)")
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    print(f"  Model vs Naive Persistence Baseline  (delta: model - naive){suffix}")
     print(f"{'═' * 80}")
     print("  ↑ = improvement over naive, ↓ = degradation vs naive, = = no change")
 
@@ -679,7 +772,7 @@ def _pivot_diag_cell(field, diag, colorize=True):
 
 # ── 1. Quick Fit Overview ─────────────────────────────────────────────────────
 
-def print_fit_overview(pivot):
+def print_fit_overview(pivot, title_suffix=""):
     """
     Compact coloured verdict matrix — one row per variant, one cell per
     (MCO, lookback) configuration.
@@ -712,7 +805,9 @@ def print_fit_overview(pivot):
     sep = "─" * total_w
 
     print(f"\n{eq}")
-    print(_c("  Quick Fit Overview  —  HMT-TSF Variants × [MCO × Lookback]", _C.CYAN, _C.BOLD))
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    print(_c(f"  Quick Fit Overview  —  HMT-TSF Variants × [MCO × Lookback]{suffix}",
+             _C.CYAN, _C.BOLD))
     print(eq)
 
     mco_hdrs = gap.join(_MCO_LABELS[m].center(mco_grp_w) for m in _MCO_VALS)
@@ -759,7 +854,7 @@ def print_fit_overview(pivot):
 
 # ── 2. Detailed Fit Diagnosis Pivot Tables ────────────────────────────────────
 
-def print_fit_pivot_tables(pivot):
+def print_fit_pivot_tables(pivot, title_suffix=""):
     has_diag = any(
         pivot[(variant, mco, lb)]["fit_diagnosis"].get("verdict") is not None
         for (variant, mco, lb) in pivot
@@ -794,7 +889,9 @@ def print_fit_pivot_tables(pivot):
 
     for field, label, _ in _PIVOT_FIELDS:
         print(f"\n{eq}")
-        print(_c(f"  {label}  ·  HMT-TSF Variants × [MCO  ·  Lookback]", _C.CYAN, _C.BOLD))
+        suffix = f"  ·  {title_suffix}" if title_suffix else ""
+        print(_c(f"  {label}  ·  HMT-TSF Variants × [MCO  ·  Lookback]{suffix}",
+                   _C.CYAN, _C.BOLD))
         print(eq)
         print(_sub_hdr())
         print(_col_hdr())
@@ -817,7 +914,7 @@ def print_fit_pivot_tables(pivot):
 
 # ── 3. Verdict Summary with bar charts ────────────────────────────────────────
 
-def print_verdict_summary(pivot):
+def print_verdict_summary(pivot, title_suffix=""):
     diag_rows = [
         {"variant": variant, "mco": mco, "lookback": lb, "fit_diagnosis": row["fit_diagnosis"]}
         for (variant, mco, lb), row in pivot.items()
@@ -842,7 +939,9 @@ def print_verdict_summary(pivot):
     eq = _c("═" * total_w, _C.CYAN)
 
     print(f"\n{eq}")
-    print(_c(f"  Verdict Summary  ({len(diag_rows)} configuration(s) total)", _C.CYAN, _C.BOLD))
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    print(_c(f"  Verdict Summary  ({len(diag_rows)} configuration(s) total){suffix}",
+             _C.CYAN, _C.BOLD))
     print(eq)
 
     sev_sort = lambda x: (-_VERDICT_SEVERITY.get(x[0], 1), x[0])
@@ -886,7 +985,7 @@ def print_verdict_summary(pivot):
 
 # ── 4. Flagged Notes ──────────────────────────────────────────────────────────
 
-def print_flagged_notes(pivot):
+def print_flagged_notes(pivot, title_suffix=""):
     """
     Notes for non-clean configurations, severity-sorted (overfit/underfit first).
     """
@@ -903,7 +1002,9 @@ def print_flagged_notes(pivot):
     eq = _c("═" * total_w, _C.CYAN)
 
     print(f"\n{eq}")
-    print(_c("  Fit Diagnosis Notes  (severity-sorted, then by variant · MCO · lookback)", _C.CYAN, _C.BOLD))
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    print(_c(f"  Fit Diagnosis Notes  (severity-sorted, then by variant · MCO · lookback){suffix}",
+             _C.CYAN, _C.BOLD))
     print(eq)
 
     flagged_sorted = sorted(
@@ -1038,21 +1139,58 @@ def save_comparison_csv(pivot, csv_path):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _print_report_bundle(pivot, title_suffix, args):
+    """Print all console sections for one X_future slice."""
+    if not pivot:
+        print(f"[INFO] No results for: {title_suffix}")
+        return
+
+    variants = _ordered_variants(pivot)
+    print(f"\n{'#' * 80}")
+    print(f"  {title_suffix}")
+    print(f"  {len(pivot)} configs across {len(variants)} variant(s): {', '.join(variants)}")
+    print(f"{'#' * 80}")
+
+    print_fit_overview(pivot, title_suffix=title_suffix)
+
+    if args.overview_only:
+        return
+
+    if not args.no_table:
+        print_results_table(pivot, title_suffix=title_suffix)
+
+    if not args.no_wf:
+        print_walk_forward_table(pivot, title_suffix=title_suffix)
+
+    if not args.no_table:
+        print_model_vs_naive_table(pivot, title_suffix=title_suffix)
+
+    if not args.no_table:
+        print_fit_pivot_tables(pivot, title_suffix=title_suffix)
+
+    print_verdict_summary(pivot, title_suffix=title_suffix)
+
+    if not args.no_notes:
+        print_flagged_notes(pivot, title_suffix=title_suffix)
+
+
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Aggregate HMT-TSF results into a summary table"
+        description="Aggregate HMT-TSF results into summary table(s)"
     )
     p.add_argument("--outputs-root", default="src/outputs",
                    help="Root directory containing output folders (default: src/outputs)")
+    p.add_argument("--x-future", choices=["with", "without", "both"], default="both",
+                   help="Which X_future slice to aggregate (default: both)")
     p.add_argument("--csv-out", default=None,
-                   help="CSV output path (default: <outputs-root>/aggregate_hmttsf.csv)")
+                   help="CSV path for --x-future with/without (default: auto by slice)")
     p.add_argument("--no-table",      action="store_true", help="Skip the console metric table")
     p.add_argument("--no-wf",         action="store_true", help="Skip the walk-forward section")
     p.add_argument("--no-csv",        action="store_true", help="Skip saving the CSV")
     p.add_argument("--no-color",      action="store_true", help="Disable ANSI colour output")
     p.add_argument("--no-notes",      action="store_true", help="Skip flagged-notes section")
     p.add_argument("--overview-only", action="store_true",
-                   help="Print only the Quick Fit Overview matrix, then exit")
+                   help="Print only the Quick Fit Overview matrix(es), then exit")
     return p.parse_args()
 
 
@@ -1067,7 +1205,6 @@ def main():
 
     args = parse_args()
     outputs_root = args.outputs_root
-    csv_out = args.csv_out or os.path.join(outputs_root, "aggregate_hmttsf.csv")
 
     if args.no_color:
         _USE_COLOR = False
@@ -1077,42 +1214,36 @@ def main():
         print(f"[INFO] Scanning [{label}]: {scan_path}")
 
     records = scan_hmttsf_results(outputs_root)
-    print(f"[INFO] Found {len(records)} HMT-TSF result file(s) across all variants.")
+    n_with    = sum(1 for r in records if r["use_x_future"])
+    n_without = sum(1 for r in records if not r["use_x_future"])
+    print(f"[INFO] Found {len(records)} result file(s): "
+          f"{n_with} with X_future, {n_without} without X_future.")
 
     if not records:
         print("[INFO] Nothing to aggregate — no results.json files found.")
         return
 
-    pivot = select_runs(records)
-    variants = _ordered_variants(pivot)
-    print(f"[INFO] Selected {len(pivot)} unique (variant × MCO × lookback) configuration(s) "
-          f"across {len(variants)} variant(s): {', '.join(variants)}")
+    mode = args.x_future
+    slices = []
+    if mode in ("with", "both"):
+        csv_w = (args.csv_out if mode == "with" and args.csv_out
+                 else os.path.join(outputs_root, "aggregate_hmttsf.csv"))
+        slices.append((True,  "use_x_future=True (headline)", csv_w))
+    if mode in ("without", "both"):
+        csv_n = (args.csv_out if mode == "without" and args.csv_out
+                 else os.path.join(outputs_root, "aggregate_hmttsf_no_x_future.csv"))
+        slices.append((False, "use_x_future=False (--no-x-future ablation)", csv_n))
 
-    # Always show fit overview
-    print_fit_overview(pivot)
+    pivots = {}
+    for use_xf, label, csv_path in slices:
+        pivot = select_runs(records, use_x_future=use_xf)
+        pivots[use_xf] = pivot
+        _print_report_bundle(pivot, label, args)
+        if not args.no_csv and not args.overview_only:
+            save_comparison_csv(pivot, csv_path)
 
-    if args.overview_only:
-        return
-
-    if not args.no_table:
-        print_results_table(pivot)
-
-    if not args.no_wf:
-        print_walk_forward_table(pivot)
-
-    if not args.no_table:
-        print_model_vs_naive_table(pivot)
-
-    if not args.no_table:
-        print_fit_pivot_tables(pivot)
-
-    print_verdict_summary(pivot)
-
-    if not args.no_notes:
-        print_flagged_notes(pivot)
-
-    if not args.no_csv:
-        save_comparison_csv(pivot, csv_out)
+    if args.x_future == "both" and not args.overview_only:
+        print_x_future_ablation_table(pivots.get(True, {}), pivots.get(False, {}))
 
 
 if __name__ == "__main__":

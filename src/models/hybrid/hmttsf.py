@@ -1220,13 +1220,37 @@ def walk_forward_evaluate(y_true: np.ndarray,
 # 13. Residual Boosting Stage (CatBoost or neural fallback)
 # ══════════════════════════════════════════════════════════════════════════════
 
+class ResidualBoostCorrector:
+    """In-memory wrapper; joblib saves kind + models only (see pack_residual_booster)."""
+
+    def __init__(self, kind: str, models):
+        self.kind = kind
+        self.models = models
+
+    def __call__(self, X_np: np.ndarray) -> np.ndarray:
+        return apply_residual_boost(self.kind, self.models, X_np)
+
+
+def apply_residual_boost(kind: str, models, X_np: np.ndarray) -> np.ndarray:
+    """Apply a fitted CatBoost-per-step or MLP residual booster."""
+    Xf = X_np.reshape(len(X_np), -1)
+    if kind == "catboost":
+        return np.stack([m.predict(Xf) for m in models], axis=1)
+    return models.predict(Xf)
+
+
+def pack_residual_booster(corrector: ResidualBoostCorrector) -> dict:
+    """Picklable dict for boost_corrector.pkl (no nested callables)."""
+    return {"kind": corrector.kind, "models": corrector.models}
+
+
 def fit_residual_booster(X_train_np: np.ndarray,
                           y_residual: np.ndarray,
                           use_catboost: bool = True,
-                          seed: int = 42):
+                          seed: int = 42) -> ResidualBoostCorrector:
     """
     Train a residual corrector on (X_flat, residual).
-    Returns a callable: corrector(X_np) → residual_pred (N, T_out).
+    Returns a picklable callable: corrector(X_np) → residual_pred (N, T_out).
     """
     N, T, F = X_train_np.shape
     X_flat  = X_train_np.reshape(N, T * F)
@@ -1242,30 +1266,19 @@ def fit_residual_booster(X_train_np: np.ndarray,
             cb.fit(X_flat, y_residual[:, t])
             models.append(cb)
         print(f"  [Boost] CatBoost residual learner fitted ({T_out} targets)")
+        return ResidualBoostCorrector("catboost", models)
 
-        def corrector(X_np):
-            Xf = X_np.reshape(len(X_np), -1)
-            return np.stack([m.predict(Xf) for m in models], axis=1)
-
-        return corrector
-
-    else:
-        # Lightweight sklearn-style MLP fallback
-        from sklearn.neural_network import MLPRegressor
-        mlp = MLPRegressor(
-            hidden_layer_sizes=(128, 64), activation="relu",
-            max_iter=300, random_state=seed, early_stopping=True,
-            validation_fraction=0.1, n_iter_no_change=15,
-        )
-        N_out = y_residual.shape[1]
-        mlp.fit(X_flat, y_residual)
-        tag = "MLP" if not (use_catboost and CATBOOST_AVAILABLE) else "CatBoost"
-        print(f"  [Boost] {tag} residual learner fitted")
-
-        def corrector(X_np):
-            return mlp.predict(X_np.reshape(len(X_np), -1))
-
-        return corrector
+    # Lightweight sklearn-style MLP fallback
+    from sklearn.neural_network import MLPRegressor
+    mlp = MLPRegressor(
+        hidden_layer_sizes=(128, 64), activation="relu",
+        max_iter=300, random_state=seed, early_stopping=True,
+        validation_fraction=0.1, n_iter_no_change=15,
+    )
+    mlp.fit(X_flat, y_residual)
+    tag = "MLP" if not (use_catboost and CATBOOST_AVAILABLE) else "CatBoost"
+    print(f"  [Boost] {tag} residual learner fitted")
+    return ResidualBoostCorrector("mlp", mlp)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1412,6 +1425,9 @@ def parse_args():
     p.add_argument("--no-feat-reduce", action="store_true",
                    help="Disable SHAP-derived feature reduction; train on all 79 features. "
                         "Output goes to src/outputs/hmttsf/ (default: hmttsf_feat_reduced/)")
+    p.add_argument("--no-x-future", action="store_true",
+                   help="Disable known-future calendar conditioning (X_future ablation); "
+                        "FutureTemporalProjection stays a no-op even if X_future_*.npy exist")
 
     # Training
     p.add_argument("--batch-size",    type=int,   default=32)
@@ -1517,6 +1533,11 @@ def main():
 
     # ── data ──────────────────────────────────────────────────────────────────
     (X_tr, y_tr, Xf_tr), (X_va, y_va, Xf_va), (X_te, y_te, Xf_te) = load_splits(args.seq_dir, device)
+    if args.no_x_future:
+        if Xf_tr is not None:
+            print("  X_future: disabled via --no-x-future")
+        Xf_tr = Xf_va = Xf_te = None
+
     T_in        = X_tr.shape[1]
     n_features  = X_tr.shape[2]
     T_out       = y_tr.shape[1]
@@ -1616,7 +1637,13 @@ def main():
     print(f"  Attn heads  : {args.n_attn_heads}")
     print(f"  RevIN       : {'on' if not args.no_revin else 'off'}")
     print(f"  DropPath    : {args.drop_path}")
-    print(f"  Temporal    : {'on (' + str(n_temporal_feats) + ' future features)' if has_future else 'off — rebuild sequences to enable'}")
+    if has_future:
+        _temporal_status = f"on ({n_temporal_feats} future features)"
+    elif args.no_x_future:
+        _temporal_status = "off (--no-x-future)"
+    else:
+        _temporal_status = "off — rebuild sequences to enable"
+    print(f"  Temporal    : {_temporal_status}")
     print(f"  In          : (batch, {T_in}, {n_features})")
     print(f"  Out         : (batch, {T_out})")
     print(f"  Params      : {n_params:,}")
@@ -1828,7 +1855,7 @@ def main():
     if boost_applied and boost_corrector is not None:
         joblib.dump(
             {
-                "corrector":    boost_corrector,
+                **pack_residual_booster(boost_corrector),
                 "boost_scale":  0.5,
                 "n_features":   n_features,
                 "kept_indices": (_KEPT_FEAT_INDICES if not args.no_feat_reduce
@@ -1849,6 +1876,7 @@ def main():
             "n_attn_heads": args.n_attn_heads,
             "adj_threshold":args.adj_threshold,
             "use_revin":    not args.no_revin,
+            "use_x_future": has_future,
             "dropout":      args.dropout,
             "drop_path":    args.drop_path,
             "T_in":         T_in,

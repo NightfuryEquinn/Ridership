@@ -8,6 +8,10 @@ aggregates fit_diagnosis, categorised by MCO × lookback window:
            | "exclude" (train start >= 2022-01-01)
   Lookback : any T_in value found in hparams / split_dates
 
+HMT-TSF runs (hmttsf/, hmttsf_feat_reduced/) are partitioned by
+known-future calendar conditioning (hparams.use_x_future; legacy default True).
+All other models are unaffected by --x-future.
+
 Output sections
 ---------------
   1. Quick Fit Overview  — compact coloured verdict matrix (all models at a glance)
@@ -15,11 +19,16 @@ Output sections
   3. Verdict Summary      — counts with % bar charts, broken down by MCO and lookback
   4. Flagged Notes        — severity-sorted annotations for non-clean runs
 
-  CSV: src/outputs/aggregate_diagnosis.csv
+  CSV (default --x-future both):
+    src/outputs/aggregate_diagnosis.csv             (HMT-TSF use_x_future=True)
+    src/outputs/aggregate_diagnosis_no_x_future.csv (HMT-TSF use_x_future=False)
 
 Usage
 -----
   python src/utils/aggregate_diagnosis.py
+  python src/utils/aggregate_diagnosis.py --x-future with
+  python src/utils/aggregate_diagnosis.py --x-future without
+  python src/utils/aggregate_diagnosis.py --x-future both
   python src/utils/aggregate_diagnosis.py --outputs-root src/outputs
   python src/utils/aggregate_diagnosis.py --csv-out my_diag.csv --no-table
   python src/utils/aggregate_diagnosis.py --no-color     # plain ASCII output
@@ -91,6 +100,8 @@ _MODEL_DISPLAY_OVERRIDE = {
     "hmttsf_feat_reduced": "HMT-TSF-FR",
 }
 
+_HMTTSF_KEYS = frozenset(_MODEL_DISPLAY_OVERRIDE)
+
 _PIVOT_FIELDS = [
     ("verdict",       "Verdict",   8),
     ("val_drift_pct", "Drift%",    7),
@@ -149,6 +160,14 @@ def _get_lookback(data):
     if lb is None:
         lb = (data.get("split_dates") or {}).get("T_in")
     return int(lb) if lb is not None else 0
+
+
+def _get_use_x_future(data):
+    """True when known-future calendar conditioning was enabled (legacy default)."""
+    hparams = data.get("hparams") or {}
+    if "use_x_future" not in hparams:
+        return True
+    return bool(hparams["use_x_future"])
 
 
 def _model_key_from_path(path, outputs_root):
@@ -261,6 +280,7 @@ def scan_all_results(outputs_root):
             "display_name": display_name,
             "mco":          _infer_mco(split_dates),
             "lookback":     _get_lookback(data),
+            "use_x_future": _get_use_x_future(data),
             "run_id":       run_id,
             "timestamp":    _timestamp_from_run_id(run_id),
             "fit_diagnosis": {
@@ -281,16 +301,28 @@ def scan_all_results(outputs_root):
 
 # ── Selection: newest run per (model_key, mco, lookback) ─────────────────────
 
-def select_runs(records):
+def select_runs(records, use_x_future=None):
+    """
+    Group by (model_key, mco, lookback) and keep the newest run per group.
+
+    When use_x_future is True/False, HMT-TSF runs are filtered to that slice;
+    all other models are always included.
+    """
     groups = defaultdict(list)
     for r in records:
+        if r["model_key"] in _HMTTSF_KEYS:
+            if use_x_future is not None and r["use_x_future"] != use_x_future:
+                continue
         key = (r["model_key"], r["mco"], r["lookback"])
         groups[key].append(r)
 
     rows = []
     for key in sorted(groups):
         newest = max(groups[key], key=lambda r: r["timestamp"])
-        rows.append(newest)
+        row = dict(newest)
+        if row["model_key"] in _HMTTSF_KEYS and not row["use_x_future"]:
+            row["display_name"] = row["display_name"] + " (no X_future)"
+        rows.append(row)
     return rows
 
 
@@ -312,7 +344,7 @@ def _build_pivot_structures(rows):
 
 # ── 1. Quick Fit Overview ─────────────────────────────────────────────────────
 
-def print_fit_overview(rows):
+def print_fit_overview(rows, title_suffix=""):
     """
     Compact coloured verdict matrix — one row per model, one cell per (MCO, lb).
 
@@ -344,7 +376,8 @@ def print_fit_overview(rows):
     sep = "─" * total_w
 
     print(f"\n{eq}")
-    title = "  Quick Fit Overview  —  Model × [MCO × Lookback]"
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    title = f"  Quick Fit Overview  —  Model × [MCO × Lookback]{suffix}"
     print(_c(title, _C.CYAN, _C.BOLD))
     print(eq)
 
@@ -396,7 +429,7 @@ def print_fit_overview(rows):
 
 # ── 2. Detailed Pivot Tables ──────────────────────────────────────────────────
 
-def print_pivot_tables(rows):
+def print_pivot_tables(rows, title_suffix=""):
     if not rows:
         print("[INFO] No fit_diagnosis data found.")
         return
@@ -434,7 +467,9 @@ def print_pivot_tables(rows):
 
     for field, label, _ in _PIVOT_FIELDS:
         print(f"\n{eq}")
-        print(_c(f"  {label}  ·  Models × [MCO  ·  Lookback]", _C.CYAN, _C.BOLD))
+        suffix = f"  ·  {title_suffix}" if title_suffix else ""
+        print(_c(f"  {label}  ·  Models × [MCO  ·  Lookback]{suffix}",
+                   _C.CYAN, _C.BOLD))
         print(eq)
         print(_sub_hdr())
         print(_col_hdr("Model"))
@@ -478,7 +513,7 @@ def print_pivot_tables(rows):
 
 # ── 3. Verdict Summary with bar charts ────────────────────────────────────────
 
-def print_verdict_summary(rows):
+def print_verdict_summary(rows, title_suffix=""):
     overall = defaultdict(int)
     by_mco  = defaultdict(lambda: defaultdict(int))
     by_lb   = defaultdict(lambda: defaultdict(int))
@@ -493,7 +528,9 @@ def print_verdict_summary(rows):
     eq = _c("═" * total_w, _C.CYAN)
 
     print(f"\n{eq}")
-    print(_c(f"  Verdict Summary  ({len(rows)} run(s) total)", _C.CYAN, _C.BOLD))
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    print(_c(f"  Verdict Summary  ({len(rows)} run(s) total){suffix}",
+             _C.CYAN, _C.BOLD))
     print(eq)
 
     sev_sort = lambda x: (-_VERDICT_SEVERITY.get(x[0], 1), x[0])
@@ -530,7 +567,7 @@ def print_verdict_summary(rows):
 
 # ── 4. Flagged Notes ──────────────────────────────────────────────────────────
 
-def print_flagged_notes(rows):
+def print_flagged_notes(rows, title_suffix=""):
     """
     Notes for non-clean runs, severity-sorted (overfit/underfit first),
     then grouped by MCO and lookback.
@@ -547,7 +584,9 @@ def print_flagged_notes(rows):
     eq = _c("═" * total_w, _C.CYAN)
 
     print(f"\n{eq}")
-    print(_c("  Fit Diagnosis Notes  (severity-sorted, then by MCO · lookback)", _C.CYAN, _C.BOLD))
+    suffix = f"  ·  {title_suffix}" if title_suffix else ""
+    print(_c(f"  Fit Diagnosis Notes  (severity-sorted, then by MCO · lookback){suffix}",
+             _C.CYAN, _C.BOLD))
     print(eq)
 
     # Sort by severity desc, then model name
@@ -611,7 +650,7 @@ def print_flagged_notes(rows):
 
 def save_diagnosis_csv(rows, csv_path):
     fieldnames = [
-        "model_key", "display_name", "mco", "lookback", "run_id",
+        "model_key", "display_name", "mco", "lookback", "use_x_future", "run_id",
         *_DIAG_CSV_KEYS, "notes",
     ]
 
@@ -627,12 +666,38 @@ def save_diagnosis_csv(rows, csv_path):
                 "display_name": row["display_name"],
                 "mco":          row["mco"],
                 "lookback":     row["lookback"],
+                "use_x_future": row["use_x_future"],
                 "run_id":       row["run_id"],
                 "notes":        " | ".join(row["notes"]),
                 **{k: diag.get(k) for k in _DIAG_CSV_KEYS},
             })
 
     print(f"\n[INFO] CSV saved → {csv_path}")
+
+
+def _print_report_bundle(rows, title_suffix, args):
+    """Print all console sections for one X_future slice."""
+    if not rows:
+        print(f"[INFO] No fit_diagnosis rows for: {title_suffix}")
+        return
+
+    print(f"\n{'#' * 80}")
+    print(f"  {title_suffix}")
+    print(f"  {len(rows)} unique (model × MCO × lookback) run(s)")
+    print(f"{'#' * 80}")
+
+    print_fit_overview(rows, title_suffix=title_suffix)
+
+    if args.overview_only:
+        return
+
+    if not args.no_table:
+        print_pivot_tables(rows, title_suffix=title_suffix)
+
+    print_verdict_summary(rows, title_suffix=title_suffix)
+
+    if not args.no_notes:
+        print_flagged_notes(rows, title_suffix=title_suffix)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -643,14 +708,16 @@ def parse_args():
     )
     p.add_argument("--outputs-root", default="src/outputs",
                    help="Root directory containing output folders (default: src/outputs)")
+    p.add_argument("--x-future", choices=["with", "without", "both"], default="both",
+                   help="HMT-TSF X_future slice to include (default: both)")
     p.add_argument("--csv-out",  default=None,
-                   help="CSV output path (default: <outputs-root>/aggregate_diagnosis.csv)")
+                   help="CSV path for --x-future with/without (default: auto by slice)")
     p.add_argument("--no-table",    action="store_true", help="Skip detailed pivot tables")
     p.add_argument("--no-notes",    action="store_true", help="Skip flagged-notes section")
     p.add_argument("--no-csv",      action="store_true", help="Skip saving the CSV")
     p.add_argument("--no-color",    action="store_true", help="Disable ANSI colour output")
     p.add_argument("--overview-only", action="store_true",
-                   help="Print only the Quick Fit Overview matrix, then exit")
+                   help="Print only the Quick Fit Overview matrix(es), then exit")
     return p.parse_args()
 
 
@@ -666,38 +733,37 @@ def main():
 
     args         = parse_args()
     outputs_root = args.outputs_root
-    csv_out      = args.csv_out or os.path.join(outputs_root, "aggregate_diagnosis.csv")
 
     if args.no_color:
         _USE_COLOR = False
 
     print(f"[INFO] Scanning: {os.path.abspath(outputs_root)}")
     records = scan_all_results(outputs_root)
-    print(f"[INFO] Found {len(records)} result file(s) with fit_diagnosis.")
+    n_hmt_with    = sum(1 for r in records if r["model_key"] in _HMTTSF_KEYS and r["use_x_future"])
+    n_hmt_without = sum(1 for r in records if r["model_key"] in _HMTTSF_KEYS and not r["use_x_future"])
+    print(f"[INFO] Found {len(records)} result file(s) with fit_diagnosis "
+          f"({n_hmt_with} HMT-TSF with X_future, {n_hmt_without} without).")
 
     if not records:
         print("[INFO] Nothing to aggregate — no results.json with fit_diagnosis found.")
         return
 
-    rows = select_runs(records)
-    print(f"[INFO] Selected {len(rows)} unique (model × MCO × lookback) run(s).")
+    mode = args.x_future
+    slices = []
+    if mode in ("with", "both"):
+        csv_w = (args.csv_out if mode == "with" and args.csv_out
+                 else os.path.join(outputs_root, "aggregate_diagnosis.csv"))
+        slices.append((True,  "HMT-TSF use_x_future=True; all other models", csv_w))
+    if mode in ("without", "both"):
+        csv_n = (args.csv_out if mode == "without" and args.csv_out
+                 else os.path.join(outputs_root, "aggregate_diagnosis_no_x_future.csv"))
+        slices.append((False, "HMT-TSF use_x_future=False (--no-x-future); all other models", csv_n))
 
-    # Always print the overview matrix
-    print_fit_overview(rows)
-
-    if args.overview_only:
-        return
-
-    if not args.no_table:
-        print_pivot_tables(rows)
-
-    print_verdict_summary(rows)
-
-    if not args.no_notes:
-        print_flagged_notes(rows)
-
-    if not args.no_csv:
-        save_diagnosis_csv(rows, csv_out)
+    for use_xf, label, csv_path in slices:
+        rows = select_runs(records, use_x_future=use_xf)
+        _print_report_bundle(rows, label, args)
+        if not args.no_csv and not args.overview_only:
+            save_diagnosis_csv(rows, csv_path)
 
 
 if __name__ == "__main__":
