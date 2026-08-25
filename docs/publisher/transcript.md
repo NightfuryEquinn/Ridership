@@ -34,6 +34,8 @@ This work makes four contributions. First, it establishes an empirical ranking o
 
 ## 2 Literature Review
 
+
+
 ### 2.1 Public Transport Reliability and Demand Dynamics
 
 Reliability is a multi-dimensional construct combining objective operational performance with subjective passenger experience. Travel time reliability is defined as the gap between expected and actual travel times, with route length, signalised intersections, and departure delays as the primary structural causes of unreliability (Mohamed et al. 2021). Satisfaction within the Klang Valley Light Rail Transit (LRT) system, however, is mediated by "soft" factors: accurate real-time information and station amenity quality (Ibrahim et al. 2022). Agencies traditionally prioritise hard metrics such as headway adherence, yet perceived reliability is shaped by the immediate physical environment and by transparent communication. Chronic unreliability then generates a demand-erosion cycle: passengers allocate buffer time against systemic delay, and that temporal penalty outweighs the fare saving, producing stagnant modal share even as fuel costs rise (Amir et al. 2025; Mee et al. 2022). High private vehicle ownership in states such as Sarawak persists precisely because bus service tangibility and responsiveness are perceived as inadequate (Ubaidillah et al. 2022). Physical network expansion alone therefore cannot shift commuter habits; infrastructure must be paired with localised, data-driven operational optimisation.
@@ -55,6 +57,8 @@ Moving from reactive to predictive management enables proactive scheduling and o
 The literature lacks a hybrid ridership forecaster that integrates multi-scale spatiotemporal structure while explicitly isolating predictive bias arising from severe structural breaks. Recent studies apply DL to transit ridership (Amir et al. 2025; Farahmand et al. 2023) but rely on single-paradigm architectures that do not jointly model multi-scale temporal dynamics and multi-dimensional spatial interaction. Pandemic-era anomalies further confound training (Maria-Arribas et al. 2026), yet no Malaysian study systematically quantifies how such breaks distort graph-based and attention-based SOTA models. Excluding the MCO period disrupts series continuity; retaining it uncorrected introduces bias. Without a unified benchmark spanning sequential, graph, and attention paradigms under both MCO conditions, operators have no evidence base for selecting a robust forecaster. This study addresses that gap through HMT-TSF, enabling a shift from reactive to proactive, data-driven transit management.
 
 ## 3 Methodology
+
+
 
 ### 3.1 Data Collection and Understanding
 
@@ -104,6 +108,8 @@ The graph family comprises STGCN, with fixed Pearson inter-feature adjacency and
 
 ### 3.5 Hybrid Multi-Scale Temporal Spatio-Feature Forecaster
 
+
+
 #### 3.5.1 Motivation and Problem Analysis
 
 HMT-TSF addresses three limitations shared by all fourteen baselines, each traceable to a specific finding of Section 3.3. No baseline captures temporal, relational, and regime structure simultaneously, despite Section 3.3 showing that ridership is jointly driven by lag-dominated weekly periodicity (Fig. 4), inter-feature relationships invisible to linear screening (Fig. 5), and a structural break that shifts both the mean level and the variance of the series (Fig. 1). None explicitly handles the MCO regime shift: static Pearson graphs and fixed-scale normalisation are both invalidated once the mapping from calendar and weather inputs to ridership becomes a different function before and after the break. None uses domain-aware feature grouping, treating all 79 features as an undifferentiated flat vector, even though Section 3.3 shows that lag, calendar, and static features carry structurally different relationships to the target — the first two dominate attribution, while the third is systematically zero under linear screening without being causally irrelevant.
@@ -119,41 +125,45 @@ Known trade-offs follow directly from this design and are stated here so they ar
 Three named, separately ablatable modules realise the design of Section 3.5.1, organised here in the order data flows through them: input normalisation and routing (Fig. 7), three parallel encoders (Fig. 8), and gated fusion with output (Fig. 9). Fig. 6 gives the full architecture end to end before each stage is expanded in turn: RevIN normalises the input and fans it out three ways; the temporal stream alone passes through feature-group fusion and self-attention before multi-scale convolution, while the graph and regime streams read the normalised tensor directly; the three resulting context vectors are combined by a gated fusion bottleneck; and the forecast heads, future-temporal correction, RevIN denormalisation, and optional residual booster produce the final seven-day output.
 
 ```mermaid
-flowchart TD
-    IN["Input X · (B, T_in, F)<br/>F = 79 full feature set, or 53 SHAP-reduced (Section 4.4)"]
-    REVIN["<b>RevIN</b> — per-sample, per-feature normalise"]
-
-    subgraph TEMP["Temporal stream"]
-        FGF["Feature Group Fusion<br/>target ctx · lag · temporal/cyclical · external · (static)"]
-        TTB["Temporal Transformer Block<br/>positional embeddings + self-attention"]
-        TCN["Multi-Scale TCN<br/>causal dilated conv, 3 scales, DropPath"]
-        FGF --> TTB --> TCN
-    end
-
-    subgraph GRAPH["Graph stream (bypasses fusion + transformer)"]
-        GCN["Feature Graph Encoder<br/>time-attention pool → 2-layer GCN<br/>Pearson adjacency, |corr| ≥ 0.1"]
-    end
-
-    subgraph REGIME["Regime stream (bypasses fusion + transformer)"]
-        RGE["Regime Gating Embedding<br/>3 learnable vectors: pre-MCO / MCO / post-MCO"]
-    end
-
-    GF["<b>Gated Fusion</b><br/>concat[h_t, h_s, h_r] → SE bottleneck gate"]
-    FH["Forecast Heads<br/>primary (highway + LN) + boosting (sigmoid-gated)"]
-    FTP["Future Temporal Projection (optional)<br/>known-future calendar features → additive correction"]
-    REVIND["RevIN Denormalise"]
-    BOOST["Post-hoc Residual Booster (optional)<br/>CatBoost / MLP on train residuals"]
-    OUT["Output ŷ · (B, T_out = 7)<br/>raw ridership counts"]
-
-    IN --> REVIN
-    REVIN --> FGF
-    REVIN -.->|bypass| GCN
-    REVIN -.->|bypass| RGE
-    TCN --> GF
+flowchart TB
+ subgraph TEMP["Temporal stream"]
+        FGF["Feature Group Fusion<br>target ctx · lag · temporal/cyclical · external · (static)"]
+        TTB["Temporal Transformer Block<br>positional embeddings + self-attention"]
+        TCN["Multi-Scale TCN<br>causal dilated conv, 3 scales, DropPath"]
+  end
+ subgraph GRAPH["Graph stream (bypasses fusion + transformer)"]
+        GCN["Feature Graph Encoder<br>time-attention pool → 2-layer GCN<br>Pearson adjacency, |corr| ≥ 0.1"]
+  end
+ subgraph REGIME["Regime stream (bypasses fusion + transformer)"]
+        RGE["Regime Gating Embedding<br>3 learnable vectors: pre-MCO / MCO / post-MCO"]
+  end
+    FGF --> TTB
+    TTB --> TCN
+    IN["Input X · (B, T_in, F)<br>F = 79 full feature set, or 53 SHAP-reduced (Section 4.4)"] --> REVIN["<b>RevIN</b> — per-sample, per-feature normalise"]
+    TCN --> GF["<b>Gated Fusion</b><br>concat[h_t, h_s, h_r] → SE bottleneck gate"]
     GCN --> GF
     RGE --> GF
-    GF --> FH --> FTP --> REVIND --> BOOST --> OUT
+    GF --> FH["Forecast Heads<br>primary (highway + LN) + boosting (sigmoid-gated)"]
+    FH --> FTP["Future Temporal Projection (optional)<br>known-future calendar features → additive correction"]
+    FTP --> REVIND["RevIN Denormalise"]
+    REVIND --> BOOST["Post-hoc Residual Booster (optional)<br>CatBoost / MLP on train residuals"]
+    BOOST --> OUT["Output ŷ · (B, T_out = 7)<br>raw ridership counts"]
+    REVIN --> TEMP
+    REVIN -. bypass .-> GRAPH
+    REVIN -. bypass .-> REGIME
 
+     FGF:::fusion
+     TTB:::fusion
+     TCN:::fusion
+     GCN:::bypass
+     RGE:::bypass
+     REVIN:::norm
+     GF:::fusion
+     FH:::head
+     FTP:::optional
+     REVIND:::norm
+     BOOST:::optional
+     OUT:::out
     classDef default fill:#f8fafc,stroke:#94a3b8,color:#0f172a
     classDef norm     fill:#fefce8,stroke:#ca8a04,color:#713f12
     classDef fusion   fill:#f0fdf4,stroke:#16a34a,color:#14532d
@@ -161,14 +171,9 @@ flowchart TD
     classDef head     fill:#fdf4ff,stroke:#a21caf,color:#581c87
     classDef optional fill:#fff7ed,stroke:#ea580c,color:#7c2d12
     classDef out      fill:#f1f5f9,stroke:#475569,color:#0f172a
-
-    class REVIN,REVIND norm
-    class FGF,TTB,TCN,GF fusion
-    class GCN,RGE bypass
-    class FH head
-    class FTP,BOOST optional
-    class OUT out
 ```
+
+
 
 Fig. 6 Full HMT-TSF architecture, from the input tensor through RevIN and three parallel encoder streams — temporal, graph, and regime — to gated fusion, forecast heads, and denormalised output.
 
@@ -194,6 +199,8 @@ flowchart TD
     class REVIN norm
     class S2,S3 bypass
 ```
+
+
 
 Fig. 7 Input tensor and RevIN normalisation, fanning out to the temporal stream and, bypassing fusion and the transformer, to the graph and regime streams.
 
@@ -231,6 +238,10 @@ flowchart TD
     class GCN,RGE bypass
 ```
 
+
+
+
+
 Fig. 8 Three parallel encoders: Feature Group Fusion and the Temporal Transformer Block feeding the Multi-Scale TCN (h_t), the Feature Graph Encoder over the Pearson adjacency (h_s), and the Regime Gating Embedding (h_r).
 
 **Stage 3 — Gated Fusion and Output (Fig. 9).** The three encoder outputs h_t, h_s, h_r are concatenated and passed through a Squeeze-and-Excitation bottleneck gate — a d_cat → d_cat//4 → d_cat projection calibrating which stream contributes most per input context, avoiding an expensive 3d × 3d weight matrix (Jiang et al. 2021). Two forecast heads follow: a primary head with highway residual and LayerNorm, and a boosting head whose scalar gate is initialised so its contribution is suppressed early and activates as training converges. This asymmetric tri-stream routing — the graph and regime streams bypassing fusion and self-attention while the temporal stream alone is projected and self-attended — is what allows one model to address all three limitations of Section 3.5.1 at once (Hu et al. 2026). The custom loss penalises accuracy and smoothness jointly, weighting the one-day-ahead step at 1.0 and decaying to approximately 0.53 at seven days. Finally, the sixteen temporal features are deterministic for any future calendar date and are pre-computed for the forecast steps of each window as Xfuture; a per-step zero-initialised MLP learns an additive correction from this known-future context, letting the model anticipate weekend dips and holiday effects inside the horizon rather than extrapolating them — the direct architectural consequence of the displacement pattern in Fig. 3. RevIN then denormalises the corrected prediction back to the MinMax-scaled space, and an optional post-hoc gradient-boosted residual booster, trained on training-set residuals, applies a further correction only when validated to improve Combined%.
@@ -265,6 +276,8 @@ flowchart TD
     class OUT out
 ```
 
+
+
 Fig. 9 Gated fusion of h_t, h_s, h_r through the SE bottleneck, forecast heads, future-temporal correction, RevIN denormalisation, and optional residual booster to the seven-day output.
 
 ### 3.6 Evaluation Metrics
@@ -274,6 +287,8 @@ Combined% is a composite index aggregating absolute, proportional, and squared e
 Raw MAE and RMSE in absolute passenger counts are reported separately as operational diagnostics. R² measures explained variance and discriminates between models with similar error magnitudes but different directional tracking, with values below zero indicating performance worse than predicting the mean. Together with Combined%, these five metrics evaluate HMT-TSF against the fourteen baselines across look-back horizons and both MCO conditions.
 
 ## 4 Findings and Results
+
+
 
 ### 4.1 Experimental Setup
 
@@ -287,24 +302,26 @@ Under the project default, baseline accuracy is tightly clustered: the top eight
 
 **Table 1.** Default-configuration (base_nomco_lb14) performance of all sixteen baseline variants.
 
-| Rank | Model | Combined% | MAPE% | R² | MAE | RMSE |
-| ---- | ---------- | --------- | ----- | ----- | ------ | ------ |
-| 1 | Informer | 79.13 | 6.59 | 0.772 | 69,476 | 110,050 |
-| 2 | BiLSTM | 79.04 | 6.52 | 0.776 | 72,460 | 109,007 |
-| 3 | TPA-LSTM | 78.67 | 6.62 | 0.776 | 75,871 | 109,009 |
-| 4 | CNN-BiLSTM | 78.18 | 6.81 | 0.764 | 76,884 | 111,782 |
-| 5 | LSTM | 78.13 | 6.71 | 0.760 | 77,719 | 112,801 |
-| 6 | ST-LSTM | 78.01 | 6.93 | 0.770 | 78,779 | 110,453 |
-| 7 | MTGNN | 77.93 | 6.91 | 0.775 | 81,292 | 109,185 |
-| 8 | CNN-LSTM | 77.64 | 6.92 | 0.752 | 79,375 | 114,632 |
-| 9 | STSGCN | 76.97 | 7.18 | 0.736 | 80,703 | 118,391 |
-| 10 | STGCN | 76.81 | 7.24 | 0.750 | 85,077 | 115,297 |
-| 11 | ASTGCN | 75.69 | 7.42 | 0.703 | 86,631 | 125,606 |
-| 12 | CNN-LSTM-Augmented | 75.36 | 7.77 | 0.721 | 90,356 | 121,639 |
-| 13 | Autoformer | 74.73 | 7.86 | 0.708 | 94,414 | 124,408 |
-| 14 | CNN-LSTM-Parallel | 74.18 | 8.18 | 0.704 | 96,477 | 125,240 |
-| 15 | STFGNN | 73.94 | 8.21 | 0.688 | 95,547 | 128,777 |
-| 16 | PDR-STGCN | 73.91 | 8.15 | 0.688 | 96,801 | 128,694 |
+
+| Rank | Model              | Combined% | MAPE% | R²    | MAE    | RMSE    |
+| ---- | ------------------ | --------- | ----- | ----- | ------ | ------- |
+| 1    | Informer           | 79.13     | 6.59  | 0.772 | 69,476 | 110,050 |
+| 2    | BiLSTM             | 79.04     | 6.52  | 0.776 | 72,460 | 109,007 |
+| 3    | TPA-LSTM           | 78.67     | 6.62  | 0.776 | 75,871 | 109,009 |
+| 4    | CNN-BiLSTM         | 78.18     | 6.81  | 0.764 | 76,884 | 111,782 |
+| 5    | LSTM               | 78.13     | 6.71  | 0.760 | 77,719 | 112,801 |
+| 6    | ST-LSTM            | 78.01     | 6.93  | 0.770 | 78,779 | 110,453 |
+| 7    | MTGNN              | 77.93     | 6.91  | 0.775 | 81,292 | 109,185 |
+| 8    | CNN-LSTM           | 77.64     | 6.92  | 0.752 | 79,375 | 114,632 |
+| 9    | STSGCN             | 76.97     | 7.18  | 0.736 | 80,703 | 118,391 |
+| 10   | STGCN              | 76.81     | 7.24  | 0.750 | 85,077 | 115,297 |
+| 11   | ASTGCN             | 75.69     | 7.42  | 0.703 | 86,631 | 125,606 |
+| 12   | CNN-LSTM-Augmented | 75.36     | 7.77  | 0.721 | 90,356 | 121,639 |
+| 13   | Autoformer         | 74.73     | 7.86  | 0.708 | 94,414 | 124,408 |
+| 14   | CNN-LSTM-Parallel  | 74.18     | 8.18  | 0.704 | 96,477 | 125,240 |
+| 15   | STFGNN             | 73.94     | 8.21  | 0.688 | 95,547 | 128,777 |
+| 16   | PDR-STGCN          | 73.91     | 8.15  | 0.688 | 96,801 | 128,694 |
+
 
 Recurrent architectures are the strongest single-paradigm family under normal conditions, occupying six of the top eight positions, because gated sequential memory aligns with the daily and weekly periodicity identified in Section 3.3 (Barath et al. 2026). Bidirectional encoding provides a measurable advantage, with BiLSTM gaining 0.91 Combined% over LSTM by contextualising mid-sequence events (Krishnasamy et al. 2025), and TPA-LSTM matching BiLSTM's R² of 0.776, validating temporal pattern attention over hidden states (Wei et al. 2023). CNN-BiLSTM and sequential CNN-LSTM approach the same band through hierarchical local-then-global encoding (Chen et al. 2022), while ST-LSTM ranks sixth with decoupled spatial encoding (Cui et al. 2025). Graph models show wider dispersion, reflecting heterogeneous strategies for encoding inter-feature correlation: MTGNN leads the family at 77.93% because asymmetric learned edges can represent directed relationships — fuel-price signals influencing ridership without the reverse — which symmetric Pearson graphs cannot (Wu et al. 2025). At the lower end of the ranking, the two remaining CNN-LSTM fusion modes and the two simple-convolution graph models (STFGNN, PDR-STGCN) trail the leaders by 3.8–5.2 Combined% points, underscoring that fusion-mode and adjacency-construction choices carry more weight than family membership alone.
 
@@ -312,22 +329,24 @@ Test-set accuracy alone is an unreliable deployment criterion, because several h
 
 **Table 2.** Fit diagnostics per baseline architecture across look-back windows. Good-fit is out of 4 runs per cell (base/tuned × MCO-exclude/include); gap-ratio range and max validation drift pool all twelve configurations per model.
 
-| Model | lb14 Good-fit | lb28 Good-fit | lb56 Good-fit | Gap-ratio range | Max validation drift % |
-| --- | --- | --- | --- | --- | --- |
-| Informer | 2/4 | 2/4 | 2/4 | 2.16×–3.69× | 20.9 |
-| BiLSTM | 0/4 | 0/4 | 0/4 | 3.44×–12.77× | 88.7 |
-| TPA-LSTM | 0/4 | 0/4 | 0/4 | 3.16×–5.64× | 70.4 |
-| CNN-BiLSTM | 0/4 | 0/4 | 0/4 | 3.89×–13.51× | 170.0 |
-| LSTM | 0/4 | 0/4 | 0/4 | 3.35×–6.68× | 36.0 |
-| ST-LSTM | 0/4 | 0/4 | 0/4 | 3.28×–5.34× | 19.7 |
-| MTGNN | 2/4 | 2/4 | 3/4 | 1.40×–2.91× | 133.7 |
-| CNN-LSTM† | 0/4 | 0/4 | 0/4 | 4.57×–10.56× | 93.1 |
-| STSGCN | 4/4 | 2/4 | 1/4 | 2.03×–2.80× | 72.4 |
-| STGCN | 0/4 | 0/4 | 0/4 | 3.09×–10.53× | 102.2 |
-| ASTGCN | 1/4 | 1/4 | 1/4 | 2.00×–4.03× | 565.3 |
-| Autoformer | 1/4 | 3/4 | 3/4 | 2.05×–3.65× | 37.4 |
-| STFGNN | 1/4 | 1/4 | 2/4 | 1.72×–3.59× | 58.6 |
-| PDR-STGCN | 0/4 | 0/4 | 0/4 | 3.20×–38.61× | 288.3 |
+
+| Model      | lb14 Good-fit | lb28 Good-fit | lb56 Good-fit | Gap-ratio range | Max validation drift % |
+| ---------- | ------------- | ------------- | ------------- | --------------- | ---------------------- |
+| Informer   | 2/4           | 2/4           | 2/4           | 2.16×–3.69×     | 20.9                   |
+| BiLSTM     | 0/4           | 0/4           | 0/4           | 3.44×–12.77×    | 88.7                   |
+| TPA-LSTM   | 0/4           | 0/4           | 0/4           | 3.16×–5.64×     | 70.4                   |
+| CNN-BiLSTM | 0/4           | 0/4           | 0/4           | 3.89×–13.51×    | 170.0                  |
+| LSTM       | 0/4           | 0/4           | 0/4           | 3.35×–6.68×     | 36.0                   |
+| ST-LSTM    | 0/4           | 0/4           | 0/4           | 3.28×–5.34×     | 19.7                   |
+| MTGNN      | 2/4           | 2/4           | 3/4           | 1.40×–2.91×     | 133.7                  |
+| CNN-LSTM†  | 0/4           | 0/4           | 0/4           | 4.57×–10.56×    | 93.1                   |
+| STSGCN     | 4/4           | 2/4           | 1/4           | 2.03×–2.80×     | 72.4                   |
+| STGCN      | 0/4           | 0/4           | 0/4           | 3.09×–10.53×    | 102.2                  |
+| ASTGCN     | 1/4           | 1/4           | 1/4           | 2.00×–4.03×     | 565.3                  |
+| Autoformer | 1/4           | 3/4           | 3/4           | 2.05×–3.65×     | 37.4                   |
+| STFGNN     | 1/4           | 1/4           | 2/4           | 1.72×–3.59×     | 58.6                   |
+| PDR-STGCN  | 0/4           | 0/4           | 0/4           | 3.20×–38.61×    | 288.3                  |
+
 
 †Diagnostics were run on the sequential-fusion CNN-LSTM configuration; the Augmented and Parallel fusion-mode variants of Table 1 share the same encoder backbone and were not separately diagnosed.
 
@@ -337,18 +356,20 @@ HMT-TSF was evaluated across ten configurations spanning two MCO conditions and 
 
 **Table 3.** HMT-TSF (79 features) results across all ten configurations.
 
-| Configuration | Combined% | MAPE% | MAE% | RMSE% | R² | MAE | RMSE |
+
+| Configuration | Combined% | MAPE% | MAE% | RMSE% | R²    | MAE    | RMSE    |
 | ------------- | --------- | ----- | ---- | ----- | ----- | ------ | ------- |
-| nomco_lb7 | 84.88 | 4.74 | 4.25 | 6.13 | 0.888 | 53,325 | 76,951 |
-| nomco_lb14 | 85.78 | 4.39 | 3.97 | 5.87 | 0.897 | 49,897 | 73,757 |
-| nomco_lb28 | 84.23 | 4.94 | 4.55 | 6.28 | 0.883 | 57,268 | 78,910 |
-| nomco_lb56 | 82.53 | 5.52 | 5.11 | 6.84 | 0.859 | 64,198 | 85,874 |
-| nomco_lb84 | 77.68 | 6.99 | 6.59 | 8.73 | 0.773 | 82,174 | 108,800 |
-| mco_lb7 | 78.61 | 6.89 | 6.12 | 8.38 | 0.807 | 75,401 | 103,170 |
-| mco_lb14 | 81.99 | 5.68 | 5.18 | 7.15 | 0.859 | 63,853 | 88,228 |
-| mco_lb28 | 79.89 | 6.26 | 5.83 | 8.02 | 0.822 | 72,032 | 99,059 |
-| mco_lb56 | 79.47 | 6.68 | 5.91 | 7.95 | 0.825 | 73,334 | 98,598 |
-| mco_lb84 | 78.45 | 6.73 | 6.17 | 8.64 | 0.791 | 76,593 | 107,293 |
+| nomco_lb7     | 84.88     | 4.74  | 4.25 | 6.13  | 0.888 | 53,325 | 76,951  |
+| nomco_lb14    | 85.78     | 4.39  | 3.97 | 5.87  | 0.897 | 49,897 | 73,757  |
+| nomco_lb28    | 84.23     | 4.94  | 4.55 | 6.28  | 0.883 | 57,268 | 78,910  |
+| nomco_lb56    | 82.53     | 5.52  | 5.11 | 6.84  | 0.859 | 64,198 | 85,874  |
+| nomco_lb84    | 77.68     | 6.99  | 6.59 | 8.73  | 0.773 | 82,174 | 108,800 |
+| mco_lb7       | 78.61     | 6.89  | 6.12 | 8.38  | 0.807 | 75,401 | 103,170 |
+| mco_lb14      | 81.99     | 5.68  | 5.18 | 7.15  | 0.859 | 63,853 | 88,228  |
+| mco_lb28      | 79.89     | 6.26  | 5.83 | 8.02  | 0.822 | 72,032 | 99,059  |
+| mco_lb56      | 79.47     | 6.68  | 5.91 | 7.95  | 0.825 | 73,334 | 98,598  |
+| mco_lb84      | 78.45     | 6.73  | 6.17 | 8.64  | 0.791 | 76,593 | 107,293 |
+
 
 Performance peaks at a 14-day look-back under both conditions, declining at longer windows once Xfuture supplies explicit future calendar structure. At `nomco_lb14` the full deployable system leads every baseline on every headline metric — 85.78 Combined% against Informer's 79.13%, a margin of 6.65 points, with MAE 28.2% lower (49,897 against 69,476). The best tuned baseline, Informer at 79.99%, remains 5.79 points behind. HMT-TSF is also the most robust model under structural break at lb14, with degradation of only Δ −3.79, and retains the highest absolute MCO accuracy at 81.99%. It posts 19/20 good-fit verdicts with Xfuture enabled (gap ratios 1.57×–2.64×); only `nomco_lb84` is overfit.
 
@@ -364,12 +385,14 @@ Cross-configuration aggregation reveals 23 zero-SHAP features plus three near-ze
 
 **Table 4.** HMT-TSF-FR versus HMT-TSF Combined% by look-back window.
 
-| Look-back | HMT-TSF | HMT-TSF-FR | Δ |
+
+| Look-back | HMT-TSF | HMT-TSF-FR | Δ     |
 | --------- | ------- | ---------- | ----- |
-| lb14 | 85.78 | 86.59 | +0.81 |
-| lb28 | 84.23 | 86.07 | +1.84 |
-| lb56 | 82.53 | 84.04 | +1.52 |
-| lb84 | 77.68 | 81.94 | +4.26 |
+| lb14      | 85.78   | 86.59      | +0.81 |
+| lb28      | 84.23   | 86.07      | +1.84 |
+| lb56      | 82.53   | 84.04      | +1.52 |
+| lb84      | 77.68   | 81.94      | +4.26 |
+
 
 HMT-TSF-FR reaches 86.59 Combined% at `nomco_lb14` (R² = 0.906, MAE = 46,323), the study-wide headline. The graph adjacency shrinks from 79 × 79 to 53 × 53 and explainability memory falls by roughly 33%. As Table 4 shows, the advantage grows with look-back and repairs the `nomco_lb84` overfit verdict. The trade-off appears under structural break: HMT-TSF-FR loses to the full model in every MCO configuration, from Δ −0.85 at lb7 to Δ −5.22 at lb84, indicating that near-constant fuel-price columns stabilise predictions under lockdown-spanning shift. The full model should therefore be retained for shock-prone conditions and FR deployed for normal operations. All FR configurations remain good-fit with gap ratios of 1.66×–2.72×, confirming that reduction introduces no overfitting.
 
@@ -405,110 +428,110 @@ AFC, Automated Fare Collection; APC, Automated Passenger Counting; ARIMA, AutoRe
 
 ## References
 
-Ahmad, M., Anwer, I., Yousuf, M.I., et al.: Investigating the key factors affecting public transport ridership in developing countries through structural equation modeling. Sustainability 16(11), 4426 (2024). https://doi.org/10.3390/su16114426
+Ahmad, M., Anwer, I., Yousuf, M.I., et al.: Investigating the key factors affecting public transport ridership in developing countries through structural equation modeling. Sustainability 16(11), 4426 (2024). [https://doi.org/10.3390/su16114426](https://doi.org/10.3390/su16114426)
 
-Amir, N.N., Anuar, N.S., Ismail, B., et al.: Ridership prediction system for Rapid Bus Kuantan and Penang using multi-feature analysis. Journal of the Malaysian Institute of Planners 23(6), 332–347 (2025). https://doi.org/10.21837/pm.v23i39.1913
+Amir, N.N., Anuar, N.S., Ismail, B., et al.: Ridership prediction system for Rapid Bus Kuantan and Penang using multi-feature analysis. Journal of the Malaysian Institute of Planners 23(6), 332–347 (2025). [https://doi.org/10.21837/pm.v23i39.1913](https://doi.org/10.21837/pm.v23i39.1913)
 
-Barath, Z., Veres, P., Banyai, A.: Beyond traditional forecasting methods: evaluating LSTM performance on diverse time series. Mathematics 14(5), 838 (2026). https://doi.org/10.3390/math14050838
+Barath, Z., Veres, P., Banyai, A.: Beyond traditional forecasting methods: evaluating LSTM performance on diverse time series. Mathematics 14(5), 838 (2026). [https://doi.org/10.3390/math14050838](https://doi.org/10.3390/math14050838)
 
-Casolaro, A., Capone, V., Iannuzzo, G., et al.: Deep learning for time series forecasting: advances and open problems. Information 14(11), 598 (2023). https://doi.org/10.3390/info14110598
+Casolaro, A., Capone, V., Iannuzzo, G., et al.: Deep learning for time series forecasting: advances and open problems. Information 14(11), 598 (2023). [https://doi.org/10.3390/info14110598](https://doi.org/10.3390/info14110598)
 
-CCS Global Tech: From reactive to proactive decisions: how AI enablement is solving everyday transit challenges (2026). https://ccsglobaltech.com/from-reactive-to-proactive-decisions-how-ai-enablement-is-solving-everyday-transit-challenges/. Accessed 9 March 2026
+CCS Global Tech: From reactive to proactive decisions: how AI enablement is solving everyday transit challenges (2026). [https://ccsglobaltech.com/from-reactive-to-proactive-decisions-how-ai-enablement-is-solving-everyday-transit-challenges/](https://ccsglobaltech.com/from-reactive-to-proactive-decisions-how-ai-enablement-is-solving-everyday-transit-challenges/). Accessed 9 March 2026
 
-Chang, J., Yin, J., Hao, Y., et al.: STFDSGCN: spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. Sensors 25(11), 3446 (2025). https://doi.org/10.3390/s25113446
+Chang, J., Yin, J., Hao, Y., et al.: STFDSGCN: spatio-temporal fusion graph neural network based on dynamic sparse graph convolution GRU for traffic flow forecast. Sensors 25(11), 3446 (2025). [https://doi.org/10.3390/s25113446](https://doi.org/10.3390/s25113446)
 
-Chen, L., Ren, Q., Zheng, J., et al.: CSFPre: expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. PLoS One 18(4), 1–22 (2023). https://doi.org/10.1371/journal.pone.0283898
+Chen, L., Ren, Q., Zheng, J., et al.: CSFPre: expressway key sections based on CEEMDAN-STSGCN-FCM during the holidays for traffic flow prediction. PLoS One 18(4), 1–22 (2023). [https://doi.org/10.1371/journal.pone.0283898](https://doi.org/10.1371/journal.pone.0283898)
 
-Chen, P., Fu, X., Wang, X.: A graph convolutional stacked bidirectional unidirectional-LSTM neural network for metro ridership prediction. IEEE Transactions on Intelligent Transportation Systems 23(7), 6950–6962 (2022). https://doi.org/10.1109/TITS.2021.3065404
+Chen, P., Fu, X., Wang, X.: A graph convolutional stacked bidirectional unidirectional-LSTM neural network for metro ridership prediction. IEEE Transactions on Intelligent Transportation Systems 23(7), 6950–6962 (2022). [https://doi.org/10.1109/TITS.2021.3065404](https://doi.org/10.1109/TITS.2021.3065404)
 
-Chevance, G., Andrieu, B., Koch, N., et al.: How gasoline prices influence the effectiveness of interventions targeting sustainable transport modes. Sustainable Mobility and Transport 1, 1–8 (2024). https://doi.org/10.1038/s44333-024-00017-1
+Chevance, G., Andrieu, B., Koch, N., et al.: How gasoline prices influence the effectiveness of interventions targeting sustainable transport modes. Sustainable Mobility and Transport 1, 1–8 (2024). [https://doi.org/10.1038/s44333-024-00017-1](https://doi.org/10.1038/s44333-024-00017-1)
 
-Cui, H., Si, B., Chi, D., et al.: Short-term passenger flow prediction for urban rail systems: a deep learning approach utilizing multi-source big data. PLoS One 20(10), 1–23 (2025). https://doi.org/10.1371/journal.pone.0333094
+Cui, H., Si, B., Chi, D., et al.: Short-term passenger flow prediction for urban rail systems: a deep learning approach utilizing multi-source big data. PLoS One 20(10), 1–23 (2025). [https://doi.org/10.1371/journal.pone.0333094](https://doi.org/10.1371/journal.pone.0333094)
 
-Deng, H.: Traffic-forecasting model with spatio-temporal kernel. Electronics 14(7), 1410 (2025). https://doi.org/10.3390/electronics14071410
+Deng, H.: Traffic-forecasting model with spatio-temporal kernel. Electronics 14(7), 1410 (2025). [https://doi.org/10.3390/electronics14071410](https://doi.org/10.3390/electronics14071410)
 
-Farahmand, Z.H., Gkiotsalitis, K., Geurs, K.T.: Predicting bus ridership based on the weather conditions using deep learning algorithms. Transportation Research Interdisciplinary Perspectives 19, 100833 (2023). https://doi.org/10.1016/j.trip.2023.100833
+Farahmand, Z.H., Gkiotsalitis, K., Geurs, K.T.: Predicting bus ridership based on the weather conditions using deep learning algorithms. Transportation Research Interdisciplinary Perspectives 19, 100833 (2023). [https://doi.org/10.1016/j.trip.2023.100833](https://doi.org/10.1016/j.trip.2023.100833)
 
-Ge, L., Sarhani, M., Voss, S., et al.: Review of transit data sources: potentials, challenges and complementarity. Sustainability 13(20), 11450 (2021). https://doi.org/10.3390/su132011450
+Ge, L., Sarhani, M., Voss, S., et al.: Review of transit data sources: potentials, challenges and complementarity. Sustainability 13(20), 11450 (2021). [https://doi.org/10.3390/su132011450](https://doi.org/10.3390/su132011450)
 
-Hashimzai, I.A., Mohammadi, M.Q.: The integration of artificial intelligence in project management: a systematic literature review of emerging trends and challenges. TIERS Information Technology Journal 5(2), 152–164 (2024). https://doi.org/10.38043/tiers.v5i2.5963
+Hashimzai, I.A., Mohammadi, M.Q.: The integration of artificial intelligence in project management: a systematic literature review of emerging trends and challenges. TIERS Information Technology Journal 5(2), 152–164 (2024). [https://doi.org/10.38043/tiers.v5i2.5963](https://doi.org/10.38043/tiers.v5i2.5963)
 
-Hassan, M., Mahin, H.D., Ahmed, F., et al.: Assessing public transit network efficiency and accessibility in Johor Bahru and Penang, Malaysia: a data-driven approach. Results in Engineering 27, 106126 (2025). https://doi.org/10.1016/j.rineng.2025.106126
+Hassan, M., Mahin, H.D., Ahmed, F., et al.: Assessing public transit network efficiency and accessibility in Johor Bahru and Penang, Malaysia: a data-driven approach. Results in Engineering 27, 106126 (2025). [https://doi.org/10.1016/j.rineng.2025.106126](https://doi.org/10.1016/j.rineng.2025.106126)
 
-Hu, J., Tang, B., Zhu, L., et al.: PDR-STGCN: an enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. Systems 14(1), 102 (2026). https://doi.org/10.3390/systems14010102
+Hu, J., Tang, B., Zhu, L., et al.: PDR-STGCN: an enhanced STGCN with multi-scale periodic fusion and a dynamic relational graph for traffic forecasting. Systems 14(1), 102 (2026). [https://doi.org/10.3390/systems14010102](https://doi.org/10.3390/systems14010102)
 
-Huang, S., Li, W., Wen, J., et al.: Spatiotemporal variations in Shanghai metro commuting flows during rainfall events. Weather, Climate and Society 14(3), 979–991 (2022). https://doi.org/10.1175/WCAS-D-21-0167.1
+Huang, S., Li, W., Wen, J., et al.: Spatiotemporal variations in Shanghai metro commuting flows during rainfall events. Weather, Climate and Society 14(3), 979–991 (2022). [https://doi.org/10.1175/WCAS-D-21-0167.1](https://doi.org/10.1175/WCAS-D-21-0167.1)
 
-Ibrahim, A.N., Borhan, M.N., Osman, M.H., et al.: The influence of service quality on user's perceived satisfaction with light rail transit service in Klang Valley, Malaysia. Mathematics 10, 2213 (2022). https://doi.org/10.3390/math10132213
+Ibrahim, A.N., Borhan, M.N., Osman, M.H., et al.: The influence of service quality on user's perceived satisfaction with light rail transit service in Klang Valley, Malaysia. Mathematics 10, 2213 (2022). [https://doi.org/10.3390/math10132213](https://doi.org/10.3390/math10132213)
 
-Jevinger, A., Zhao, C., Persson, J.A., et al.: Artificial intelligence for improving public transport: a mapping study. Public Transport 16, 99–158 (2024). https://doi.org/10.1007/s12469-023-00334-7
+Jevinger, A., Zhao, C., Persson, J.A., et al.: Artificial intelligence for improving public transport: a mapping study. Public Transport 16, 99–158 (2024). [https://doi.org/10.1007/s12469-023-00334-7](https://doi.org/10.1007/s12469-023-00334-7)
 
-Jiang, R., Yin, D., Wang, Z., et al.: DL-Traff: survey and benchmark of deep learning models for urban traffic prediction. In: Proceedings of the 30th ACM International Conference on Information and Knowledge Management, pp. 4515–4525 (2021). https://doi.org/10.1145/3459637.3482000
+Jiang, R., Yin, D., Wang, Z., et al.: DL-Traff: survey and benchmark of deep learning models for urban traffic prediction. In: Proceedings of the 30th ACM International Conference on Information and Knowledge Management, pp. 4515–4525 (2021). [https://doi.org/10.1145/3459637.3482000](https://doi.org/10.1145/3459637.3482000)
 
-Jiang, S., Cai, C.: The impacts of weather conditions on metro ridership: an empirical study from three mega cities in China. Travel Behaviour and Society 31, 166–177 (2023). https://doi.org/10.1016/j.tbs.2022.12.003
+Jiang, S., Cai, C.: The impacts of weather conditions on metro ridership: an empirical study from three mega cities in China. Travel Behaviour and Society 31, 166–177 (2023). [https://doi.org/10.1016/j.tbs.2022.12.003](https://doi.org/10.1016/j.tbs.2022.12.003)
 
-Jin, S., Jing, C., Wang, Y., et al.: Spatiotemporal graph convolutional neural networks for metro flow prediction. The International Archives of the Photogrammetry, Remote Sensing and Spatial Information Sciences XLIII, 403–409 (2022). https://doi.org/10.5194/isprs-archives-XLIII-B4-2022-403-2022
+Jin, S., Jing, C., Wang, Y., et al.: Spatiotemporal graph convolutional neural networks for metro flow prediction. The International Archives of the Photogrammetry, Remote Sensing and Spatial Information Sciences XLIII, 403–409 (2022). [https://doi.org/10.5194/isprs-archives-XLIII-B4-2022-403-2022](https://doi.org/10.5194/isprs-archives-XLIII-B4-2022-403-2022)
 
-Keller, C., Gluck, F., Gerlach, C.F., et al.: Investigating the potential of data science methods for sustainable public transport. Sustainability 14, 4211 (2022). https://doi.org/10.3390/su14074211
+Keller, C., Gluck, F., Gerlach, C.F., et al.: Investigating the potential of data science methods for sustainable public transport. Sustainability 14, 4211 (2022). [https://doi.org/10.3390/su14074211](https://doi.org/10.3390/su14074211)
 
-Kim, T., Kim, J., Tae, Y., et al.: Reversible instance normalization for accurate time-series forecasting against distribution shift. In: International Conference on Learning Representations (ICLR 2022), pp. 1–25 (2023). https://openreview.net/forum?id=cGDAkQo1C0p
+Kim, T., Kim, J., Tae, Y., et al.: Reversible instance normalization for accurate time-series forecasting against distribution shift. In: International Conference on Learning Representations (ICLR 2022), pp. 1–25 (2023). [https://openreview.net/forum?id=cGDAkQo1C0p](https://openreview.net/forum?id=cGDAkQo1C0p)
 
-Krishnasamy, L., C., S., Dhanaraj, R.K., et al.: Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. Scientific Reports 15, 18423 (2025). https://doi.org/10.1038/s41598-025-02933-9
+Krishnasamy, L., C., S., Dhanaraj, R.K., et al.: Intelligent traffic congestion forecasting using BiLSTM and adaptive secretary bird optimizer for sustainable urban transportation. Scientific Reports 15, 18423 (2025). [https://doi.org/10.1038/s41598-025-02933-9](https://doi.org/10.1038/s41598-025-02933-9)
 
-Levner, A.: AI-powered public transportation gains momentum as Optibus platform hits one million optimizations. Optibus (2025). https://blog.optibus.com/ai-powered-public-transportation-gains-momentum-as-optibus-platform-hits-one-million-optimizations. Accessed 31 March 2025
+Levner, A.: AI-powered public transportation gains momentum as Optibus platform hits one million optimizations. Optibus (2025). [https://blog.optibus.com/ai-powered-public-transportation-gains-momentum-as-optibus-platform-hits-one-million-optimizations](https://blog.optibus.com/ai-powered-public-transportation-gains-momentum-as-optibus-platform-hits-one-million-optimizations). Accessed 31 March 2025
 
-Liu, C., Xiao, Z., Long, W., et al.: Vehicle trajectory data processing, analytics and applications: a survey. ACM Computing Surveys 57(9), 1–36 (2025). https://doi.org/10.1145/3715902
+Liu, C., Xiao, Z., Long, W., et al.: Vehicle trajectory data processing, analytics and applications: a survey. ACM Computing Surveys 57(9), 1–36 (2025). [https://doi.org/10.1145/3715902](https://doi.org/10.1145/3715902)
 
-Lu, K., Liu, J., Zhou, X., et al.: A review of big data applications in urban transit systems. IEEE Transactions on Intelligent Transportation Systems 22(5), 2535–2552 (2020). https://doi.org/10.1109/TITS.2020.2973365
+Lu, K., Liu, J., Zhou, X., et al.: A review of big data applications in urban transit systems. IEEE Transactions on Intelligent Transportation Systems 22(5), 2535–2552 (2020). [https://doi.org/10.1109/TITS.2020.2973365](https://doi.org/10.1109/TITS.2020.2973365)
 
-Lv, Z., Li, J., Dong, C., et al.: Deep learning in the COVID-19 epidemic: a deep model for urban traffic revitalization index. Data & Knowledge Engineering 135, 101912 (2021). https://doi.org/10.1016/j.datak.2021.101912
+Lv, Z., Li, J., Dong, C., et al.: Deep learning in the COVID-19 epidemic: a deep model for urban traffic revitalization index. Data & Knowledge Engineering 135, 101912 (2021). [https://doi.org/10.1016/j.datak.2021.101912](https://doi.org/10.1016/j.datak.2021.101912)
 
-Ma, X., Zhang, H.: Time series forecasting method based on multi-scale feature fusion and Autoformer. Applied Sciences 15(7), 3768 (2025). https://doi.org/10.3390/app15073768
+Ma, X., Zhang, H.: Time series forecasting method based on multi-scale feature fusion and Autoformer. Applied Sciences 15(7), 3768 (2025). [https://doi.org/10.3390/app15073768](https://doi.org/10.3390/app15073768)
 
-Maria-Arribas, D., Pantrigo, J.J., Cuesta-Infante, A.: A massive, graph augmented, traffic dataset for machine learning and deep learning spatio-temporal traffic analysis. Research Square, 1–17 (2026). https://doi.org/10.21203/rs.3.rs-8670080/v1
+Maria-Arribas, D., Pantrigo, J.J., Cuesta-Infante, A.: A massive, graph augmented, traffic dataset for machine learning and deep learning spatio-temporal traffic analysis. Research Square, 1–17 (2026). [https://doi.org/10.21203/rs.3.rs-8670080/v1](https://doi.org/10.21203/rs.3.rs-8670080/v1)
 
-Mee, C.K., Subramaniam, G., Ating, R., et al.: Willingness to use public transport in Kuala Lumpur and Manila. Environment-Behaviour Proceedings Journal 7(21), 1–9 (2022). https://doi.org/10.21834/ebpj.v7i21.3751
+Mee, C.K., Subramaniam, G., Ating, R., et al.: Willingness to use public transport in Kuala Lumpur and Manila. Environment-Behaviour Proceedings Journal 7(21), 1–9 (2022). [https://doi.org/10.21834/ebpj.v7i21.3751](https://doi.org/10.21834/ebpj.v7i21.3751)
 
-Mohamed, A.H., Adwan, I.A., Ahmeda, A.G., et al.: Identification of affecting factors on the travel time reliability for bus transportation. Knowledge-based Engineering and Science 2(1), 19–30 (2021). https://doi.org/10.51526/kbes.2021.2.1.19-30
+Mohamed, A.H., Adwan, I.A., Ahmeda, A.G., et al.: Identification of affecting factors on the travel time reliability for bus transportation. Knowledge-based Engineering and Science 2(1), 19–30 (2021). [https://doi.org/10.51526/kbes.2021.2.1.19-30](https://doi.org/10.51526/kbes.2021.2.1.19-30)
 
-Mystakidis, A., Koukaras, P., Tjortjis, C.: Advances in traffic congestion prediction: an overview of emerging techniques and methods. Smart Cities 8(1), 25 (2025). https://doi.org/10.3390/smartcities8010025
+Mystakidis, A., Koukaras, P., Tjortjis, C.: Advances in traffic congestion prediction: an overview of emerging techniques and methods. Smart Cities 8(1), 25 (2025). [https://doi.org/10.3390/smartcities8010025](https://doi.org/10.3390/smartcities8010025)
 
-Ngo, N.S., Bashar, S.: The impacts of extreme weather events on U.S. public transit ridership. Transportation Research Part D: Transport and Environment 137, 104504 (2024). https://doi.org/10.1016/j.trd.2024.104504
+Ngo, N.S., Bashar, S.: The impacts of extreme weather events on U.S. public transit ridership. Transportation Research Part D: Transport and Environment 137, 104504 (2024). [https://doi.org/10.1016/j.trd.2024.104504](https://doi.org/10.1016/j.trd.2024.104504)
 
-Pour, M.A., Zargari, F., Samimi, A., et al.: Analyzing the influence of fuel price shock on urban public transit and interurban automobile travel demand: evidence from a country with fixed fuel price regulation. Transportation Research Interdisciplinary Perspectives 36, 101829 (2026). https://doi.org/10.1016/j.trip.2025.101829
+Pour, M.A., Zargari, F., Samimi, A., et al.: Analyzing the influence of fuel price shock on urban public transit and interurban automobile travel demand: evidence from a country with fixed fuel price regulation. Transportation Research Interdisciplinary Perspectives 36, 101829 (2026). [https://doi.org/10.1016/j.trip.2025.101829](https://doi.org/10.1016/j.trip.2025.101829)
 
-Rahmani, B., Moghaddam, A.M., Maghrebi, M.: Forecasting demand fluctuations of public bus transit during special events and adverse weather conditions through smart card data analysis. Travel Behaviour and Society 40, 101033 (2025). https://doi.org/10.1016/j.tbs.2025.101033
+Rahmani, B., Moghaddam, A.M., Maghrebi, M.: Forecasting demand fluctuations of public bus transit during special events and adverse weather conditions through smart card data analysis. Travel Behaviour and Society 40, 101033 (2025). [https://doi.org/10.1016/j.tbs.2025.101033](https://doi.org/10.1016/j.tbs.2025.101033)
 
-S.K.B., S., Mathivanan, S.K., Rajadurai, H., et al.: A multi-modal geospatial-temporal LSTM based deep learning framework for predictive modeling of urban mobility patterns. Scientific Reports 14, 1–19 (2024). https://doi.org/10.1038/s41598-024-74237-3
+S.K.B., S., Mathivanan, S.K., Rajadurai, H., et al.: A multi-modal geospatial-temporal LSTM based deep learning framework for predictive modeling of urban mobility patterns. Scientific Reports 14, 1–19 (2024). [https://doi.org/10.1038/s41598-024-74237-3](https://doi.org/10.1038/s41598-024-74237-3)
 
-Shi, B., Wang, Z., Yan, J., et al.: A novel spatial-temporal deep learning method for metro flow prediction considering external factors and periodicity. Applied Sciences 14(5), 1949 (2024). https://doi.org/10.3390/app14051949
+Shi, B., Wang, Z., Yan, J., et al.: A novel spatial-temporal deep learning method for metro flow prediction considering external factors and periodicity. Applied Sciences 14(5), 1949 (2024). [https://doi.org/10.3390/app14051949](https://doi.org/10.3390/app14051949)
 
-Sobrie, L., Verschelde, M., Hennebel, V., et al.: Capturing complexity over space and time via deep learning: an application to real-time delay prediction in railways. European Journal of Operational Research 310(3), 1201–1217 (2023). https://doi.org/10.1016/j.ejor.2023.03.040
+Sobrie, L., Verschelde, M., Hennebel, V., et al.: Capturing complexity over space and time via deep learning: an application to real-time delay prediction in railways. European Journal of Operational Research 310(3), 1201–1217 (2023). [https://doi.org/10.1016/j.ejor.2023.03.040](https://doi.org/10.1016/j.ejor.2023.03.040)
 
-Son, H., Jang, J., Park, J., et al.: Leveraging advanced technologies for (smart) transportation planning: a systematic review. Sustainability 17(5), 2245 (2025). https://doi.org/10.3390/su17052245
+Son, H., Jang, J., Park, J., et al.: Leveraging advanced technologies for (smart) transportation planning: a systematic review. Sustainability 17(5), 2245 (2025). [https://doi.org/10.3390/su17052245](https://doi.org/10.3390/su17052245)
 
-Song, Y., Luo, R., Zhou, T., et al.: Graph attention Informer for long-term traffic flow prediction under the impact of sports events. Sensors 24(15), 4796 (2024). https://doi.org/10.3390/s24154796
+Song, Y., Luo, R., Zhou, T., et al.: Graph attention Informer for long-term traffic flow prediction under the impact of sports events. Sensors 24(15), 4796 (2024). [https://doi.org/10.3390/s24154796](https://doi.org/10.3390/s24154796)
 
-Suwaidi, J.A., Aydin, R., Rashid, H.: Investigating barriers and challenges to artificial intelligence (AI) implementation in logistics operations: a systematic review of literature. In: Proceedings of the 5th European International Conference on Industrial Engineering and Operations Management, pp. 1600–1616 (2022). https://doi.org/10.46254/EU05.20220308
+Suwaidi, J.A., Aydin, R., Rashid, H.: Investigating barriers and challenges to artificial intelligence (AI) implementation in logistics operations: a systematic review of literature. In: Proceedings of the 5th European International Conference on Industrial Engineering and Operations Management, pp. 1600–1616 (2022). [https://doi.org/10.46254/EU05.20220308](https://doi.org/10.46254/EU05.20220308)
 
-Topilin, I., Jiang, J., Feofilova, A., et al.: Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. Smart Cities 8(5), 148 (2025). https://doi.org/10.3390/smartcities8050148
+Topilin, I., Jiang, J., Feofilova, A., et al.: Traffic flow prediction via a hybrid CPO-CNN-LSTM-attention architecture. Smart Cities 8(5), 148 (2025). [https://doi.org/10.3390/smartcities8050148](https://doi.org/10.3390/smartcities8050148)
 
-Ubaidillah, N.Z., Sa'ad, N.H., Ismail, F., et al.: The impact of public bus service quality on the users' satisfaction: evidence from a developing Asian city. Review of Applied Socio-Economic Research 23(1), 83–96 (2022). https://doi.org/10.54609/reaser.v23i1.185
+Ubaidillah, N.Z., Sa'ad, N.H., Ismail, F., et al.: The impact of public bus service quality on the users' satisfaction: evidence from a developing Asian city. Review of Applied Socio-Economic Research 23(1), 83–96 (2022). [https://doi.org/10.54609/reaser.v23i1.185](https://doi.org/10.54609/reaser.v23i1.185)
 
-Vujadinovic, V.L., Damnjanovic, A., Cakic, A., et al.: AI-driven approach for enhancing sustainability in urban public transportation. Sustainability 16(17), 7763 (2024). https://doi.org/10.3390/su16177763
+Vujadinovic, V.L., Damnjanovic, A., Cakic, A., et al.: AI-driven approach for enhancing sustainability in urban public transportation. Sustainability 16(17), 7763 (2024). [https://doi.org/10.3390/su16177763](https://doi.org/10.3390/su16177763)
 
-Wang, J., Liu, C., Wu, Z., et al.: The roadmap and strategy for prioritizing the development of public transport in China. Multimodal Transportation 4(1), 100184 (2025). https://doi.org/10.1016/j.multra.2024.100184
+Wang, J., Liu, C., Wu, Z., et al.: The roadmap and strategy for prioritizing the development of public transport in China. Multimodal Transportation 4(1), 100184 (2025). [https://doi.org/10.1016/j.multra.2024.100184](https://doi.org/10.1016/j.multra.2024.100184)
 
-Wei, L., Guo, D., Chen, Z., et al.: Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. ISPRS International Journal of Geo-Information 12(1), 25 (2023). https://doi.org/10.3390/ijgi12010025
+Wei, L., Guo, D., Chen, Z., et al.: Forecasting short-term passenger flow of subway stations based on the temporal pattern attention mechanism and the long short-term memory network. ISPRS International Journal of Geo-Information 12(1), 25 (2023). [https://doi.org/10.3390/ijgi12010025](https://doi.org/10.3390/ijgi12010025)
 
-Wu, J.-L., Lu, M., Wang, C.-Y.: Forecasting metro rail transit passenger flow with multiple-attention deep neural networks and surrounding vehicle detection devices. Applied Intelligence 53, 18531–18546 (2023). https://doi.org/10.1007/s10489-023-04483-x
+Wu, J.-L., Lu, M., Wang, C.-Y.: Forecasting metro rail transit passenger flow with multiple-attention deep neural networks and surrounding vehicle detection devices. Applied Intelligence 53, 18531–18546 (2023). [https://doi.org/10.1007/s10489-023-04483-x](https://doi.org/10.1007/s10489-023-04483-x)
 
-Wu, Z., Liu, X., Zhang, X.: Multi dynamic temporal representation graph convolutional network for traffic flow prediction. Scientific Reports 15, 16734 (2025). https://doi.org/10.1038/s41598-025-01157-1
+Wu, Z., Liu, X., Zhang, X.: Multi dynamic temporal representation graph convolutional network for traffic flow prediction. Scientific Reports 15, 16734 (2025). [https://doi.org/10.1038/s41598-025-01157-1](https://doi.org/10.1038/s41598-025-01157-1)
 
-Yin, X., Wu, G., Wei, J., et al.: Deep learning on traffic prediction: methods, analysis, and future directions. IEEE Transactions on Intelligent Transportation Systems 23(6), 4927–4943 (2022). https://doi.org/10.1109/TITS.2021.3054840
+Yin, X., Wu, G., Wei, J., et al.: Deep learning on traffic prediction: methods, analysis, and future directions. IEEE Transactions on Intelligent Transportation Systems 23(6), 4927–4943 (2022). [https://doi.org/10.1109/TITS.2021.3054840](https://doi.org/10.1109/TITS.2021.3054840)
 
-Yusuf, O., Rasheed, A., Lindseth, F.: Data-driven predictive modelling of stop-level public transit patterns. Transportation, 1–53 (2025). https://doi.org/10.1007/s11116-025-10689-4
+Yusuf, O., Rasheed, A., Lindseth, F.: Data-driven predictive modelling of stop-level public transit patterns. Transportation, 1–53 (2025). [https://doi.org/10.1007/s11116-025-10689-4](https://doi.org/10.1007/s11116-025-10689-4)
 
-Zhao, M., Lan, C.-L.: Modeling travel time reliability for non-interstate national highway system routes. Virginia Transportation Research Council, 1–68 (2025). https://vtrc.virginia.gov/media/vtrc/vtrc-pdf/vtrc-pdf/26-R23.pdf
+Zhao, M., Lan, C.-L.: Modeling travel time reliability for non-interstate national highway system routes. Virginia Transportation Research Council, 1–68 (2025). [https://vtrc.virginia.gov/media/vtrc/vtrc-pdf/vtrc-pdf/26-R23.pdf](https://vtrc.virginia.gov/media/vtrc/vtrc-pdf/vtrc-pdf/26-R23.pdf)
 
-Zhuang, W., Cao, Y.: Short-term traffic flow prediction based on CNN-BILSTM with multicomponent information. Applied Sciences 12(17), 8714 (2022). https://doi.org/10.3390/app12178714
+Zhuang, W., Cao, Y.: Short-term traffic flow prediction based on CNN-BILSTM with multicomponent information. Applied Sciences 12(17), 8714 (2022). [https://doi.org/10.3390/app12178714](https://doi.org/10.3390/app12178714)
