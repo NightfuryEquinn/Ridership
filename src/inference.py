@@ -8,9 +8,9 @@ feature window, then distributes predicted total ridership across the
 
 Usage
 -----
-    python src/inference.py                                  # all defaults
+    python src/inference.py                                  # lookback=14, start=2026-01-01
     python src/inference.py --lookback 56
-    python src/inference.py --start-date 2026-01-01   # forecast 2026-01-01 … 2026-01-07
+    python src/inference.py --start-date 2025-09-15   # forecast 2025-09-15 … 2025-09-21
     python src/inference.py --lookback 28 --start-date 2025-09-15 --out forecast.csv
     python src/inference.py --list-runs                      # show all available runs
     python src/inference.py --run-id 20260611_144949 --output-dir hmttsf_feat_reduced
@@ -57,8 +57,10 @@ FEATURES_CSV_MAP: dict[str, str] = {
     "mco":   "data/features/features_aligned.csv",
 }
 
-HIST_YEAR         = 2024    # Calendar year for annual share mode.
-T_OUT             = 7       # Forecast horizon (days) — fixed by the dataset.
+HIST_YEAR           = 2024          # Calendar year for annual share mode.
+DEFAULT_LOOKBACK    = 14            # Default look-back window (days).
+DEFAULT_START_DATE  = "2026-01-01"  # Default first day of the 7-day forecast window.
+T_OUT               = 7             # Forecast horizon (days) — fixed by the dataset.
 
 # Sequence directory lookup: (regime, lookback) → data/sequences/{dir}
 SEQ_DIR_MAP: dict[tuple[str, int], str] = {
@@ -1002,14 +1004,14 @@ def main() -> None:
         epilog=__doc__,
     )
     p.add_argument(
-        "--lookback", type=int, default=14, choices=LOOKBACK_CHOICES,
-        help="Look-back window in days (default: 14).",
+        "--lookback", type=int, default=DEFAULT_LOOKBACK, choices=LOOKBACK_CHOICES,
+        help=f"Look-back window in days (default: {DEFAULT_LOOKBACK}).",
     )
     p.add_argument(
-        "--start-date", type=str, default=None, metavar="YYYY-MM-DD",
+        "--start-date", type=str, default=DEFAULT_START_DATE, metavar="YYYY-MM-DD",
         help="First day of the 7-day forecast window (inclusive). "
              "The input lookback ends the day before. "
-             "Defaults to the day after the last date in the features CSV.",
+             f"(default: {DEFAULT_START_DATE}).",
     )
     p.add_argument(
         "--output-dir", type=str, default=HMTTSF_OUTPUT_DIR_FR,
@@ -1081,14 +1083,7 @@ def main() -> None:
     df = load_feature_csv(features_csv)
 
     # ── resolve forecast window ───────────────────────────────────────────
-    if args.start_date is None:
-        forecast_start = df.index.max() + timedelta(days=1)
-        print(
-            f"[inference]  --start-date not set; first forecast day: "
-            f"{forecast_start.date()} (day after last features CSV date)"
-        )
-    else:
-        forecast_start = pd.Timestamp(args.start_date)
+    forecast_start = pd.Timestamp(args.start_date)
 
     input_window_end = forecast_start - timedelta(days=1)
     forecast_dates = [forecast_start + timedelta(days=i) for i in range(T_OUT)]
