@@ -2,6 +2,7 @@
 # Tested with Python 3.11 on Windows (local A100 workstation).
 # Install: pip install -r requirements.txt
 # PyTorch with CUDA support should be installed per https://pytorch.org/get-started/
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
 # (the plain pip package below installs the default build for your platform).
 
 # Core numerics & data
