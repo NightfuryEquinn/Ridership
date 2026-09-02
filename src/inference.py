@@ -42,6 +42,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from src.models.hybrid.hmttsf import HMTTSFForecaster, _KEPT_FEAT_INDICES, apply_residual_boost
+from src.utils.metrics import compute_metrics
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION  ← change these constants to adjust defaults project-wide
@@ -755,6 +756,58 @@ def get_actuals(
     return pd.DataFrame(rows, columns=cols)
 
 
+def _compute_overall_accuracy(
+    total_pred: np.ndarray,
+    actuals: pd.DataFrame,
+) -> dict | None:
+    """Combined% and components for pred vs actual on days with headline data."""
+    mask = ~actuals["total_ridership"].isna()
+    n = int(mask.sum())
+    if n == 0:
+        return None
+    y_true = actuals.loc[mask, "total_ridership"].values.astype(float)
+    y_pred = total_pred[np.where(mask)[0]].astype(float)
+    metrics = compute_metrics(y_true, y_pred)
+    metrics["n_days"] = n
+    metrics["n_total"] = len(total_pred)
+    return metrics
+
+
+def _print_overall_accuracy_section(
+    total_pred: np.ndarray,
+    actuals: pd.DataFrame,
+    run: dict,
+    width: int = 88,
+) -> None:
+    """Print forecast-window Combined% vs held-out test Combined%, with diff pp."""
+    acc = _compute_overall_accuracy(total_pred, actuals)
+    if acc is None:
+        return
+
+    test_combined = float(run["combined"])
+    test_r2 = float(run["r2"])
+    diff_combined_pp = acc["Combined"] - test_combined
+    diff_r2 = acc["R2"] - test_r2
+
+    print(f"\n{'-' * width}")
+    print(
+        f"  Pred vs actual overall accuracy "
+        f"({acc['n_days']}/{acc['n_total']} day(s) with headline actuals):\n"
+    )
+    print(f"  {'Metric':<12}  {'Forecast':>12}  {'Test run':>12}  {'Diff':>14}")
+    print(f"  {'-' * 12}  {'-' * 12}  {'-' * 12}  {'-' * 14}")
+    print(
+        f"  {'Combined%':<12}  {acc['Combined']:>11.2f}%  "
+        f"{test_combined:>11.2f}%  {diff_combined_pp:>+12.2f} pp"
+    )
+    print(
+        f"  {'R²':<12}  {acc['R2']:>12.4f}  {test_r2:>12.4f}  {diff_r2:>+14.4f}"
+    )
+    print(f"  {'MAPE%':<12}  {acc['MAPE']:>11.2f}%")
+    print(f"  {'MAE%':<12}  {acc['MAE_pct']:>11.2f}%  (MAE {acc['MAE']:>,.0f} passengers)")
+    print(f"  {'RMSE%':<12}  {acc['RMSE_pct']:>11.2f}%  (RMSE {acc['RMSE']:>,.0f} passengers)")
+
+
 def _compute_line_metrics(
     service_preds: pd.DataFrame,
     actuals: pd.DataFrame,
@@ -922,6 +975,8 @@ def print_forecast_table(
 
         print(sum_row_a)
         print(sum_row_p)
+
+        _print_overall_accuracy_section(total_pred, actuals, run, width=W)
 
         # Per-line error summary
         line_metrics = _compute_line_metrics(service_preds, actuals)
